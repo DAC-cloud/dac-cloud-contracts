@@ -30,7 +30,6 @@ contract DACTest is Test {
             address(lpToken),
             address(mpToken),
             50,
-            address(0),
             address(dealFactory),
             address(lpFactory),
             address(votingFactory)

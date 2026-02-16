@@ -11,6 +11,7 @@ contract LPManagementProposal {
     address public dividendToken;
     address public dacEntity;
     address private _votingContract;
+    uint256 public cashAmount;
 
     constructor(
         uint256 _id,
@@ -20,7 +21,8 @@ contract LPManagementProposal {
         address _divToken,
         address _dac,
         address _votingFactory,
-        address _token
+        address _token,
+        uint256 _cashAmount
     ) {
         id = _id;
         typ = _typ;
@@ -29,6 +31,7 @@ contract LPManagementProposal {
         dividendToken = _divToken;
         dacEntity = _dac;
         _votingContract = IVotingFactory(_votingFactory).deployVoting(_id, 7 days, address(this), _token);
+        cashAmount = _cashAmount;
     }
 
     function amount() external view returns (uint256) {

@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 interface IDACEntity {
     struct CapitalCall {
         address treasuryToken;
+        uint256 nonce;
         address lpRecipient;
         uint256 lpAmount;
         uint256 cashAmount;
@@ -13,7 +14,6 @@ interface IDACEntity {
     function voteOnProposal(uint256 proposalId, bool support) external;
     function getQuorumPercent() external view returns (uint256);
     function getTreasuryBalance(address token) external view returns (uint256);
-    function transferTreasury(address token, address to, uint256 amount) external;
     function getLPToken() external view returns (address);
 
     struct Config {
@@ -21,6 +21,5 @@ interface IDACEntity {
         address lpToken;
         address mpToken;
         address votingFactory;
-        address parentDAC;
     }
 }

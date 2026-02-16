@@ -10,4 +10,4 @@ interface IVoting {
     function outcome(uint256 propId) external view returns (bool);
 }
 
-enum LPManagementType { MintMP, Dividend }
+enum LPManagementType { MintMP, Dividend, CapitalCall }

@@ -32,6 +32,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     mapping(address => uint256) public stakedRealMP;
     MPToken public mpToken;
     address[] public holders; // For pro-rata loops
+    uint256 public capitalCallNonce;
+    uint256 public lpAmount;
 
     constructor(
         uint256 _id,
@@ -43,7 +45,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         uint256 _threshold,
         uint256 _duration,
         address _mpToken,
-        address _votingFactory
+        address _votingFactory,
+        uint256 _lpAmount
     ) ERC20("Staked MP for Deal", "sMP") {
         id = _id;
         description = _description;
@@ -56,6 +59,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         startTime = block.timestamp;
         mpToken = MPToken(_mpToken);
         _votingContract = IVotingFactory(_votingFactory).deployVoting(_id, _duration, address(this), _mpToken);
+        lpAmount = _lpAmount;
+        capitalCallNonce = _id; // Use id as nonce
         emit DealInitialized(_id);
     }
 
@@ -94,6 +99,9 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function onApproved() external onlyDACEntity {
         approved = true;
+        // Fulfill capital call for child DAC
+        IDACEntity.CapitalCall memory call = IDACEntity.CapitalCall(_fundingToken, capitalCallNonce, address(this), lpAmount, _fundingAmount);
+        IDACEntity(_childDAC).fulfillCapitalCall(call);
         emit DealActivated(id);
     }
 

@@ -12,9 +12,10 @@ contract LPManagementFactory {
         address dividendToken,
         address dac,
         address votingFactory,
-        address token
+        address token,
+        uint256 cashAmount
     ) external returns (address) {
-        LPManagementProposal prop = new LPManagementProposal(id, typ, target, amountOrPercent, dividendToken, dac, votingFactory, token);
+        LPManagementProposal prop = new LPManagementProposal(id, typ, target, amountOrPercent, dividendToken, dac, votingFactory, token, cashAmount);
         return address(prop);
     }
 }
