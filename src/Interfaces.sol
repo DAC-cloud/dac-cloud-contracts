@@ -6,6 +6,7 @@ interface IVotingFactory {
 }
 
 interface IVoting {
+    function vote(bool support) external;
     function isResolved(uint256 propId) external view returns (bool);
     function outcome(uint256 propId) external view returns (bool);
 }

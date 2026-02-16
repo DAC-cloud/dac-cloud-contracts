@@ -3,7 +3,9 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Voting {
+import "./Interfaces.sol";
+
+contract Voting is IVoting {
     uint256 public propId;
     uint256 public endTime;
     address public owner;

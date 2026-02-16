@@ -20,6 +20,7 @@ interface IDealFactory {
         uint256 successThreshold,
         uint256 duration,
         address mpToken,
+        address lpToken,
         address votingFactory,
         uint256 lpAmount
     ) external returns (address);
@@ -118,7 +119,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     ) external onlyMPHolder returns (uint256 id) {
         id = nextId++;
         address deal = IDealFactory(dealFactory).deployDeal(
-            id, description, address(this), childDAC, fundingAmount, fundingToken, successThreshold, duration, config.mpToken, config.votingFactory, lpAmount
+            id, description, address(this), childDAC, fundingAmount, fundingToken, successThreshold, duration, config.mpToken, config.lpToken, config.votingFactory, lpAmount
         );
         deals[id] = deal;
         dealsMapping[deal] = id;
@@ -147,12 +148,6 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         fulfilledCalls[callHash] = true;
         emit CapitalCallFulfilled(callHash, call.lpRecipient, call.lpAmount);
         return true;
-    }
-
-    function proxyVoteFromDeal(address deal, uint256 childProposalId, bool support) external onlyDeal {
-        uint256 weight = IDeal(deal).getStakedMPTotal();
-        IDACEntity(IDeal(deal).childDAC()).voteOnProposal(childProposalId, support);
-        emit ProxyVote(deal, childProposalId, support, weight);
     }
 
     function createLPManagementProposal(
@@ -217,8 +212,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         return treasuryBalances[token];
     }
 
-    function voteOnProposal(uint256 proposalId, bool support) external {
-        // Implement voting logic if needed
+    function getProposalVoting(uint256 proposalId) external view returns (address) {
+        return ILPManagementProposal(lpProposals[proposalId]).votingContract();
     }
 
     function getLPToken() external view returns (address) {
