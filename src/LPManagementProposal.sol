@@ -4,56 +4,35 @@ pragma solidity ^0.8.20;
 import "./Interfaces.sol";
 
 contract LPManagementProposal {
-    uint256 public id;
-    LPManagementType public typ;
-    address public target;
-    uint256 public amountOrPercent;
-    address public dividendToken;
-    address public dacEntity;
-    address private _votingContract;
-    uint256 public cashAmount;
+    uint256 public immutable id;
+    LPManagementType public immutable typ;
+    address public immutable target;
+    uint256 public immutable amountOrPercent;
+    address public immutable dividendToken;
+    address public immutable dacEntity;
+    address public immutable votingContract;
+    uint256 public immutable cashAmount;
 
     constructor(
         uint256 _id,
-        LPManagementType _typ,
-        address _target,
-        uint256 _amt,
-        address _divToken,
+        LPMParams memory params,
         address _dac,
         address _votingFactory,
-        address _token,
-        uint256 _cashAmount
+        address _token
     ) {
         id = _id;
-        typ = _typ;
-        target = _target;
-        amountOrPercent = _amt;
-        dividendToken = _divToken;
+        typ = params.typ;
+        target = params.target;
+        amountOrPercent = params.amountOrPercent;
+        dividendToken = params.dividendToken;
         dacEntity = _dac;
-        _votingContract = IVotingFactory(_votingFactory).deployVoting(_id, 7 days, address(this), _token);
-        cashAmount = _cashAmount;
-    }
+        cashAmount = params.cashAmount;
 
-    function amount() external view returns (uint256) {
-        return amountOrPercent;
-    }
-
-    function percent() external view returns (uint256) {
-        return amountOrPercent;
-    }
-
-    function votingContract() external view returns (address) {
-        return _votingContract;
-    }
-
-    function execute() external onlyDACEntity {
-        // Handled in DACEntity
+        votingContract = IVotingFactory(_votingFactory).deployVoting(_id, 7 days, address(this), _token);
     }
 
     modifier onlyDACEntity() {
         require(msg.sender == dacEntity, "Only DAC");
         _;
     }
-
-    event LPMProposalExecuted(uint256 indexed id, LPManagementType typ);
 }

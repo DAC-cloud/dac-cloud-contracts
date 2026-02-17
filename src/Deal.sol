@@ -11,65 +11,68 @@ import "./LPToken.sol";
 import "./IDACEntity.sol";
 
 contract Deal is ERC20, ReentrancyGuard, IDeal {
-    uint256 public id;
+    // IMMUTABLES
+    uint256 public immutable id;
+    address public immutable dacEntity;
+    address public immutable childDAC;
+    address public immutable mpTokenAddr;
+    address public immutable lpTokenAddr;
+    address public immutable votingFactoryAddr;
+
+    // STORAGE
     string public description;
-    address public dacEntity;
-    address private _childDAC;
     address private _fundingToken;
     uint256 private _fundingAmount;
-    uint256 public successThreshold;
-    uint256 public startTime;
-    uint256 public duration;
+    uint256 private _successThreshold;
+    uint256 private duration;
+    uint256 private startTime;
     address private _votingContract;
-    address private _votingFactory;
 
-    mapping(address => uint256) private _stakedMPBalances;
-    uint256 private _totalStakedMP;
-    mapping(address => mapping(address => uint256)) private _allowances;
-
-    bool public approved = false;
-    bool public evaluated = false;
-    bool public success = false; // For returnProfits
-
-    mapping(address => uint256) public stakedRealMP;
-    MPToken public mpToken;
-
-    address[] public holders; // For pro-rata loops
-
-    uint256 public capitalCallNonce;
-    uint256 public lpAmount;
+    bool public approved;
+    bool public evaluated;
+    bool public successFlag;
 
     mapping(uint256 => address) public childProposalVotings;
 
+    uint256 private _totalStakedMP;
+    mapping(address => uint256) public stakedRealMP;
+    mapping(address => uint256) public stakedMPBalance;
+    mapping(address => uint256) public claimableLP;
+
+    address[] public holders; // only for claimable tracking
+
     constructor(
         uint256 _id,
-        string memory _description,
         address _dac,
         address _child,
-        uint256 _funding,
-        address _token,
-        uint256 _threshold,
-        uint256 _duration,
         address _mpToken,
         address _lpToken,
-        address _dacVotingFactory,
-        uint256 _lpAmount
+        address _votingFactory
     ) ERC20("Staked MP for Deal", "sMP") {
         id = _id;
-        description = _description;
         dacEntity = _dac;
-        _childDAC = _child;
-        _fundingAmount = _funding;
-        _fundingToken = _token;
-        successThreshold = _threshold;
-        duration = _duration;
+        childDAC = _child;
+        mpTokenAddr = _mpToken;
+        lpTokenAddr = _lpToken;
+        votingFactoryAddr = _votingFactory;
+    }
+
+    function initialize(DealParams calldata params) external {
+        require(msg.sender == dacEntity, "Only DAC");
+        require(startTime == 0, "Already initialized");
+
+        description = params.description;
+        _fundingAmount = params.fundingAmount;
+        _fundingToken = params.fundingToken;
+        _successThreshold = params.successThreshold;
+        duration = params.duration;
         startTime = block.timestamp;
-        mpToken = MPToken(_mpToken);
-        _votingFactory = _dacVotingFactory;
-        _votingContract = IVotingFactory(_dacVotingFactory).deployVoting(_id, _duration, address(this), _lpToken);
-        lpAmount = _lpAmount;
-        capitalCallNonce = _id; // Use id as nonce
-        emit DealInitialized(_id);
+
+        _votingContract = IVotingFactory(votingFactoryAddr).deployVoting(
+            id, duration, address(this), lpTokenAddr
+        );
+
+        emit DealInitialized(id);
     }
 
     function totalSupply() public view override returns (uint256) {
@@ -77,26 +80,13 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     }
 
     function balanceOf(address account) public view override returns (uint256) {
-        return _stakedMPBalances[account];
-    }
-
-    function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowances[owner][spender];
-    }
-
-    function onMPStaked(address staker, uint256 amount) external onlyDACOrMPToken {
-        if (_stakedMPBalances[staker] == 0) holders.push(staker);
-        stakedRealMP[staker] += amount;
-        _stakedMPBalances[staker] += amount;
-        _totalStakedMP += amount;
-        _mint(staker, amount);
-        emit StakedMPMinted(staker, amount);
+        return stakedMPBalance[account];
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
-        require(_stakedMPBalances[msg.sender] >= amount, "Insufficient balance");
-        _stakedMPBalances[msg.sender] -= amount;
-        _stakedMPBalances[to] += amount;
+        require(stakedMPBalance[msg.sender] >= amount, "Insufficient balance");
+        stakedMPBalance[msg.sender] -= amount;
+        stakedMPBalance[to] += amount;
         return super.transfer(to, amount);
     }
 
@@ -105,72 +95,83 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         return true;
     }
 
-    function onApproved() external onlyDACEntity {
+    function onMPStaked(address staker, uint256 amount) external {
+        require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
+        if (stakedMPBalance[staker] == 0) holders.push(staker);
+        stakedRealMP[staker] += amount;
+        stakedMPBalance[staker] += amount;
+        _totalStakedMP += amount;
+        _mint(staker, amount);
+        emit StakedMPMinted(staker, amount);
+    }
+
+    function onApproved() external {
+        require(msg.sender == dacEntity, "Only DAC");
         approved = true;
-        // Fulfill capital call for child DAC
-        IDACEntity.CapitalCall memory call = IDACEntity.CapitalCall(_fundingToken, capitalCallNonce, address(this), lpAmount, _fundingAmount);
-        IDACEntity(_childDAC).fulfillCapitalCall(call);
+
+        CapitalCall memory call = CapitalCall({
+            treasuryToken: _fundingToken,
+            nonce: id,
+            lpRecipient: address(this),
+            lpAmount: 0, // child decides amount if needed
+            cashAmount: _fundingAmount
+        });
+
+        IDACEntity(childDAC).fulfillCapitalCall(call);
         emit DealActivated(id);
     }
 
-    function transformStakes() external onlyDACEntity {
+    function transformStakes() external {
+        require(msg.sender == dacEntity, "Only DAC");
         require(!evaluated, "Already evaluated");
         evaluated = true;
-        success = true;
-        uint256 totalMP = _totalStakedMP;
-        mpToken.burnFrom(address(this), totalMP);
-        _totalStakedMP = 0;
-        // Pro-rata LP mint to holders
+        successFlag = true;
+
+        uint256 transformedMP = _totalStakedMP;
+
+        MPToken(mpTokenAddr).burnFrom(address(this), _totalStakedMP);
+
         for (uint256 i = 0; i < holders.length; i++) {
-            address holder = holders[i];
-            uint256 share = stakedRealMP[holder];
-            LPToken(IDACEntity(dacEntity).getLPToken()).mint(holder, share);
+            address h = holders[i];
+            claimableLP[h] = stakedRealMP[h];
         }
-        emit StakesTransformed(totalMP);
+        _totalStakedMP = 0;
+        
+        emit StakesTransformed(transformedMP);
     }
 
-    function slashStakes(uint256 slashPercent) external onlyDACEntity {
+    function slashStakes(uint256 slashPercent) external {
+        require(msg.sender == dacEntity, "Only DAC");
         require(!evaluated, "Already evaluated");
         evaluated = true;
+
         uint256 slashAmount = (_totalStakedMP * slashPercent) / 100;
-        mpToken.burnFrom(address(this), slashAmount);
+        MPToken(mpTokenAddr).burnFrom(address(this), slashAmount);
+
         for (uint256 i = 0; i < holders.length; i++) {
-            address holder = holders[i];
-            uint256 holderSlash = (_stakedMPBalances[holder] * slashPercent) / 100;
-            _stakedMPBalances[holder] -= holderSlash;
+            address h = holders[i];
+            uint256 holderSlash = (stakedMPBalance[h] * slashPercent) / 100;
+            stakedMPBalance[h] -= holderSlash;
+            claimableLP[h] = 0; // slashed
         }
         _totalStakedMP -= slashAmount;
-        IERC20(_fundingToken).transfer(dacEntity, (_fundingAmount * slashPercent) / 100);
+
         emit StakesSlashed(slashAmount);
     }
 
-    function getStakedMPTotal() external view returns (uint256) {
-        return _totalStakedMP;
+    function claimLP() external {
+        uint256 amount = claimableLP[msg.sender];
+        require(amount > 0, "Nothing to claim");
+        claimableLP[msg.sender] = 0;
+        LPToken(lpTokenAddr).mint(msg.sender, amount);
+        emit LPClaimed(msg.sender, amount);
     }
 
-    function returnProfits(uint256 profitAmount) external onlyAfterSuccess nonReentrant {
-        IERC20(_fundingToken).transfer(dacEntity, profitAmount);
-    }
-
-    function isValidDeal() external pure returns (bool) {
-        return true; // Placeholder
-    }
-
-    function votingContract() external view returns (address) {
-        return _votingContract;
-    }
-
-    function fundingToken() external view returns (address) {
-        return _fundingToken;
-    }
-
-    function fundingAmount() external view returns (uint256) {
-        return _fundingAmount;
-    }
-
-    function childDAC() external view returns (address) {
-        return _childDAC;
-    }
+    function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
+    function isValidDeal() external pure returns (bool) { return true; }
+    function votingContract() external view returns (address) { return _votingContract; }
+    function fundingToken() external view returns (address) { return _fundingToken; }
+    function fundingAmount() external view returns (uint256) { return _fundingAmount; }
 
     function createChildLPProposal(
         LPManagementType typ,
@@ -179,12 +180,13 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         address dividendToken,
         uint256 cashAmount
     ) external onlyStakedMPHolder returns (uint256) {
-        return IDACEntity(_childDAC).createLPManagementProposal(typ, target, amountOrPercent, dividendToken, cashAmount);
+        LPMParams memory proposalParams = LPMParams({ typ: typ, target: target, amountOrPercent: amountOrPercent, dividendToken: dividendToken, cashAmount: cashAmount });
+        return IDACEntity(childDAC).createLPManagementProposal(proposalParams);
     }
 
     function createChildProposalVoting(uint256 childProposalId) external onlyStakedMPHolder {
         require(childProposalVotings[childProposalId] == address(0), "Voting already exists");
-        address voting = IVotingFactory(_votingFactory).deployVoting(childProposalId, 7 days, address(this), address(this));
+        address voting = IVotingFactory(votingFactoryAddr).deployVoting(childProposalId, 7 days, address(this), address(this));
         childProposalVotings[childProposalId] = voting;
         emit ChildProposalVotingCreated(childProposalId, voting);
     }
@@ -194,7 +196,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         require(voting != address(0), "No voting for this proposal");
         require(IVoting(voting).isResolved(childProposalId), "Voting not resolved");
         bool support = IVoting(voting).outcome(childProposalId);
-        address childVoting = IDACEntity(_childDAC).getProposalVoting(childProposalId);
+        address childVoting = IDACEntity(childDAC).getProposalVoting(childProposalId);
         IVoting(childVoting).vote(support);
         emit ChildProposalVoted(childProposalId, support);
     }
@@ -204,18 +206,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         _;
     }
 
-    modifier onlyDACOrMPToken() {
-        require(msg.sender == dacEntity || msg.sender == address(mpToken), "Unauthorized");
-        _;
-    }
-
     modifier onlyStakedMPHolder() {
         require(balanceOf(msg.sender) > 0, "Not staked MP holder");
-        _;
-    }
-
-    modifier onlyAfterSuccess() {
-        require(evaluated && success, "Not successful");
         _;
     }
 
@@ -227,4 +219,5 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     event StakesSlashed(uint256 slashAmount);
     event ChildProposalVotingCreated(uint256 indexed childProposalId, address voting);
     event ChildProposalVoted(uint256 indexed childProposalId, bool support);
+    event LPClaimed(address indexed holder, uint256 amount);
 }

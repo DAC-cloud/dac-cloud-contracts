@@ -2,20 +2,18 @@
 pragma solidity ^0.8.20;
 
 import "./LPManagementProposal.sol";
+import "./Interfaces.sol";
 
 contract LPManagementFactory {
     function deployLPManagement(
         uint256 id,
-        LPManagementType typ,
-        address target,
-        uint256 amountOrPercent,
-        address dividendToken,
+        LPMParams calldata params,
         address dac,
         address votingFactory,
-        address token,
-        uint256 cashAmount
+        address token
     ) external returns (address) {
-        LPManagementProposal prop = new LPManagementProposal(id, typ, target, amountOrPercent, dividendToken, dac, votingFactory, token, cashAmount);
+        LPMParams memory proposalParams = params;
+        LPManagementProposal prop = new LPManagementProposal(id, proposalParams, dac, votingFactory, token);
         return address(prop);
     }
 }

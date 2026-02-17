@@ -2,23 +2,19 @@
 pragma solidity ^0.8.20;
 
 import "./Deal.sol";
+import "./Interfaces.sol";
 
 contract DealFactory {
     function deployDeal(
         uint256 id,
-        string memory description,
+        DealParams calldata params,
         address dac,
-        address childDAC,
-        uint256 fundingAmount,
-        address fundingToken,
-        uint256 successThreshold,
-        uint256 duration,
         address mpToken,
         address lpToken,
-        address votingFactory,
-        uint256 lpAmount
+        address votingFactory
     ) external returns (address) {
-        Deal deal = new Deal(id, description, dac, childDAC, fundingAmount, fundingToken, successThreshold, duration, mpToken, lpToken, votingFactory, lpAmount);
+        Deal deal = new Deal(id, dac, params.dealTarget, mpToken, lpToken, votingFactory);
+        deal.initialize(params);
         return address(deal);
     }
 }
