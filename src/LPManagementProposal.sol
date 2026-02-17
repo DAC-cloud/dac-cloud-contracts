@@ -32,7 +32,11 @@ contract LPManagementProposal {
     }
 
     modifier onlyDACEntity() {
-        require(msg.sender == dacEntity, "Only DAC");
+        _onlyDACEntity();
         _;
+    }
+
+    function _onlyDACEntity() internal {
+        require(msg.sender == dacEntity, "Only DAC");
     }
 }

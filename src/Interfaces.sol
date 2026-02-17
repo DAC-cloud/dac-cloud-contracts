@@ -11,7 +11,11 @@ interface IVoting {
     function outcome(uint256 propId) external view returns (bool);
 }
 
-enum LPManagementType { MintMP, Dividend, CapitalCall }
+enum LPManagementType {
+    MintMP,
+    Dividend,
+    CapitalCall
+}
 
 struct DealParams {
     address dealTarget;

@@ -8,6 +8,9 @@ contract MPToken is ERC20 {
     uint256 public immutable maxSupply;
     address public immutable dacEntity;
 
+    // Events
+    event Staked(address indexed staker, address indexed deal, uint256 amount);
+
     constructor(uint256 _maxSupply, address _dacEntity, string memory name_, string memory symbol_) ERC20(name_, symbol_) {
         maxSupply = _maxSupply;
         dacEntity = _dacEntity;
@@ -30,6 +33,4 @@ contract MPToken is ERC20 {
         require(msg.sender == dacEntity, "Only DAC");
         _burn(from, amount);
     }
-
-    event Staked(address indexed staker, address indexed deal, uint256 amount);
 }

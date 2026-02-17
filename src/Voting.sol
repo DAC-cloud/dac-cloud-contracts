@@ -14,6 +14,9 @@ contract Voting is IVoting {
     uint256 public noVotes;
     mapping(address => bool) public voted;
 
+    // Events
+    event Voted(address indexed voter, bool support, uint256 weight);
+
     constructor(uint256 _propId, uint256 _duration, address _owner, address _token, uint256 _quorum) {
         propId = _propId;
         endTime = block.timestamp + _duration;
@@ -35,6 +38,4 @@ contract Voting is IVoting {
         uint256 total = yesVotes + noVotes;
         return total > 0 && yesVotes * 100 >= total * quorum;
     }
-
-    event Voted(address indexed voter, bool support, uint256 weight);
 }

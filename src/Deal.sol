@@ -11,7 +11,6 @@ import "./LPToken.sol";
 import "./IDACEntity.sol";
 
 contract Deal is ERC20, ReentrancyGuard, IDeal {
-    // IMMUTABLES
     uint256 public immutable id;
     address public immutable dacEntity;
     address public immutable childDAC;
@@ -19,7 +18,6 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     address public immutable lpTokenAddr;
     address public immutable votingFactoryAddr;
 
-    // STORAGE
     string public description;
     address private _fundingToken;
     uint256 private _fundingAmount;
@@ -40,6 +38,16 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     mapping(address => uint256) public claimableLP;
 
     address[] public holders; // only for claimable tracking
+
+    // Events
+    event DealInitialized(uint256 indexed id);
+    event StakedMPMinted(address indexed staker, uint256 amount);
+    event DealActivated(uint256 indexed id);
+    event StakesTransformed(uint256 totalMP);
+    event StakesSlashed(uint256 slashAmount);
+    event ChildProposalVotingCreated(uint256 indexed childProposalId, address voting);
+    event ChildProposalVoted(uint256 indexed childProposalId, bool support);
+    event LPClaimed(address indexed holder, uint256 amount);
 
     constructor(
         uint256 _id,
@@ -167,12 +175,6 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit LPClaimed(msg.sender, amount);
     }
 
-    function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
-    function isValidDeal() external pure returns (bool) { return true; }
-    function votingContract() external view returns (address) { return _votingContract; }
-    function fundingToken() external view returns (address) { return _fundingToken; }
-    function fundingAmount() external view returns (uint256) { return _fundingAmount; }
-
     function createChildLPProposal(
         LPManagementType typ,
         address target,
@@ -180,7 +182,14 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         address dividendToken,
         uint256 cashAmount
     ) external onlyStakedMPHolder returns (uint256) {
-        LPMParams memory proposalParams = LPMParams({ typ: typ, target: target, amountOrPercent: amountOrPercent, dividendToken: dividendToken, cashAmount: cashAmount });
+        LPMParams memory proposalParams = LPMParams({ 
+            typ: typ, 
+            target: target, 
+            amountOrPercent: amountOrPercent, 
+            dividendToken: dividendToken, 
+            cashAmount: cashAmount 
+        });
+
         return IDACEntity(childDAC).createLPManagementProposal(proposalParams);
     }
 
@@ -201,23 +210,27 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit ChildProposalVoted(childProposalId, support);
     }
 
+    function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
+    function isValidDeal() external pure returns (bool) { return true; }
+    function votingContract() external view returns (address) { return _votingContract; }
+    function fundingToken() external view returns (address) { return _fundingToken; }
+    function fundingAmount() external view returns (uint256) { return _fundingAmount; }
+
     modifier onlyDACEntity() {
-        require(msg.sender == dacEntity, "Only DAC");
+        _onlyDACEntity();
         _;
     }
 
     modifier onlyStakedMPHolder() {
-        require(balanceOf(msg.sender) > 0, "Not staked MP holder");
+        _onlyStakedMPHolder();
         _;
     }
 
-    // Events
-    event DealInitialized(uint256 indexed id);
-    event StakedMPMinted(address indexed staker, uint256 amount);
-    event DealActivated(uint256 indexed id);
-    event StakesTransformed(uint256 totalMP);
-    event StakesSlashed(uint256 slashAmount);
-    event ChildProposalVotingCreated(uint256 indexed childProposalId, address voting);
-    event ChildProposalVoted(uint256 indexed childProposalId, bool support);
-    event LPClaimed(address indexed holder, uint256 amount);
+    function _onlyDACEntity() internal {
+        require(msg.sender == dacEntity, "Only DAC");
+    }
+
+    function _onlyStakedMPHolder() internal {
+        require(balanceOf(msg.sender) > 0, "Not staked MP holder");
+    }
 }

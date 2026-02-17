@@ -54,6 +54,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     mapping(bytes32 => CapitalCall) public capitalCalls;
     mapping(bytes32 => bool) public fulfilledCalls;
 
+    // Events
     event DACCreated(address indexed creator, address indexed dac);
     event DealCreated(uint256 indexed id, address indexed creator, address childDAC);
     event DealApproved(uint256 indexed id);
@@ -245,6 +246,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         } else {
             IDeal(deal).slashStakes(100); // full slash for now
         }
+
         emit DealEvaluated(id, success);
     }
 
@@ -265,26 +267,47 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     }
 
     modifier onlyMPHolder() {
-        require(mpToken.balanceOf(msg.sender) > 0, "Not MP holder");
+        _onlyMPHolder();
         _;
     }
 
     modifier onlyLPHolder() {
-        require(lpToken.balanceOf(msg.sender) > 0, "Not LP holder");
+        _onlyLPHolder();
         _;
     }
 
     modifier onlyDeal() {
-        require(dealsMapping[msg.sender] != 0, "Not a Deal");
+        _onlyDeal();
         _;
     }
 
     modifier onlyOracle(address oracle) {
-        require(oracles[oracle], "Not oracle");
+        _onlyOracle(oracle);
         _;
     }
 
     modifier onlyAfterVote(uint256 id, bool requiredOutcome) {
+        _onlyAfterVote(id, requiredOutcome);
+        _;
+    }
+
+    function _onlyMPHolder() internal {
+        require(mpToken.balanceOf(msg.sender) > 0, "Not MP holder");
+    }
+
+    function _onlyLPHolder() internal {
+        require(lpToken.balanceOf(msg.sender) > 0, "Not LP holder");
+    }
+
+    function _onlyDeal() internal {
+        require(dealsMapping[msg.sender] != 0, "Not a Deal");
+    }
+
+    function _onlyOracle(address oracle) internal {
+        require(oracles[oracle], "Not oracle");
+    }
+
+    function _onlyAfterVote(uint256 id, bool requiredOutcome) internal {
         address votingAddr = deals[id] != address(0)
             ? IDeal(deals[id]).votingContract()
             : LPManagementProposal(lpProposals[id]).votingContract();
@@ -294,6 +317,5 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             IVoting(votingAddr).outcome(id) == requiredOutcome,
             "Vote not passed"
         );
-        _;
     }
 }
