@@ -4,11 +4,12 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IDACEntity.sol";
+import "./IEvaluator.sol";
 import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./MPToken.sol";
 import "./IDeal.sol";
-import "./LPManagementProposal.sol";   // for type access if needed
+import "./LPManagementProposal.sol";
 
 // Factory interfaces (minimal)
 interface IDealFactory {
@@ -48,6 +49,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     uint256 public nextId = 1;
 
     mapping(address => uint256) public dealsMapping;    // Deal address => id (for onlyDeal modifier)
+    mapping(address => address) public dealEvaluators;
 
     mapping(address => bool) public oracles;
 
@@ -71,6 +73,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         address _mpToken,
         uint256 _quorum,
         address _dealFactory,
+        address _evaluatorFactory,
         address _lpFactory,
         address _votingFactory
     ) {
@@ -80,6 +83,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             mpToken: _mpToken,
             votingFactory: _votingFactory,
             dealFactory: _dealFactory,
+            evaluatorFactory: _evaluatorFactory,
             lpFactory: _lpFactory
         });
 
@@ -124,7 +128,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         emit TreasuryDeposit(token, amount, msg.sender);
     }
 
-    function createDealProposal(DealParams calldata params)
+    function createDealProposal(DealParams calldata params, address evaluator)
         external
         onlyMPHolder
         returns (uint256 id)
@@ -141,6 +145,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
         deals[id] = deal;
         dealsMapping[deal] = id;
+
+        dealEvaluators[deal] = evaluator;
 
         IERC20(params.fundingToken).approve(deal, params.fundingAmount);
 
@@ -237,16 +243,37 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         }
     }
 
-    function evaluateDeal(uint256 id, bool success, address oracle) external onlyOracle(oracle) {
+    function mintLP(address deal, address to, uint256 amount) external {
+        require(msg.sender == address(this) || msg.sender == deal, "Only DAC/Deal");
+        lpToken.mint(to, amount);
+    }
+
+    function _performTransformation(uint256 id) internal {
+        address deal = deals[id];
+        uint256 totalMP = IDeal(deal).getStakedMPTotal();
+        MPToken(mpToken).burnFrom(deal, totalMP);
+        IDeal(deal).markAsSuccess();
+    }
+
+    function _performSlash(uint256 id, uint256 slashPercent) internal {
+        address deal = deals[id];
+        IDeal(deal).markAsFailed(slashPercent);
+        // funding return already handled inside markAsFailed if you want, or add here
+    }
+
+    function evaluateDeal(uint256 id) external onlyMPHolder {
         address deal = deals[id];
         require(deal != address(0), "Invalid deal");
 
-        if (success) {
-            IDeal(deal).transformStakes();
-        } else {
-            IDeal(deal).slashStakes(100); // full slash for now
-        }
+        address evaluator = dealEvaluators[deal];
 
+        bool success = IEvaluator(evaluator).evaluateDeal(id, deal, address(this));
+
+        if (success) {
+            _performTransformation(id);
+        } else {
+            _performSlash(id, 100);
+        }
         emit DealEvaluated(id, success);
     }
 
@@ -291,23 +318,23 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         _;
     }
 
-    function _onlyMPHolder() internal {
+    function _onlyMPHolder() internal view {
         require(mpToken.balanceOf(msg.sender) > 0, "Not MP holder");
     }
 
-    function _onlyLPHolder() internal {
+    function _onlyLPHolder() internal view {
         require(lpToken.balanceOf(msg.sender) > 0, "Not LP holder");
     }
 
-    function _onlyDeal() internal {
+    function _onlyDeal() internal view {
         require(dealsMapping[msg.sender] != 0, "Not a Deal");
     }
 
-    function _onlyOracle(address oracle) internal {
+    function _onlyOracle(address oracle) internal view {
         require(oracles[oracle], "Not oracle");
     }
 
-    function _onlyAfterVote(uint256 id, bool requiredOutcome) internal {
+    function _onlyAfterVote(uint256 id, bool requiredOutcome) internal view {
         address votingAddr = deals[id] != address(0)
             ? IDeal(deals[id]).votingContract()
             : LPManagementProposal(lpProposals[id]).votingContract();

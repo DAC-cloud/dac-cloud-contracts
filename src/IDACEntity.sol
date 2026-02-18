@@ -7,6 +7,7 @@ interface IDACEntity {
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);
     function createLPManagementProposal(LPMParams calldata params) external returns (uint256 id);
     function getProposalVoting(uint256 proposalId) external view returns (address);
+    function mintLP(address deal, address to, uint256 amount) external;
     function getQuorumPercent() external view returns (uint256);
     function getTreasuryBalance(address token) external view returns (uint256);
     function getLPToken() external view returns (address);
@@ -17,6 +18,7 @@ interface IDACEntity {
         address mpToken;
         address votingFactory;
         address dealFactory;
+        address evaluatorFactory;
         address lpFactory;
     }
 }

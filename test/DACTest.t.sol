@@ -6,6 +6,7 @@ import "../src/DACEntity.sol";
 import "../src/LPToken.sol";
 import "../src/MPToken.sol";
 import "../src/DealFactory.sol";
+import "../src/EvaluatorFactory.sol";
 import "../src/LPManagementFactory.sol";
 import "../src/VotingFactory.sol";
 
@@ -14,6 +15,7 @@ contract DACTest is Test {
     LPToken lpToken;
     MPToken mpToken;
     DealFactory dealFactory;
+    EvaluatorFactory evaluatorFactory;
     LPManagementFactory lpFactory;
     VotingFactory votingFactory;
     address owner = address(1);
@@ -22,6 +24,7 @@ contract DACTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         dealFactory = new DealFactory();
+        evaluatorFactory = new EvaluatorFactory();
         lpFactory = new LPManagementFactory();
         votingFactory = new VotingFactory();
         lpToken = new LPToken("LP Token", "LP", address(0)); // Temp for dac creation
@@ -31,6 +34,7 @@ contract DACTest is Test {
             address(mpToken),
             50,
             address(dealFactory),
+            address(evaluatorFactory),
             address(lpFactory),
             address(votingFactory)
         );

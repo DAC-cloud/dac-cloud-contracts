@@ -83,24 +83,19 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit DealInitialized(id);
     }
 
-    function totalSupply() public view override returns (uint256) {
-        return _totalStakedMP;
+    function totalSupply() public view override returns (uint256) { return _totalStakedMP; }
+    function balanceOf(address account) public view override returns (uint256) { return stakedMPBalance[account]; }
+
+    function transfer(address, uint256) public pure override returns (bool) {
+        revert("StakedMP tokens are non-transferable");
     }
 
-    function balanceOf(address account) public view override returns (uint256) {
-        return stakedMPBalance[account];
+    function transferFrom(address, address, uint256) public pure override returns (bool) {
+        revert("StakedMP tokens are non-transferable");
     }
 
-    function transfer(address to, uint256 amount) public override returns (bool) {
-        require(stakedMPBalance[msg.sender] >= amount, "Insufficient balance");
-        stakedMPBalance[msg.sender] -= amount;
-        stakedMPBalance[to] += amount;
-        return super.transfer(to, amount);
-    }
-
-    function approve(address spender, uint256 amount) public override returns (bool) {
-        _approve(msg.sender, spender, amount);
-        return true;
+    function approve(address, uint256) public pure override returns (bool) {
+        revert("StakedMP tokens are non-transferable");
     }
 
     function onMPStaked(address staker, uint256 amount) external {
@@ -121,7 +116,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
             treasuryToken: _fundingToken,
             nonce: id,
             lpRecipient: address(this),
-            lpAmount: 0, // child decides amount if needed
+            lpAmount: 0, //todo: need to fill this amount, from state, initialized at init
             cashAmount: _fundingAmount
         });
 
@@ -129,41 +124,34 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit DealActivated(id);
     }
 
-    function transformStakes() external {
+    function markAsSuccess() external {
         require(msg.sender == dacEntity, "Only DAC");
         require(!evaluated, "Already evaluated");
         evaluated = true;
         successFlag = true;
 
         uint256 transformedMP = _totalStakedMP;
-
-        MPToken(mpTokenAddr).burnFrom(address(this), _totalStakedMP);
-
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
             claimableLP[h] = stakedRealMP[h];
         }
         _totalStakedMP = 0;
-        
         emit StakesTransformed(transformedMP);
     }
 
-    function slashStakes(uint256 slashPercent) external {
+    function markAsFailed(uint256 slashPercent) external {
         require(msg.sender == dacEntity, "Only DAC");
         require(!evaluated, "Already evaluated");
         evaluated = true;
 
         uint256 slashAmount = (_totalStakedMP * slashPercent) / 100;
-        MPToken(mpTokenAddr).burnFrom(address(this), slashAmount);
-
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
             uint256 holderSlash = (stakedMPBalance[h] * slashPercent) / 100;
             stakedMPBalance[h] -= holderSlash;
-            claimableLP[h] = 0; // slashed
+            claimableLP[h] = 0;
         }
         _totalStakedMP -= slashAmount;
-
         emit StakesSlashed(slashAmount);
     }
 
@@ -171,7 +159,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         uint256 amount = claimableLP[msg.sender];
         require(amount > 0, "Nothing to claim");
         claimableLP[msg.sender] = 0;
-        LPToken(lpTokenAddr).mint(msg.sender, amount);
+        IDACEntity(dacEntity).mintLP(address(this), msg.sender, amount);
         emit LPClaimed(msg.sender, amount);
     }
 
@@ -226,11 +214,11 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         _;
     }
 
-    function _onlyDACEntity() internal {
+    function _onlyDACEntity() internal view {
         require(msg.sender == dacEntity, "Only DAC");
     }
 
-    function _onlyStakedMPHolder() internal {
+    function _onlyStakedMPHolder() internal view {
         require(balanceOf(msg.sender) > 0, "Not staked MP holder");
     }
 }
