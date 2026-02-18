@@ -11,19 +11,16 @@ interface IVoting {
     function outcome(uint256 propId) external view returns (bool);
 }
 
-enum LPManagementType {
-    MintMP,
-    Dividend,
-    CapitalCall
-}
+enum LPManagementType { MintMP, Dividend, CapitalCall }
 
 struct DealParams {
-    address dealTarget;
+    address dealTarget;        // childDAC
     string description;
     uint256 fundingAmount;
     address fundingToken;
-    uint256 successThreshold;
-    uint256 duration;
+    uint256 successThreshold; //todo: maybe remove from here? We store full schedule in Evaluator, and Evaluator fully decides on deal based on returned capital
+    uint256 approveDeadline;
+    uint256 dealDeadline;
 }
 
 struct LPMParams {
@@ -40,4 +37,10 @@ struct CapitalCall {
     address lpRecipient;
     uint256 lpAmount;
     uint256 cashAmount;
+}
+
+struct EvaluationResult {
+    uint8 action;           // 0 = slash, 1 = convert, 2 = extend, 3 = close
+    uint256 percent;        // % to apply
+    uint256 newDeadline;    // only for extend
 }

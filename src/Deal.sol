@@ -21,7 +21,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     string public description;
     address private _fundingToken;
     uint256 private _fundingAmount;
-    uint256 private _successThreshold;
+    uint256 public approveDeadline;
+    uint256 public dealDeadline;
     uint256 private duration;
     uint256 private startTime;
     address private _votingContract;
@@ -36,6 +37,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     mapping(address => uint256) public stakedRealMP;
     mapping(address => uint256) public stakedMPBalance;
     mapping(address => uint256) public claimableLP;
+    uint256 public returnedCapital;
 
     address[] public holders; // only for claimable tracking
 
@@ -48,6 +50,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     event ChildProposalVotingCreated(uint256 indexed childProposalId, address voting);
     event ChildProposalVoted(uint256 indexed childProposalId, bool support);
     event LPClaimed(address indexed holder, uint256 amount);
+    event CapitalReturned(uint256 amount);
 
     constructor(
         uint256 _id,
@@ -72,8 +75,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         description = params.description;
         _fundingAmount = params.fundingAmount;
         _fundingToken = params.fundingToken;
-        _successThreshold = params.successThreshold;
-        duration = params.duration;
+        approveDeadline = params.approveDeadline;
+        dealDeadline = params.dealDeadline;
         startTime = block.timestamp;
 
         _votingContract = IVotingFactory(votingFactoryAddr).deployVoting(
@@ -85,18 +88,9 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function totalSupply() public view override returns (uint256) { return _totalStakedMP; }
     function balanceOf(address account) public view override returns (uint256) { return stakedMPBalance[account]; }
-
-    function transfer(address, uint256) public pure override returns (bool) {
-        revert("StakedMP tokens are non-transferable");
-    }
-
-    function transferFrom(address, address, uint256) public pure override returns (bool) {
-        revert("StakedMP tokens are non-transferable");
-    }
-
-    function approve(address, uint256) public pure override returns (bool) {
-        revert("StakedMP tokens are non-transferable");
-    }
+    function transfer(address, uint256) public pure override returns (bool) { revert("StakedMP non-transferable"); }
+    function transferFrom(address, address, uint256) public pure override returns (bool) { revert("StakedMP non-transferable"); }
+    function approve(address, uint256) public pure override returns (bool) { revert("StakedMP non-transferable"); }
 
     function onMPStaked(address staker, uint256 amount) external {
         require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
@@ -124,25 +118,57 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit DealActivated(id);
     }
 
-    function markAsSuccess() external {
+    function unstake() external {
+        require(!approved, "Already approved");
+        require(block.timestamp > approveDeadline, "Approve deadline not passed");
+        uint256 amount = stakedMPBalance[msg.sender];
+        require(amount > 0, "No stake");
+
+        stakedMPBalance[msg.sender] = 0;
+        _totalStakedMP -= amount;
+        MPToken(mpTokenAddr).burnFrom(address(this), amount); // burn StakedMP
+        MPToken(mpTokenAddr).mint(msg.sender, amount);        // return real MP
+    }
+
+    function returnCapitalToDAC() external {
+        require(block.timestamp > dealDeadline || msg.sender == dacEntity, "Deadline not passed");
+        uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
+        if (balance == 0) return;
+
+        IERC20(_fundingToken).transfer(dacEntity, balance);
+        returnedCapital += balance;
+        emit CapitalReturned(balance);
+    }
+
+    function markAsSuccess(uint256 rewardPercent) external { // added percentage there to support rich evaluator decisions flexibility
         require(msg.sender == dacEntity, "Only DAC");
         require(!evaluated, "Already evaluated");
-        evaluated = true;
+        evaluated = true; //todo: make it percentage based (change from "evaluated" to "rewarded")
         successFlag = true;
 
-        uint256 transformedMP = _totalStakedMP;
+        // we're not slashing stacked-MP balances
+        
+        // I think we need to move even further with flexibility here
+        // MP balances can be later returned to manager when the deal closed by evaluator
+        // and that makes a total sense economically
+
+        // todo: and here "evaluated" becomes "closed", while rewards still be there
+        // so evaluator need to also have a new action to close the deal
+        
+        uint256 transformAmount = (_totalStakedMP * rewardPercent) / 100;
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
-            claimableLP[h] = stakedRealMP[h];
+            uint256 holderReward = (stakedMPBalance[h] * rewardPercent) / 100;
+            claimableLP[h] = holderReward;
         }
-        _totalStakedMP = 0;
-        emit StakesTransformed(transformedMP);
+
+        emit StakesTransformed(transformAmount);
     }
 
     function markAsFailed(uint256 slashPercent) external {
         require(msg.sender == dacEntity, "Only DAC");
         require(!evaluated, "Already evaluated");
-        evaluated = true;
+        evaluated = true; //todo: closed
 
         uint256 slashAmount = (_totalStakedMP * slashPercent) / 100;
         for (uint256 i = 0; i < holders.length; i++) {
@@ -199,6 +225,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     }
 
     function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
+    function getReturnedCapital() external view returns (uint256) { return returnedCapital; }
     function isValidDeal() external pure returns (bool) { return true; }
     function votingContract() external view returns (address) { return _votingContract; }
     function fundingToken() external view returns (address) { return _fundingToken; }

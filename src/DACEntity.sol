@@ -156,6 +156,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         dealsMapping[deal] = id;
 
         dealEvaluators[deal] = evaluator;
+        //todo: store evaluation metrics there (or inside a basic deal?)
 
         IERC20(params.fundingToken).approve(deal, params.fundingAmount);
 
@@ -257,20 +258,25 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         lpToken.mint(to, amount);
     }
 
-    function _performTransformation(uint256 id) internal {
+    function forceReturnCapital(uint256 id) external onlyLPHolder {
+        address deal = deals[id];
+        require(deal != address(0), "Invalid deal");
+        IDeal(deal).returnCapitalToDAC();
+    }
+
+    function _performTransformation(uint256 id, uint256 transformationPercent) internal {
         address deal = deals[id];
         uint256 totalMP = IDeal(deal).getStakedMPTotal();
         MPToken(mpToken).burnFrom(deal, totalMP);
-        IDeal(deal).markAsSuccess();
+        IDeal(deal).markAsSuccess(transformationPercent);
     }
 
     function _performSlash(uint256 id, uint256 slashPercent) internal {
         address deal = deals[id];
         IDeal(deal).markAsFailed(slashPercent);
-        // funding return already handled inside markAsFailed if you want, or add here
     }
 
-    function evaluateDeal(uint256 id) external onlyMPHolder {
+    function evaluateDeal(uint256 id) external onlyMPHolder /* todo: change to MP-or-LP rule */ {
         address deal = deals[id];
         require(deal != address(0), "Invalid deal");
 
@@ -278,8 +284,10 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
         bool success = IEvaluator(evaluator).evaluateDeal(id, deal, address(this));
 
+        //todo: evaluator actions
+
         if (success) {
-            _performTransformation(id);
+            _performTransformation(id, 100);
         } else {
             _performSlash(id, 100);
         }
