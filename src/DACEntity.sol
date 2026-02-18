@@ -33,6 +33,10 @@ interface ILPManagementFactory {
     ) external returns (address);
 }
 
+interface IEvaluatorFactory {
+    function isValidEvaluator(address evaluator) external view returns (bool);
+}
+
 contract DACEntity is IDACEntity, ReentrancyGuard {
     address public immutable deployer;
 
@@ -58,7 +62,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
     // Events
     event DACCreated(address indexed creator, address indexed dac);
-    event DealCreated(uint256 indexed id, address indexed creator, address childDAC);
+    event DealCreated(uint256 indexed id, address indexed creator, address deal, address target, address evaluator);
     event DealApproved(uint256 indexed id);
     event CapitalCallFulfilled(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
     event LPMProposalCreated(uint256 indexed id, LPManagementType typ);
@@ -133,6 +137,11 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         onlyMPHolder
         returns (uint256 id)
     {
+        require(
+            IEvaluatorFactory(config.evaluatorFactory).isValidEvaluator(evaluator),
+            "Not a trusted evaluator"
+        );
+
         id = nextId++;
         address deal = IDealFactory(config.dealFactory).deployDeal(
             id,
@@ -150,7 +159,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
         IERC20(params.fundingToken).approve(deal, params.fundingAmount);
 
-        emit DealCreated(id, msg.sender, params.dealTarget);
+        emit DealCreated(id, msg.sender, deal, params.dealTarget, evaluator);
     }
 
     function approveDeal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
