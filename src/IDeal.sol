@@ -9,6 +9,8 @@ interface IDeal {
     function onApproved() external;
     function markAsSuccess(uint256 rewardPercent) external;
     function markAsFailed(uint256 slashPercent) external;
+    function extendDeadline(uint256 newDeadline) external;
+    function closeDeal() external;
     function claimLP() external;
     function unstake() external;
     function returnCapitalToDAC() external;

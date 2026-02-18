@@ -21,6 +21,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     string public description;
     address private _fundingToken;
     uint256 private _fundingAmount;
+    uint256 private _childLPAmount;
     uint256 public approveDeadline;
     uint256 public dealDeadline;
     uint256 private duration;
@@ -28,8 +29,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     address private _votingContract;
 
     bool public approved;
-    bool public evaluated;
-    bool public successFlag;
+    bool public closed;
+    uint256 public rewardsConverted;
 
     mapping(uint256 => address) public childProposalVotings;
 
@@ -51,6 +52,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     event ChildProposalVoted(uint256 indexed childProposalId, bool support);
     event LPClaimed(address indexed holder, uint256 amount);
     event CapitalReturned(uint256 amount);
+    event DeadlineExtended(uint256 newDeadline);
+    event DealClosed(uint256 totalMP);
 
     constructor(
         uint256 _id,
@@ -75,6 +78,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         description = params.description;
         _fundingAmount = params.fundingAmount;
         _fundingToken = params.fundingToken;
+        //_childLPAmount = params.
         approveDeadline = params.approveDeadline;
         dealDeadline = params.dealDeadline;
         startTime = block.timestamp;
@@ -104,6 +108,9 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function onApproved() external {
         require(msg.sender == dacEntity, "Only DAC");
+        require(!approved, "Already approved");
+        require(block.timestamp > approveDeadline, "Approve deadline not passed");
+
         approved = true;
 
         CapitalCall memory call = CapitalCall({
@@ -119,8 +126,13 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     }
 
     function unstake() external {
-        require(!approved, "Already approved");
-        require(block.timestamp > approveDeadline, "Approve deadline not passed");
+        // allow to unstake if the deal is closed
+        if (!closed) {
+            // of if the deal is not approved within deadline
+            require(!approved, "Already approved");
+            require(block.timestamp > approveDeadline, "Approve deadline not passed");
+        }
+        
         uint256 amount = stakedMPBalance[msg.sender];
         require(amount > 0, "No stake");
 
@@ -142,19 +154,11 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function markAsSuccess(uint256 rewardPercent) external { // added percentage there to support rich evaluator decisions flexibility
         require(msg.sender == dacEntity, "Only DAC");
-        require(!evaluated, "Already evaluated");
-        evaluated = true; //todo: make it percentage based (change from "evaluated" to "rewarded")
-        successFlag = true;
+        require(!closed, "Deal is already closed");
+        require(rewardsConverted + rewardPercent <= 100, "Insufficient remaining rewards");
 
-        // we're not slashing stacked-MP balances
-        
-        // I think we need to move even further with flexibility here
-        // MP balances can be later returned to manager when the deal closed by evaluator
-        // and that makes a total sense economically
+        rewardsConverted = rewardsConverted + rewardPercent;
 
-        // todo: and here "evaluated" becomes "closed", while rewards still be there
-        // so evaluator need to also have a new action to close the deal
-        
         uint256 transformAmount = (_totalStakedMP * rewardPercent) / 100;
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
@@ -162,13 +166,17 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
             claimableLP[h] = holderReward;
         }
 
+        // if all rewards were paid out marking the deal as closed so MP tokens can withdraw stakes
+        if (rewardsConverted == 100) {
+            this.closeDeal();
+        }
+
         emit StakesTransformed(transformAmount);
     }
 
     function markAsFailed(uint256 slashPercent) external {
         require(msg.sender == dacEntity, "Only DAC");
-        require(!evaluated, "Already evaluated");
-        evaluated = true; //todo: closed
+        require(!closed, "Deal is already closed");
 
         uint256 slashAmount = (_totalStakedMP * slashPercent) / 100;
         for (uint256 i = 0; i < holders.length; i++) {
@@ -179,6 +187,20 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         }
         _totalStakedMP -= slashAmount;
         emit StakesSlashed(slashAmount);
+    }
+
+    function extendDeadline(uint256 newDeadline) external {
+        require(msg.sender == dacEntity, "Only DAC");
+        require(!closed, "Deal is already closed");
+        dealDeadline = newDeadline;
+        emit DeadlineExtended(newDeadline);
+    }
+
+    function closeDeal() external {
+        require(msg.sender == address(this) || msg.sender == dacEntity, "Only DAC");
+        require(!closed, "Deal is already closed");
+        closed = true;
+        emit DealClosed(_totalStakedMP);
     }
 
     function claimLP() external {

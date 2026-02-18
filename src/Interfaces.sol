@@ -18,7 +18,7 @@ struct DealParams {
     string description;
     uint256 fundingAmount;
     address fundingToken;
-    uint256 successThreshold; //todo: maybe remove from here? We store full schedule in Evaluator, and Evaluator fully decides on deal based on returned capital
+    uint256 successThreshold;
     uint256 approveDeadline;
     uint256 dealDeadline;
 }
@@ -39,8 +39,15 @@ struct CapitalCall {
     uint256 cashAmount;
 }
 
+struct Milestone {
+    uint256 timestamp;
+    uint256 expectedReturnPercent; // cumulative % of funding expected back
+    uint256 rewardPercentage;
+    uint256 penalty; // slash % applied
+}
+
 struct EvaluationResult {
-    uint8 action;           // 0 = slash, 1 = convert, 2 = extend, 3 = close
-    uint256 percent;        // % to apply
-    uint256 newDeadline;    // only for extend
+    uint8 action;       // 0=slash, 1=convert, 2=extend, 3=close
+    uint256 percent;    // % to slash/convert
+    uint256 newDeadline; // only for extend
 }

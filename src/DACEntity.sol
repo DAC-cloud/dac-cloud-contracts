@@ -266,32 +266,36 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
     function _performTransformation(uint256 id, uint256 transformationPercent) internal {
         address deal = deals[id];
-        uint256 totalMP = IDeal(deal).getStakedMPTotal();
-        MPToken(mpToken).burnFrom(deal, totalMP);
         IDeal(deal).markAsSuccess(transformationPercent);
     }
 
     function _performSlash(uint256 id, uint256 slashPercent) internal {
         address deal = deals[id];
+        uint256 totalMP = IDeal(deal).getStakedMPTotal();
+        MPToken(mpToken).burnFrom(deal, totalMP);
         IDeal(deal).markAsFailed(slashPercent);
     }
 
-    function evaluateDeal(uint256 id) external onlyMPHolder /* todo: change to MP-or-LP rule */ {
+    function evaluateDeal(uint256 id) external onlyMPHolder {
         address deal = deals[id];
         require(deal != address(0), "Invalid deal");
 
-        address evaluator = dealEvaluators[deal];
+        address evaluatorAddr = dealEvaluators[deal];
+        EvaluationResult memory result = IEvaluator(evaluatorAddr).evaluateDeal(id, deal, address(this));
 
-        bool success = IEvaluator(evaluator).evaluateDeal(id, deal, address(this));
-
-        //todo: evaluator actions
-
-        if (success) {
-            _performTransformation(id, 100);
-        } else {
-            _performSlash(id, 100);
+        if (result.action == 0) { // slash
+            _performSlash(id, result.percent);
+        } else if (result.action == 1) { // convert
+            _performTransformation(id, result.percent);
+        } else if (result.action == 2) { // extend
+            IDeal(deal).extendDeadline(result.newDeadline);
+        } else if (result.action == 3) { // close
+            IDeal(deal).closeDeal();
         }
-        emit DealEvaluated(id, success);
+
+        if (result.action == 1 || result.action == 0) {
+            emit DealEvaluated(id, result.action == 1);
+        }
     }
 
     function getQuorumPercent() external view returns (uint256) {
