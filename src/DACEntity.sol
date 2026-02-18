@@ -10,6 +10,7 @@ import "./LPToken.sol";
 import "./MPToken.sol";
 import "./IDeal.sol";
 import "./LPManagementProposal.sol";
+import "./IEvaluatorFactory.sol";
 
 // Factory interfaces (minimal)
 interface IDealFactory {
@@ -20,7 +21,7 @@ interface IDealFactory {
         address mpToken,
         address lpToken,
         address votingFactory
-    ) external returns (address);
+    ) external returns (address, address);
 }
 
 interface ILPManagementFactory {
@@ -31,10 +32,6 @@ interface ILPManagementFactory {
         address votingFactory,
         address token
     ) external returns (address);
-}
-
-interface IEvaluatorFactory {
-    function isValidEvaluator(address evaluator) external view returns (bool);
 }
 
 contract DACEntity is IDACEntity, ReentrancyGuard {
@@ -132,18 +129,19 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         emit TreasuryDeposit(token, amount, msg.sender);
     }
 
-    function createDealProposal(DealParams calldata params, address evaluator)
+    function createDealProposal(DealParams calldata params)
         external
         onlyMPHolder
-        returns (uint256 id)
+        returns (uint256 id, address dealAddr, address evaluatorAddr)
     {
-        require(
-            IEvaluatorFactory(config.evaluatorFactory).isValidEvaluator(evaluator),
-            "Not a trusted evaluator"
-        );
+        // Basic validation – later replace with registry check
+        require(params.evaluatorFactory != address(0), "Evaluator factory required");
+
+        require(params.proposer == msg.sender, "Proposer must be msg.sender");
 
         id = nextId++;
-        address deal = IDealFactory(config.dealFactory).deployDeal(
+
+        (dealAddr, evaluatorAddr) = IDealFactory(config.dealFactory).deployDeal(
             id,
             params,
             address(this),
@@ -152,15 +150,13 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             config.votingFactory
         );
 
-        deals[id] = deal;
-        dealsMapping[deal] = id;
+        deals[id] = dealAddr;
+        dealsMapping[dealAddr] = id;
+        dealEvaluators[dealAddr] = evaluatorAddr; // optional, for easy lookup
 
-        dealEvaluators[deal] = evaluator;
-        //todo: store evaluation metrics there (or inside a basic deal?)
+        IERC20(params.fundingToken).approve(dealAddr, params.fundingAmount);
 
-        IERC20(params.fundingToken).approve(deal, params.fundingAmount);
-
-        emit DealCreated(id, msg.sender, deal, params.dealTarget, evaluator);
+        emit DealCreated(id, msg.sender, dealAddr, params.dealTarget, evaluatorAddr);
     }
 
     function approveDeal(uint256 id) external onlyAfterVote(id, true) nonReentrant {

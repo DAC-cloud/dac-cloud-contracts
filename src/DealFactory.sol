@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./Deal.sol";
 import "./Interfaces.sol";
+import "./IEvaluatorFactory.sol";
 
 contract DealFactory {
     function deployDeal(
@@ -12,9 +13,24 @@ contract DealFactory {
         address mpToken,
         address lpToken,
         address votingFactory
-    ) external returns (address) {
-        Deal deal = new Deal(id, dac, params.dealTarget, mpToken, lpToken, votingFactory);
+    ) external returns (address dealAddr, address evaluatorAddr) {
+        Deal deal = new Deal(
+            id,
+            dac,
+            params.dealTarget,
+            mpToken,
+            lpToken,
+            votingFactory,
+            params.proposer,
+            params.isWhitelistOnly
+        );
+
         deal.initialize(params);
-        return address(deal);
+        
+        // Create per-deal evaluator instance
+        evaluatorAddr = IEvaluatorFactory(params.evaluatorFactory)
+            .deployEvaluator(params.evaluatorConfig);
+
+        dealAddr = address(deal);
     }
 }

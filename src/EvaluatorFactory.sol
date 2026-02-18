@@ -3,18 +3,18 @@ pragma solidity ^0.8.20;
 
 import "./BasicEvaluator.sol";
 import "./Interfaces.sol";
+import "./IEvaluatorFactory.sol";
 
-contract EvaluatorFactory {
+contract EvaluatorFactory is IEvaluatorFactory {
     uint256 public nextId = 1;
     mapping(address => uint256) public evaluatorsMapping;
 
-    function isValidEvaluator(address evaluator) external view returns (bool) {
-        return evaluatorsMapping[evaluator] != 0;
-    }
+    function deployEvaluator(bytes calldata config) external returns (address) {
+        Milestone[] memory schedule = abi.decode(config, (Milestone[]));
 
-    function deployBasicEvaluatorWithSchedule(Milestone[] calldata schedule) external returns (address) {
         BasicEvaluator eval = new BasicEvaluator(schedule);
         evaluatorsMapping[address(eval)] = nextId++;
+
         return address(eval);
     }
 }

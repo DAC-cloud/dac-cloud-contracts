@@ -17,6 +17,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     address public immutable mpTokenAddr;
     address public immutable lpTokenAddr;
     address public immutable votingFactoryAddr;
+    address public immutable proposer;
+    bool public immutable isWhitelistOnly; 
 
     string public description;
     address private _fundingToken;
@@ -40,6 +42,10 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     mapping(address => uint256) public claimableLP;
     uint256 public returnedCapital;
 
+    // Whitelist
+    mapping(address => bool) public isWhitelisted;
+    mapping(address => bool) public canInviteOthers;
+
     address[] public holders; // only for claimable tracking
 
     // Events
@@ -54,6 +60,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     event CapitalReturned(uint256 amount);
     event DeadlineExtended(uint256 newDeadline);
     event DealClosed(uint256 totalMP);
+    event Invited(address indexed invitee, bool canInvite);
 
     constructor(
         uint256 _id,
@@ -61,7 +68,9 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         address _child,
         address _mpToken,
         address _lpToken,
-        address _votingFactory
+        address _votingFactory,
+        address _proposer,
+        bool _isWhitelistOnly
     ) ERC20("Staked MP for Deal", "sMP") {
         id = _id;
         dacEntity = _dac;
@@ -69,6 +78,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         mpTokenAddr = _mpToken;
         lpTokenAddr = _lpToken;
         votingFactoryAddr = _votingFactory;
+        proposer = _proposer;
+        isWhitelistOnly = _isWhitelistOnly;
     }
 
     function initialize(DealParams calldata params) external {
@@ -78,7 +89,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         description = params.description;
         _fundingAmount = params.fundingAmount;
         _fundingToken = params.fundingToken;
-        //_childLPAmount = params.
+        _childLPAmount = params.managedEquity;
         approveDeadline = params.approveDeadline;
         dealDeadline = params.dealDeadline;
         startTime = block.timestamp;
@@ -86,6 +97,12 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         _votingContract = IVotingFactory(votingFactoryAddr).deployVoting(
             id, duration, address(this), lpTokenAddr
         );
+
+        if (isWhitelistOnly) {
+            isWhitelisted[proposer] = true;
+            canInviteOthers[proposer] = true;
+            emit Invited(proposer, true);
+        }
 
         emit DealInitialized(id);
     }
@@ -98,6 +115,11 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function onMPStaked(address staker, uint256 amount) external {
         require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
+
+        if (isWhitelistOnly) {
+            require(isWhitelisted[staker], "Not whitelisted for this deal");
+        }
+
         if (stakedMPBalance[staker] == 0) holders.push(staker);
         stakedRealMP[staker] += amount;
         stakedMPBalance[staker] += amount;
@@ -117,12 +139,22 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
             treasuryToken: _fundingToken,
             nonce: id,
             lpRecipient: address(this),
-            lpAmount: 0, //todo: need to fill this amount, from state, initialized at init
+            lpAmount: _childLPAmount,
             cashAmount: _fundingAmount
         });
 
         IDACEntity(childDAC).fulfillCapitalCall(call);
         emit DealActivated(id);
+    }
+
+    function invite(address invitee, bool grantInviteRight) external {
+        require(isWhitelistOnly, "Deal is not whitelist-only");
+        require(isWhitelisted[msg.sender] && canInviteOthers[msg.sender], "Not authorized to invite");
+        require(!isWhitelisted[invitee], "Already whitelisted");
+
+        isWhitelisted[invitee] = true;
+        canInviteOthers[invitee] = grantInviteRight;
+        emit Invited(invitee, grantInviteRight);
     }
 
     function unstake() external {
@@ -152,7 +184,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit CapitalReturned(balance);
     }
 
-    function markAsSuccess(uint256 rewardPercent) external { // added percentage there to support rich evaluator decisions flexibility
+    function markAsSuccess(uint256 rewardPercent) external {
         require(msg.sender == dacEntity, "Only DAC");
         require(!closed, "Deal is already closed");
         require(rewardsConverted + rewardPercent <= 100, "Insufficient remaining rewards");
@@ -166,7 +198,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
             claimableLP[h] = holderReward;
         }
 
-        // if all rewards were paid out marking the deal as closed so MP tokens can withdraw stakes
+        // if all rewards were paid out, marking the deal as closed so MP tokens can withdraw stakes
         if (rewardsConverted == 100) {
             this.closeDeal();
         }

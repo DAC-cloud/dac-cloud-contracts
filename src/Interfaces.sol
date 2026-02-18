@@ -15,12 +15,18 @@ enum LPManagementType { MintMP, Dividend, CapitalCall }
 
 struct DealParams {
     address dealTarget;        // childDAC
+    address proposer;
     string description;
     uint256 fundingAmount;
+    uint256 managedEquity;     // only for DAC based Deals (investment into child DAC LP)
     address fundingToken;
     uint256 successThreshold;
     uint256 approveDeadline;
     uint256 dealDeadline;
+    bool isWhitelistOnly;
+    address evaluatorFactory;     // trusted factory that creates the evaluator
+    bytes evaluatorConfig;        // opaque config for evaluator (e.g. abi.encode(Milestone[]))
+    bytes dealConfig;             // future-proof field for deal-specific init data
 }
 
 struct LPMParams {
