@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Deal.sol";
+import "./DACDeal.sol";
 import "./Interfaces.sol";
 import "./IEvaluatorFactory.sol";
 
@@ -15,7 +15,7 @@ contract DealFactory {
         address votingFactory,
         VotingConfig calldata votingConfig
     ) external returns (address dealAddr, address evaluatorAddr) {
-        Deal deal = new Deal(
+        Deal deal = new DACDeal(
             id,
             dac,
             params.dealTarget,

@@ -10,10 +10,12 @@ import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./IDACEntity.sol";
 
-contract Deal is ERC20, ReentrancyGuard, IDeal {
+abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
+    address public immutable factory;
+
     uint256 public immutable id;
     address public immutable dacEntity;
-    address public immutable childDAC;
+    address public immutable managedEntity;
     address public immutable mpTokenAddr;
     address public immutable lpTokenAddr;
     address public immutable votingFactoryAddr;
@@ -23,7 +25,6 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     string public description;
     address private _fundingToken;
     uint256 private _fundingAmount;
-    uint256 private _childLPAmount;
     uint256 private _lpRewardsLimit;
     uint256 public approveDeadline;
     uint256 public dealDeadline;
@@ -33,9 +34,8 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     bool public approved;
     bool public closed;
+    bool public earlyReturns; //todo: change by voting of staked-MP, default false
     uint256 public rewardsConverted;
-
-    mapping(uint256 => address) public childProposalVotings;
 
     uint256 private _totalStakedMP;
     mapping(address => uint256) public stakedRealMP;
@@ -55,8 +55,6 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     event DealActivated(uint256 indexed id);
     event StakesTransformed(uint256 totalMP);
     event StakesSlashed(uint256 slashAmount);
-    event ChildProposalVotingCreated(uint256 indexed childProposalId, address voting);
-    event ChildProposalVoted(uint256 indexed childProposalId, bool support);
     event LPClaimed(address indexed holder, uint256 amount);
     event CapitalReturned(uint256 amount);
     event DeadlineExtended(uint256 newDeadline);
@@ -66,16 +64,17 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     constructor(
         uint256 _id,
         address _dac,
-        address _child,
+        address _entityAddress,
         address _mpToken,
         address _lpToken,
         address _votingFactory,
         address _proposer,
         bool _isWhitelistOnly
     ) ERC20("Staked MP for Deal", "sMP") {
+        factory = msg.sender;
         id = _id;
         dacEntity = _dac;
-        childDAC = _child;
+        managedEntity = _entityAddress;
         mpTokenAddr = _mpToken;
         lpTokenAddr = _lpToken;
         votingFactoryAddr = _votingFactory;
@@ -85,23 +84,22 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function initialize(
         DealParams calldata params,
-        VotingConfig calldata votingConfig
-    ) external {
-        require(msg.sender == dacEntity, "Only DAC");
+        VotingConfig calldata defaultVotingConfig
+    ) public virtual override {
+        require(msg.sender == factory, "Only factory");
         require(startTime == 0, "Already initialized");
 
         description = params.description;
         _fundingAmount = params.fundingAmount;
         _fundingToken = params.fundingToken;
-        _childLPAmount = params.managedEquity;
         _lpRewardsLimit = params.lpRewardsLimit;
         approveDeadline = params.approveDeadline;
         dealDeadline = params.dealDeadline;
         startTime = block.timestamp;
-        _votingConfig = votingConfig;
+        _votingConfig = defaultVotingConfig;
 
         _votingContract = IVotingFactory(votingFactoryAddr).deployVoting(
-            id, votingConfig.defaultDuration, address(this), lpTokenAddr, votingConfig.quorumPercent
+            id, _votingConfig.defaultDuration, address(this), lpTokenAddr, _votingConfig.quorumPercent
         );
 
         if (isWhitelistOnly) {
@@ -139,22 +137,12 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit StakedMPMinted(staker, amount);
     }
 
-    function onApproved() external {
-        require(msg.sender == dacEntity, "Only DAC");
+    function onApproved() public virtual override {
+        require((msg.sender == dacEntity || msg.sender == address(this)), "Only DAC");
         require(!approved, "Already approved");
         require(block.timestamp > approveDeadline, "Approve deadline not passed");
 
         approved = true;
-
-        CapitalCall memory call = CapitalCall({
-            treasuryToken: _fundingToken,
-            nonce: id,
-            lpRecipient: address(this),
-            lpAmount: _childLPAmount,
-            cashAmount: _fundingAmount
-        });
-
-        IDACEntity(childDAC).fulfillCapitalCall(call);
         
         emit DealActivated(id);
     }
@@ -187,8 +175,19 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         MPToken(mpTokenAddr).mint(msg.sender, amount);        // return real MP
     }
 
-    function returnCapitalToDAC() external {
-        require(block.timestamp > dealDeadline || msg.sender == dacEntity, "Deadline not passed");
+    function returnCapitalToDAC() public virtual override {
+        if (msg.sender != address(this)) {
+            if (msg.sender == dacEntity) {
+                require(block.timestamp > dealDeadline, "Deadline not passed");
+            }
+            else {
+                require(stakedMPBalance[msg.sender] != 0, "Not a staked-MP holder");
+                if (!earlyReturns) {
+                    require(block.timestamp > dealDeadline, "Deadline not passed");
+                }
+            }
+        }
+        
         uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
         if (balance == 0) return;
 
@@ -267,48 +266,15 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit LPClaimed(msg.sender, amount);
     }
 
-    function createChildLPProposal(
-        LPMParams calldata params
-    ) external onlyStakedMPHolder returns (uint256) {
-        LPMParams memory proposalParams = params;
-
-        return IDACEntity(childDAC).createLPManagementProposal(proposalParams);
-    }
-
-    function createChildProposalVoting(uint256 childProposalId) external onlyStakedMPHolder {
-        require(childProposalVotings[childProposalId] == address(0), "Voting already exists");
-        
-        address voting = IVotingFactory(votingFactoryAddr).deployVoting(
-            childProposalId, 
-            _votingConfig.defaultDuration, 
-            address(this), 
-            address(this), 
-            _votingConfig.quorumPercent
-        );
-        childProposalVotings[childProposalId] = voting;
-        
-        emit ChildProposalVotingCreated(childProposalId, voting);
-    }
-
-    function resolveChildProposalVote(uint256 childProposalId) external onlyStakedMPHolder {
-        address voting = childProposalVotings[childProposalId];
-        require(voting != address(0), "No voting for this proposal");
-        require(IVoting(voting).isResolved(childProposalId), "Voting not resolved");
-        
-        bool support = IVoting(voting).outcome(childProposalId);
-        address childVoting = IDACEntity(childDAC).getProposalVoting(childProposalId);
-        IVoting(childVoting).vote(support);
-        
-        emit ChildProposalVoted(childProposalId, support);
-    }
-
     function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
     function getReturnedCapital() external view returns (uint256) { return returnedCapital; }
     function getLPRewardsLimit() external view returns (uint256) { return _lpRewardsLimit; }
     function isValidDeal() external pure returns (bool) { return true; }
     function votingContract() external view returns (address) { return _votingContract; }
-    function fundingToken() external view returns (address) { return _fundingToken; }
-    function fundingAmount() external view returns (uint256) { return _fundingAmount; }
+    function fundingToken() public view returns (address) { return _fundingToken; }
+    function fundingAmount() public view returns (uint256) { return _fundingAmount; }
+
+    function votingConfig() public view returns (VotingConfig memory) { return _votingConfig; }
 
     modifier onlyDACEntity() {
         _onlyDACEntity();

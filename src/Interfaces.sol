@@ -17,7 +17,9 @@ enum LPManagementType {
     CapitalCall,
     AddTrustedEvaluatorFactory,
     RemoveTrustedEvaluatorFactory,
-    RevokeMP
+    RevokeMP,
+    ApprovePermit2Spend,      // Only for VaultDeal
+    ReturnCapitalToDAC        // Only for VaultDeal
 }
 
 struct VotingConfig {

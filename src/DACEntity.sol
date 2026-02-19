@@ -210,6 +210,14 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         onlyLPHolder
         returns (uint256 id)
     {
+        require(
+            !(
+                params.typ == LPManagementType.ApprovePermit2Spend ||
+                params.typ == LPManagementType.ReturnCapitalToDAC
+            ), 
+            "Unsupported proposal type"
+        );
+
         id = nextId++;
         address prop = ILPManagementFactory(config.lpFactory).deployLPManagement(
             id,
