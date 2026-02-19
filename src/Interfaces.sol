@@ -26,15 +26,15 @@ struct VotingConfig {
 }
 
 struct DealParams {
-    address dealTarget;        // childDAC
+    address dealTarget;        // childDAC or Vault-based deal address
     address proposer;
     string description;
-    uint256 fundingAmount;
-    uint256 managedEquity;     // only for DAC based Deals (investment into child DAC LP)
     address fundingToken;
-    uint256 successThreshold;
+    uint256 fundingAmount;
+    uint256 lpRewardsLimit;
     uint256 approveDeadline;
     uint256 dealDeadline;
+    uint256 managedEquity;     // only for DAC based Deals (investment into child DAC LP)
     bool isWhitelistOnly;
     address evaluatorFactory;     // trusted factory that creates the evaluator
     bytes evaluatorConfig;        // opaque config for evaluator (e.g. abi.encode(Milestone[]))

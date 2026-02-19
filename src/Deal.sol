@@ -24,6 +24,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     address private _fundingToken;
     uint256 private _fundingAmount;
     uint256 private _childLPAmount;
+    uint256 private _lpRewardsLimit;
     uint256 public approveDeadline;
     uint256 public dealDeadline;
     uint256 private startTime;
@@ -93,6 +94,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         _fundingAmount = params.fundingAmount;
         _fundingToken = params.fundingToken;
         _childLPAmount = params.managedEquity;
+        _lpRewardsLimit = params.lpRewardsLimit;
         approveDeadline = params.approveDeadline;
         dealDeadline = params.dealDeadline;
         startTime = block.timestamp;
@@ -201,14 +203,17 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         require(!closed, "Deal is already closed");
         require(rewardsConverted + rewardPercent <= 100, "Insufficient remaining rewards");
 
-        rewardsConverted = rewardsConverted + rewardPercent;
+        uint256 rewardLP = (_lpRewardsLimit * rewardPercent) / 100;
 
-        uint256 transformAmount = (_totalStakedMP * rewardPercent) / 100;
+        uint256 transformAmount = rewardLP; // for event
+
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
-            uint256 holderReward = (stakedMPBalance[h] * rewardPercent) / 100;
-            claimableLP[h] = holderReward;
+            uint256 holderShare = (stakedRealMP[h] * rewardLP) / _totalStakedMP;  // pro-rata on original stake
+            claimableLP[h] = holderShare;
         }
+
+        rewardsConverted += rewardPercent;
 
         // if all rewards were paid out, marking the deal as closed so MP tokens can withdraw stakes
         if (rewardsConverted == 100) {
@@ -299,6 +304,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
     function getReturnedCapital() external view returns (uint256) { return returnedCapital; }
+    function getLPRewardsLimit() external view returns (uint256) { return _lpRewardsLimit; }
     function isValidDeal() external pure returns (bool) { return true; }
     function votingContract() external view returns (address) { return _votingContract; }
     function fundingToken() external view returns (address) { return _fundingToken; }

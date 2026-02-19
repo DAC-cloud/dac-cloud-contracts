@@ -16,6 +16,7 @@ interface IDeal {
     function returnCapitalToDAC() external;
     function getStakedMPTotal() external view returns (uint256);
     function getReturnedCapital() external view returns (uint256);
+    function getLPRewardsLimit() external view returns (uint256);
     function isValidDeal() external pure returns (bool);
     function votingContract() external view returns (address);
     function fundingToken() external view returns (address);
