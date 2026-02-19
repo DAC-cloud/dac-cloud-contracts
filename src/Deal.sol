@@ -26,9 +26,9 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     uint256 private _childLPAmount;
     uint256 public approveDeadline;
     uint256 public dealDeadline;
-    uint256 private duration;
     uint256 private startTime;
     address private _votingContract;
+    VotingConfig private _votingConfig;
 
     bool public approved;
     bool public closed;
@@ -82,7 +82,10 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         isWhitelistOnly = _isWhitelistOnly;
     }
 
-    function initialize(DealParams calldata params) external {
+    function initialize(
+        DealParams calldata params,
+        VotingConfig calldata votingConfig
+    ) external {
         require(msg.sender == dacEntity, "Only DAC");
         require(startTime == 0, "Already initialized");
 
@@ -93,9 +96,10 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         approveDeadline = params.approveDeadline;
         dealDeadline = params.dealDeadline;
         startTime = block.timestamp;
+        _votingConfig = votingConfig;
 
         _votingContract = IVotingFactory(votingFactoryAddr).deployVoting(
-            id, duration, address(this), lpTokenAddr
+            id, votingConfig.defaultDuration, address(this), lpTokenAddr, votingConfig.quorumPercent
         );
 
         if (isWhitelistOnly) {
@@ -116,15 +120,20 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     function onMPStaked(address staker, uint256 amount) external {
         require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
 
+        // if the deal is approved no more stakes allowed
+        require(!approved, "Already approved");
+
         if (isWhitelistOnly) {
             require(isWhitelisted[staker], "Not whitelisted for this deal");
         }
 
         if (stakedMPBalance[staker] == 0) holders.push(staker);
+        
         stakedRealMP[staker] += amount;
         stakedMPBalance[staker] += amount;
         _totalStakedMP += amount;
         _mint(staker, amount);
+        
         emit StakedMPMinted(staker, amount);
     }
 
@@ -144,6 +153,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         });
 
         IDACEntity(childDAC).fulfillCapitalCall(call);
+        
         emit DealActivated(id);
     }
 
@@ -154,6 +164,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
         isWhitelisted[invitee] = true;
         canInviteOthers[invitee] = grantInviteRight;
+        
         emit Invited(invitee, grantInviteRight);
     }
 
@@ -181,6 +192,7 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
         IERC20(_fundingToken).transfer(dacEntity, balance);
         returnedCapital += balance;
+        
         emit CapitalReturned(balance);
     }
 
@@ -218,28 +230,35 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
             claimableLP[h] = 0;
         }
         _totalStakedMP -= slashAmount;
+        
         emit StakesSlashed(slashAmount);
     }
 
     function extendDeadline(uint256 newDeadline) external {
         require(msg.sender == dacEntity, "Only DAC");
         require(!closed, "Deal is already closed");
+        
         dealDeadline = newDeadline;
+        
         emit DeadlineExtended(newDeadline);
     }
 
     function closeDeal() external {
         require(msg.sender == address(this) || msg.sender == dacEntity, "Only DAC");
         require(!closed, "Deal is already closed");
+        
         closed = true;
+        
         emit DealClosed(_totalStakedMP);
     }
 
     function claimLP() external {
         uint256 amount = claimableLP[msg.sender];
         require(amount > 0, "Nothing to claim");
+        
         claimableLP[msg.sender] = 0;
         IDACEntity(dacEntity).mintLP(address(this), msg.sender, amount);
+        
         emit LPClaimed(msg.sender, amount);
     }
 
@@ -263,8 +282,16 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function createChildProposalVoting(uint256 childProposalId) external onlyStakedMPHolder {
         require(childProposalVotings[childProposalId] == address(0), "Voting already exists");
-        address voting = IVotingFactory(votingFactoryAddr).deployVoting(childProposalId, 7 days, address(this), address(this));
+        
+        address voting = IVotingFactory(votingFactoryAddr).deployVoting(
+            childProposalId, 
+            _votingConfig.defaultDuration, 
+            address(this), 
+            address(this), 
+            _votingConfig.quorumPercent
+        );
         childProposalVotings[childProposalId] = voting;
+        
         emit ChildProposalVotingCreated(childProposalId, voting);
     }
 
@@ -272,9 +299,11 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
         address voting = childProposalVotings[childProposalId];
         require(voting != address(0), "No voting for this proposal");
         require(IVoting(voting).isResolved(childProposalId), "Voting not resolved");
+        
         bool support = IVoting(voting).outcome(childProposalId);
         address childVoting = IDACEntity(childDAC).getProposalVoting(childProposalId);
         IVoting(childVoting).vote(support);
+        
         emit ChildProposalVoted(childProposalId, support);
     }
 

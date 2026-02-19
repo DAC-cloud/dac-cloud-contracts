@@ -18,7 +18,8 @@ contract LPManagementProposal {
         LPMParams memory params,
         address _dac,
         address _votingFactory,
-        address _token
+        address _token,
+        VotingConfig memory votingConfig
     ) {
         id = _id;
         typ = params.typ;
@@ -28,7 +29,13 @@ contract LPManagementProposal {
         dacEntity = _dac;
         cashAmount = params.cashAmount;
 
-        votingContract = IVotingFactory(_votingFactory).deployVoting(_id, 7 days, address(this), _token);
+        votingContract = IVotingFactory(_votingFactory).deployVoting(
+            _id, 
+            votingConfig.defaultDuration, 
+            address(this), 
+            _token,
+            votingConfig.quorumPercent
+        );
     }
 
     modifier onlyDACEntity() {

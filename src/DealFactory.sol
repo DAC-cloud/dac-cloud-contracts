@@ -12,7 +12,8 @@ contract DealFactory {
         address dac,
         address mpToken,
         address lpToken,
-        address votingFactory
+        address votingFactory,
+        VotingConfig calldata votingConfig
     ) external returns (address dealAddr, address evaluatorAddr) {
         Deal deal = new Deal(
             id,
@@ -25,7 +26,7 @@ contract DealFactory {
             params.isWhitelistOnly
         );
 
-        deal.initialize(params);
+        deal.initialize(params, votingConfig);
         
         // Create per-deal evaluator instance
         evaluatorAddr = IEvaluatorFactory(params.evaluatorFactory)

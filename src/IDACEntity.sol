@@ -20,5 +20,6 @@ interface IDACEntity {
         address dealFactory;
         address evaluatorFactory;
         address lpFactory;
+        VotingConfig votingConfig;
     }
 }

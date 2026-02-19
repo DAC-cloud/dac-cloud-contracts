@@ -20,7 +20,8 @@ interface IDealFactory {
         address dac,
         address mpToken,
         address lpToken,
-        address votingFactory
+        address votingFactory,
+        VotingConfig calldata votingConfig
     ) external returns (address, address);
 }
 
@@ -30,7 +31,8 @@ interface ILPManagementFactory {
         LPMParams calldata params,
         address dac,
         address votingFactory,
-        address token
+        address token,
+        VotingConfig calldata votingConfig
     ) external returns (address);
 }
 
@@ -85,7 +87,11 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             votingFactory: _votingFactory,
             dealFactory: _dealFactory,
             evaluatorFactory: _evaluatorFactory,
-            lpFactory: _lpFactory
+            lpFactory: _lpFactory,
+            votingConfig: VotingConfig({   // DEFAULTS — change here or via governance later
+                quorumPercent: 50,
+                defaultDuration: 7 days
+            })
         });
 
         lpToken = LPToken(_lpToken);
@@ -147,7 +153,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             address(this),
             config.mpToken,
             config.lpToken,
-            config.votingFactory
+            config.votingFactory,
+            config.votingConfig
         );
 
         deals[id] = dealAddr;
@@ -200,7 +207,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             params,
             address(this),
             config.votingFactory,
-            config.lpToken
+            config.lpToken,
+            config.votingConfig
         );
 
         lpProposals[id] = prop;

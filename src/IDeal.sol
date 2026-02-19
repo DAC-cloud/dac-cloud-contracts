@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "./Interfaces.sol";
 
 interface IDeal {
-    function initialize(DealParams calldata params) external;
+    function initialize(DealParams calldata params, VotingConfig calldata votingConfig) external;
     function onMPStaked(address staker, uint256 amount) external;
     function onApproved() external;
     function markAsSuccess(uint256 rewardPercent) external;

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 interface IVotingFactory {
-    function deployVoting(uint256 id, uint256 duration, address owner, address token) external returns (address);
+    function deployVoting(uint256 id, uint256 duration, address owner, address token, uint256 quorum) external returns (address);
 }
 
 interface IVoting {
@@ -12,6 +12,11 @@ interface IVoting {
 }
 
 enum LPManagementType { MintMP, Dividend, CapitalCall }
+
+struct VotingConfig {
+    uint256 quorumPercent;
+    uint256 defaultDuration;   // in seconds
+}
 
 struct DealParams {
     address dealTarget;        // childDAC

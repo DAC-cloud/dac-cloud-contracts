@@ -10,10 +10,20 @@ contract LPManagementFactory {
         LPMParams calldata params,
         address dac,
         address votingFactory,
-        address token
+        address token,
+        VotingConfig calldata votingConfig
     ) external returns (address) {
         LPMParams memory proposalParams = params;
-        LPManagementProposal prop = new LPManagementProposal(id, proposalParams, dac, votingFactory, token);
+        VotingConfig memory _votingConfig = votingConfig;
+        
+        LPManagementProposal prop = new LPManagementProposal(
+            id, 
+            proposalParams, 
+            dac, 
+            votingFactory, 
+            token, 
+            _votingConfig
+        );
         return address(prop);
     }
 }
