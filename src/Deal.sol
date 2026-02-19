@@ -263,19 +263,9 @@ contract Deal is ERC20, ReentrancyGuard, IDeal {
     }
 
     function createChildLPProposal(
-        LPManagementType typ,
-        address target,
-        uint256 amountOrPercent,
-        address dividendToken,
-        uint256 cashAmount
+        LPMParams calldata params
     ) external onlyStakedMPHolder returns (uint256) {
-        LPMParams memory proposalParams = LPMParams({ 
-            typ: typ, 
-            target: target, 
-            amountOrPercent: amountOrPercent, 
-            dividendToken: dividendToken, 
-            cashAmount: cashAmount 
-        });
+        LPMParams memory proposalParams = params;
 
         return IDACEntity(childDAC).createLPManagementProposal(proposalParams);
     }

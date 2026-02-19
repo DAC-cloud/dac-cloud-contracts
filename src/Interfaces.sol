@@ -11,7 +11,14 @@ interface IVoting {
     function outcome(uint256 propId) external view returns (bool);
 }
 
-enum LPManagementType { MintMP, Dividend, CapitalCall }
+enum LPManagementType {
+    MintMP,
+    Dividend,
+    CapitalCall,
+    AddTrustedEvaluatorFactory,
+    RemoveTrustedEvaluatorFactory,
+    RevokeMP
+}
 
 struct VotingConfig {
     uint256 quorumPercent;
@@ -36,10 +43,9 @@ struct DealParams {
 
 struct LPMParams {
     LPManagementType typ;
-    address target;
-    uint256 amountOrPercent;
-    address dividendToken;
-    uint256 cashAmount;
+    address target;      // For RevokeMP / Add/RemoveFactory
+    uint256 amount;      // For RevokeMP (amount to burn)
+    bytes data;          // Future-proof opaque data
 }
 
 struct CapitalCall {

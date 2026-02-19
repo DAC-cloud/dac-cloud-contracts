@@ -59,6 +59,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     mapping(bytes32 => CapitalCall) public capitalCalls;
     mapping(bytes32 => bool) public fulfilledCalls;
 
+    mapping(address => bool) public trustedEvaluatorFactories;
+
     // Events
     event DACCreated(address indexed creator, address indexed dac);
     event DealCreated(uint256 indexed id, address indexed creator, address deal, address target, address evaluator);
@@ -66,10 +68,13 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     event CapitalCallFulfilled(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
     event LPMProposalCreated(uint256 indexed id, LPManagementType typ);
     event MPMinted(address indexed to, uint256 amount);
-    event DividendPayout(address indexed token, uint256 percent, uint256 totalPayout);
+    event DividendPayout(address indexed token, uint256 totalPayout, uint256 merkleRoot);
     event CapitalCallCreated(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
     event DealEvaluated(uint256 indexed id, bool success);
     event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
+    event TrustedEvaluatorFactoryAdded(address indexed factory);
+    event TrustedEvaluatorFactoryRemoved(address indexed factory);
+    event MPRevoked(address indexed target, uint256 amount);
 
     constructor(
         address _lpToken,
@@ -140,8 +145,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         onlyMPHolder
         returns (uint256 id, address dealAddr, address evaluatorAddr)
     {
-        // Basic validation – later replace with registry check
-        require(params.evaluatorFactory != address(0), "Evaluator factory required");
+        require(trustedEvaluatorFactories[params.evaluatorFactory], "Untrusted evaluator factory");
 
         require(params.proposer == msg.sender, "Proposer must be msg.sender");
 
@@ -222,25 +226,22 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
         if (typ == LPManagementType.MintMP) {
             address target = LPManagementProposal(prop).target();
-            uint256 amount = LPManagementProposal(prop).amountOrPercent();
+            uint256 amount = LPManagementProposal(prop).getMPAmount();
             mpToken.mint(target, amount);
             emit MPMinted(target, amount);
         }
         else if (typ == LPManagementType.Dividend) {
-            address token = LPManagementProposal(prop).dividendToken();
-            uint256 percent = LPManagementProposal(prop).amountOrPercent();
-            uint256 totalLP = lpToken.totalSupply();
-            uint256 payout = (treasuryBalances[token] * percent) / 100;
-
-            // TODO: Replace with Merkle claim in next version for gas efficiency
-            treasuryBalances[token] -= payout;
-            emit DividendPayout(token, percent, payout);
+            address token = LPManagementProposal(prop).getDividendToken();
+            uint256 amount = LPManagementProposal(prop).getCashAmount();
+            // TODO: Merkle root
+            // TODO: Store dividend payout in state for future claims
+            emit DividendPayout(token, amount, 0);
         }
         else if (typ == LPManagementType.CapitalCall) {
-            address treasuryToken = LPManagementProposal(prop).dividendToken(); // reuse field
+            address treasuryToken = LPManagementProposal(prop).getDividendToken();
             address lpRecipient = LPManagementProposal(prop).target();
-            uint256 lpAmount = LPManagementProposal(prop).amountOrPercent();
-            uint256 cashAmount = LPManagementProposal(prop).cashAmount();
+            uint256 lpAmount = LPManagementProposal(prop).getLPAmount();
+            uint256 cashAmount = LPManagementProposal(prop).getCashAmount();
 
             CapitalCall memory call = CapitalCall({
                 treasuryToken: treasuryToken,
@@ -254,6 +255,22 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             capitalCalls[hash] = call;
             fulfilledCalls[hash] = false;
             emit CapitalCallCreated(hash, lpRecipient, lpAmount);
+        }
+        else if (typ == LPManagementType.AddTrustedEvaluatorFactory) {
+            address factory = LPManagementProposal(prop).target();
+            trustedEvaluatorFactories[factory] = true;
+            emit TrustedEvaluatorFactoryAdded(factory);
+        } 
+        else if (typ == LPManagementType.RemoveTrustedEvaluatorFactory) {
+            address factory = LPManagementProposal(prop).target();
+            trustedEvaluatorFactories[factory] = false;
+            emit TrustedEvaluatorFactoryRemoved(factory);
+        } 
+        else if (typ == LPManagementType.RevokeMP) {
+            address target = LPManagementProposal(prop).target();
+            uint256 amount = LPManagementProposal(prop).getMPAmount();
+            mpToken.burnFrom(target, amount);
+            emit MPRevoked(target, amount);
         }
     }
 
