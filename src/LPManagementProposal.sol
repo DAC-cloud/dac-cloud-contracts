@@ -51,6 +51,15 @@ contract LPManagementProposal {
         return cash;
     }
 
+    function getMerkleRoot() external view returns (bytes32) {
+        require(
+            typ == LPManagementType.Dividend,
+            "Not applicable type"
+        );
+        (, , bytes32 merkleRoot) = abi.decode(data, (address, uint256, bytes32));
+        return merkleRoot;
+    }
+
     function getFactoryAddress() external view returns (address) {
         require(
             typ == LPManagementType.AddTrustedEvaluatorFactory ||

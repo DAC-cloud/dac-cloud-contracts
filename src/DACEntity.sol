@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "./IDACEntity.sol";
 import "./IEvaluator.sol";
 import "./Interfaces.sol";
@@ -51,6 +52,9 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     mapping(uint256 => address) public lpProposals;     // id => LPManagementProposal address
     uint256 public nextId = 1;
 
+    mapping(uint256 => bytes32) public dividendMerkleRoots;   // proposalId => root
+    mapping(bytes32 => bool) public dividendClaimed;           // keccak(root + leaf) => claimed
+
     mapping(address => uint256) public dealsMapping;    // Deal address => id (for onlyDeal modifier)
     mapping(address => address) public dealEvaluators;
 
@@ -68,7 +72,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     event CapitalCallFulfilled(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
     event LPMProposalCreated(uint256 indexed id, LPManagementType typ);
     event MPMinted(address indexed to, uint256 amount);
-    event DividendPayout(address indexed token, uint256 totalPayout, uint256 merkleRoot);
+    event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
+    event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
     event CapitalCallCreated(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
     event DealEvaluated(uint256 indexed id, bool success);
     event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
@@ -232,10 +237,12 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         }
         else if (typ == LPManagementType.Dividend) {
             address token = LPManagementProposal(prop).getDividendToken();
-            uint256 amount = LPManagementProposal(prop).getCashAmount();
-            // TODO: Merkle root
-            // TODO: Store dividend payout in state for future claims
-            emit DividendPayout(token, amount, 0);
+            bytes32 merkleRoot = LPManagementProposal(prop).getMerkleRoot();
+            uint256 totalPayout = LPManagementProposal(prop).getCashAmount();
+            
+            dividendMerkleRoots[id] = merkleRoot;
+
+            emit DividendPayout(id, token, totalPayout, merkleRoot);
         }
         else if (typ == LPManagementType.CapitalCall) {
             address treasuryToken = LPManagementProposal(prop).getDividendToken();
@@ -283,6 +290,32 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         address deal = deals[id];
         require(deal != address(0), "Invalid deal");
         IDeal(deal).returnCapitalToDAC();
+    }
+
+    function claimDividend(
+        uint256 proposalId,
+        uint256 index,
+        uint256 amount,
+        bytes32[] calldata proof
+    ) external {
+        bytes32 root = dividendMerkleRoots[proposalId];
+        require(root != bytes32(0), "No dividend for this proposal");
+
+        bytes32 leaf = keccak256(abi.encodePacked(index, msg.sender, amount));
+
+        bytes32 claimedKey = keccak256(abi.encodePacked(root, leaf));
+        require(!dividendClaimed[claimedKey], "Already claimed");
+
+        require(MerkleProof.verify(proof, root, leaf), "Invalid Merkle proof");
+
+        dividendClaimed[claimedKey] = true;
+
+        address prop = lpProposals[proposalId];
+
+        address token = LPManagementProposal(prop).getDividendToken();
+        IERC20(token).transfer(msg.sender, amount);
+
+        emit DividendClaimed(proposalId, msg.sender, amount);
     }
 
     function _performTransformation(uint256 id, uint256 transformationPercent) internal {
