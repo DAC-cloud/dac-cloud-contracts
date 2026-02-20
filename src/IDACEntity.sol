@@ -6,6 +6,7 @@ import "./Interfaces.sol";
 interface IDACEntity {
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);
     function createLPManagementProposal(LPMParams calldata params) external returns (uint256 id);
+    function getDealVoting(uint256 dealId) external view returns (address);
     function getProposalVoting(uint256 proposalId) external view returns (address);
     function mintLP(address deal, address to, uint256 amount) external;
     function getQuorumPercent() external view returns (uint256);
@@ -13,7 +14,6 @@ interface IDACEntity {
     function getLPToken() external view returns (address);
 
     struct Config {
-        uint256 quorumPercent;
         address lpToken;
         address mpToken;
         address votingFactory;

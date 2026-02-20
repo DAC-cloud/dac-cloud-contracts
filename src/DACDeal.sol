@@ -13,22 +13,32 @@ import "./Deal.sol";
 
 contract DACDeal is Deal {
     uint256 private _childLPAmount;
-    mapping(uint256 => address) public childProposalVotings;
-
+    
     // Events
-    event ChildProposalVotingCreated(uint256 indexed childProposalId, address voting);
-    event ChildProposalVoted(uint256 indexed childProposalId, bool support);
+    event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
+    event ChildLPVoteCasted(uint256 indexed childProposalId, bool support);
+    event ChildDealVoteCasted(uint256 indexed childDealId, bool support);
 
     constructor(
         uint256 _id,
+        address _governanceFactory,
         address _dac,
         address _child,
         address _mpToken,
         address _lpToken,
         address _votingFactory,
-        address _proposer,
-        bool _isWhitelistOnly
-    ) Deal(_id, _dac, _child, _mpToken, _lpToken, _votingFactory, _proposer, _isWhitelistOnly) {}
+        address _proposer
+    ) Deal(
+        _id, 
+        _dac, 
+        _governanceFactory, 
+        _mpToken, 
+        _lpToken, 
+        _votingFactory, 
+        _proposer
+    ) {
+        managedEntity = _child;
+    }
 
     function initialize(
         DealParams calldata params,
@@ -55,30 +65,52 @@ contract DACDeal is Deal {
         emit DealActivated(id);
     }
 
-    function createChildProposalVoting(uint256 childProposalId) external onlyStakedMPHolder {
-        require(childProposalVotings[childProposalId] == address(0), "Voting already exists");
-        
-        address voting = IVotingFactory(votingFactoryAddr).deployVoting(
-            childProposalId, 
-            super.votingConfig().defaultDuration, 
-            address(this), 
-            address(this), 
-            super.votingConfig().quorumPercent
+    function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
+        supported = (
+            params.typ == StakedMPManagementType.ChildLPProposalVoting ||
+            params.typ == StakedMPManagementType.CreateChildLPProposal ||
+            params.typ == StakedMPManagementType.ChildDealVoting
         );
-        childProposalVotings[childProposalId] = voting;
-        
-        emit ChildProposalVotingCreated(childProposalId, voting);
     }
 
-    function resolveChildProposalVote(uint256 childProposalId) external onlyStakedMPHolder {
-        address voting = childProposalVotings[childProposalId];
-        require(voting != address(0), "No voting for this proposal");
-        require(IVoting(voting).isResolved(childProposalId), "Voting not resolved");
-        
-        bool support = IVoting(voting).outcome(childProposalId);
-        address childVoting = IDACEntity(managedEntity).getProposalVoting(childProposalId);
-        IVoting(childVoting).vote(support);
-        
-        emit ChildProposalVoted(childProposalId, support);
+    function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual override {
+        StakedMPManagementType typ = proposal.typ();
+
+        if (typ == StakedMPManagementType.CreateChildLPProposal) {
+            LPMParams memory childProposal = proposal.getLPMParams();
+            uint256 childProposalId = IDACEntity(managedEntity).createLPManagementProposal(childProposal);
+
+            StakedMPParams memory dealProposalParams = StakedMPParams({
+                typ: StakedMPManagementType.ChildLPProposalVoting,
+                target: address(0),
+                id: childProposalId,
+                data: abi.encode(true)
+            });
+
+            uint256 proposalId = this.createStakedMPProposal(dealProposalParams);
+
+            emit ChildLPVoteCreated(childProposalId, proposalId);
+        }
+        else if (typ == StakedMPManagementType.ChildLPProposalVoting) {
+            uint256 childProposalId = proposal.targetId();
+            bool support = proposal.getToggleValue();
+
+            address childVoting = IDACEntity(managedEntity).getProposalVoting(childProposalId);
+            IVoting(childVoting).vote(support);
+
+            emit ChildLPVoteCasted(childProposalId, support);
+        }
+        else if (typ == StakedMPManagementType.ChildDealVoting) {
+            uint256 childDealId = proposal.targetId();
+            bool support = proposal.getToggleValue();
+
+            address childVoting = IDACEntity(managedEntity).getDealVoting(childDealId);
+            IVoting(childVoting).vote(support);
+
+            emit ChildDealVoteCasted(childDealId, support);
+        }
+        else {
+            revert("Unsupported management proposal type for DAC Deal");
+        }
     }
 }

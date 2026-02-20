@@ -15,22 +15,26 @@ contract DealFactory {
         address votingFactory,
         VotingConfig calldata votingConfig
     ) external returns (address dealAddr, address evaluatorAddr) {
+        //todo: select a proper deal by params.dealKind
+
+        //todo: check if governance factory is trusted and matching the deal type
+
         Deal deal = new DACDeal(
             id,
             dac,
+            params.governanceFactory,
             params.dealTarget,
             mpToken,
             lpToken,
             votingFactory,
-            params.proposer,
-            params.isWhitelistOnly
+            params.proposer
         );
 
         deal.initialize(params, votingConfig);
         
         // Create per-deal evaluator instance
         evaluatorAddr = IEvaluatorFactory(params.evaluatorFactory)
-            .deployEvaluator(params.evaluatorConfig);
+            .deployEvaluator(params.dealKind, params.evaluatorConfig);
 
         dealAddr = address(deal);
     }

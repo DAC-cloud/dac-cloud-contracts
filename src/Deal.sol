@@ -9,19 +9,33 @@ import "./IDeal.sol";
 import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./IDACEntity.sol";
+import "./StakedMPProposal.sol";
+
+interface IStakedMPProposalFactory {
+    function deployProposal(
+        uint256 id,
+        StakedMPParams calldata params,
+        address dac,
+        address votingFactory,
+        address token,
+        VotingConfig calldata votingConfig
+    ) external returns (address);
+}
 
 abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
     address public immutable factory;
-
+    
     uint256 public immutable id;
     address public immutable dacEntity;
+    address public immutable governanceFactory;
+    
     address public immutable managedEntity;
+
     address public immutable mpTokenAddr;
     address public immutable lpTokenAddr;
     address public immutable votingFactoryAddr;
     address public immutable proposer;
-    bool public immutable isWhitelistOnly; 
-
+    
     string public description;
     address private _fundingToken;
     uint256 private _fundingAmount;
@@ -32,16 +46,20 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
     address private _votingContract;
     VotingConfig private _votingConfig;
 
+    // Deal state
     bool public approved;
     bool public closed;
-    bool public earlyReturns; //todo: change by voting of staked-MP, default false
+    bool public recovery;
+    bool public earlyReturns;
+    bool public isWhitelistOnly; 
     uint256 public rewardsConverted;
+    uint256 public returnedCapital;
 
+    // MP tokens staking
     uint256 private _totalStakedMP;
     mapping(address => uint256) public stakedRealMP;
     mapping(address => uint256) public stakedMPBalance;
     mapping(address => uint256) public claimableLP;
-    uint256 public returnedCapital;
 
     // Whitelist
     mapping(address => bool) public isWhitelisted;
@@ -49,6 +67,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     address[] public holders; // only for claimable tracking
 
+    // Governance
+    uint256 public nextId = 1;
+    mapping(uint256 => address) public stakedMPProposals;
+    
     // Events
     event DealInitialized(uint256 indexed id);
     event StakedMPMinted(address indexed staker, uint256 amount);
@@ -60,26 +82,27 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
     event DeadlineExtended(uint256 newDeadline);
     event DealClosed(uint256 totalMP);
     event Invited(address indexed invitee, bool canInvite);
+    event StakedMPProposalCreated(uint256 indexed id, StakedMPManagementType typ, address target, uint256 targetId, bytes data);
+    event StakedMPProposalExecuted(uint256 indexed id, StakedMPManagementType typ);
+    event EarlyReturnsToggled(bool enabled);
 
     constructor(
         uint256 _id,
         address _dac,
-        address _entityAddress,
+        address _governanceFactory,
         address _mpToken,
         address _lpToken,
         address _votingFactory,
-        address _proposer,
-        bool _isWhitelistOnly
+        address _proposer
     ) ERC20("Staked MP for Deal", "sMP") {
         factory = msg.sender;
         id = _id;
+        governanceFactory = _governanceFactory;
         dacEntity = _dac;
-        managedEntity = _entityAddress;
         mpTokenAddr = _mpToken;
         lpTokenAddr = _lpToken;
         votingFactoryAddr = _votingFactory;
         proposer = _proposer;
-        isWhitelistOnly = _isWhitelistOnly;
     }
 
     function initialize(
@@ -102,11 +125,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
             id, _votingConfig.defaultDuration, address(this), lpTokenAddr, _votingConfig.quorumPercent
         );
 
-        if (isWhitelistOnly) {
-            isWhitelisted[proposer] = true;
-            canInviteOthers[proposer] = true;
-            emit Invited(proposer, true);
-        }
+        isWhitelistOnly = true;
+        isWhitelisted[proposer] = true;
+        canInviteOthers[proposer] = true;
+        emit Invited(proposer, true);
 
         emit DealInitialized(id);
     }
@@ -138,7 +160,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
     }
 
     function onApproved() public virtual override {
-        require((msg.sender == dacEntity || msg.sender == address(this)), "Only DAC");
+        require(msg.sender == dacEntity, "Only DAC");
         require(!approved, "Already approved");
         require(block.timestamp > approveDeadline, "Approve deadline not passed");
 
@@ -149,13 +171,17 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function invite(address invitee, bool grantInviteRight) external {
         require(isWhitelistOnly, "Deal is not whitelist-only");
-        require(isWhitelisted[msg.sender] && canInviteOthers[msg.sender], "Not authorized to invite");
-        require(!isWhitelisted[invitee], "Already whitelisted");
 
-        isWhitelisted[invitee] = true;
-        canInviteOthers[invitee] = grantInviteRight;
+        if (msg.sender != address(this)) {
+            require(isWhitelisted[msg.sender] && canInviteOthers[msg.sender], "Not authorized to invite");
+        }
         
-        emit Invited(invitee, grantInviteRight);
+        if(!isWhitelisted[invitee]) {
+            isWhitelisted[invitee] = true;
+            canInviteOthers[invitee] = grantInviteRight;
+            
+            emit Invited(invitee, grantInviteRight);
+        }   
     }
 
     function unstake() external {
@@ -176,15 +202,13 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
     }
 
     function returnCapitalToDAC() public virtual override {
-        if (msg.sender != address(this)) {
-            if (msg.sender == dacEntity) {
+        if (msg.sender == dacEntity) {
+            require(block.timestamp > dealDeadline, "Deadline not passed");
+        }
+        else {
+            require(stakedMPBalance[msg.sender] != 0, "Not a staked-MP holder");
+            if (!earlyReturns) {
                 require(block.timestamp > dealDeadline, "Deadline not passed");
-            }
-            else {
-                require(stakedMPBalance[msg.sender] != 0, "Not a staked-MP holder");
-                if (!earlyReturns) {
-                    require(block.timestamp > dealDeadline, "Deadline not passed");
-                }
             }
         }
         
@@ -266,6 +290,89 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
         emit LPClaimed(msg.sender, amount);
     }
 
+    function createStakedMPProposal(StakedMPParams calldata params) external returns (uint256 proposalId) {
+        if (msg.sender != address(this)) {
+            _onlyStakedMPHolder();
+        }
+
+        proposalId = nextId++;
+        
+        if (!(
+            params.typ == StakedMPManagementType.ToggleEarlyReturns ||
+            params.typ == StakedMPManagementType.ToggleWhitelist 
+        )) {
+            // If type is not a basic Deal governance type, requiring derived contracts to validate
+            require(
+                _checkStackedMPProposalSupported(params),
+                "Governance proposal type not supported"
+            );
+        }
+
+        address prop = IStakedMPProposalFactory(governanceFactory).deployProposal(
+            proposalId,
+            params,
+            address(this),
+            votingFactoryAddr,
+            address(this),
+            _votingConfig
+        );
+
+        stakedMPProposals[proposalId] = prop;
+
+        emit StakedMPProposalCreated(proposalId, params.typ, params.target, params.id, params.data);
+    }
+
+    function _toggleEarlyReturns(bool allowEarlyReturn) internal {
+        if (earlyReturns != allowEarlyReturn) {
+            earlyReturns = allowEarlyReturn;
+            emit EarlyReturnsToggled(earlyReturns);
+        }
+    }
+
+    function _toggleWhitelist(bool whitelistOnly) internal {
+        if (isWhitelistOnly != whitelistOnly) {
+            isWhitelistOnly = whitelistOnly;
+            
+            if (isWhitelistOnly) {
+                // Inviting all existing manager with invite capability
+                for (uint256 i = 0; i < holders.length; i++) {
+                    address manager = holders[i];
+                    this.invite(manager, true);
+                }
+            }
+        }
+    }
+
+    function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual returns (bool supported) {
+        // Children override this to indicate if the governance proposal is supported
+        supported = false;
+    }
+
+    function executeStakedMPProposal(uint256 proposalId) external onlyAfterStakedMPVote(proposalId) {
+        address prop = stakedMPProposals[proposalId];
+        StakedMPManagementType typ = StakedMPProposal(prop).typ();
+
+        if (typ == StakedMPManagementType.ToggleEarlyReturns) {
+            bool toggleValue = StakedMPProposal(prop).getToggleValue();
+            _toggleEarlyReturns(toggleValue);
+        }
+        else if (typ == StakedMPManagementType.ToggleWhitelist) {
+            bool toggleValue = StakedMPProposal(prop).getToggleValue();
+            _toggleWhitelist(toggleValue);
+        } 
+        else {
+            // Forward to child for specific types
+            _executeStakedMPProposal(StakedMPProposal(prop));
+        }
+        
+        emit StakedMPProposalExecuted(proposalId, typ);
+    }
+
+    function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual {
+        // Children override this to handle their specific proposals
+        revert("Unsupported management proposal type in base Deal");
+    }
+
     function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
     function getReturnedCapital() external view returns (uint256) { return returnedCapital; }
     function getLPRewardsLimit() external view returns (uint256) { return _lpRewardsLimit; }
@@ -292,5 +399,14 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDeal {
 
     function _onlyStakedMPHolder() internal view {
         require(balanceOf(msg.sender) > 0, "Not staked MP holder");
+    }
+
+    modifier onlyAfterStakedMPVote(uint256 proposalId) {
+        _onlyAfterStakedMPVote(proposalId);
+        _;
+    }
+    
+    function _onlyAfterStakedMPVote(uint256 proposalId) internal view {
+        //todo: implement voting logic
     }
 }

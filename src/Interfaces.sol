@@ -11,23 +11,50 @@ interface IVoting {
     function outcome(uint256 propId) external view returns (bool);
 }
 
+struct VotingConfig {
+    uint256 quorumPercent;
+    uint256 defaultDuration;   // in seconds
+}
+
 enum LPManagementType {
     MintMP,
     Dividend,
     CapitalCall,
     AddTrustedEvaluatorFactory,
     RemoveTrustedEvaluatorFactory,
-    RevokeMP,
-    ApprovePermit2Spend,      // Only for VaultDeal
-    ReturnCapitalToDAC        // Only for VaultDeal
+    RevokeMP
 }
 
-struct VotingConfig {
-    uint256 quorumPercent;
-    uint256 defaultDuration;   // in seconds
+struct LPMParams {
+    LPManagementType typ;
+    address target;      // For RevokeMP / Add/RemoveFactory
+    uint256 amount;      // For RevokeMP (amount to burn)
+    bytes data;          // Future-proof opaque data
+}
+
+enum StakedMPManagementType {
+    // Common to all Deals
+    ToggleEarlyReturns,
+    ToggleWhitelist,
+    // DACDeal-specific
+    CreateChildLPProposal,
+    ChildLPProposalVoting,
+    ChildDealVoting,
+    // VaultDeal-specific
+    ApprovePermit2Spend,
+    ReturnCapitalToDAC
+}
+
+struct StakedMPParams {
+    StakedMPManagementType typ;
+    address target;      // For ApprovePermit2Spend (treasury token), etc.
+    uint256 id;          // For governance ops
+    bytes data;          // Opaque type-specific data (calldataHash, etc.)
 }
 
 struct DealParams {
+    bytes4 dealKind;
+    address governanceFactory;
     address dealTarget;        // childDAC or Vault-based deal address
     address proposer;
     string description;
@@ -41,13 +68,6 @@ struct DealParams {
     address evaluatorFactory;     // trusted factory that creates the evaluator
     bytes evaluatorConfig;        // opaque config for evaluator (e.g. abi.encode(Milestone[]))
     bytes dealConfig;             // future-proof field for deal-specific init data
-}
-
-struct LPMParams {
-    LPManagementType typ;
-    address target;      // For RevokeMP / Add/RemoveFactory
-    uint256 amount;      // For RevokeMP (amount to burn)
-    bytes data;          // Future-proof opaque data
 }
 
 struct CapitalCall {

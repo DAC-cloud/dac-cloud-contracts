@@ -32,7 +32,7 @@ contract VaultTreasury is ReentrancyGuard {
     address public immutable vaultDeal;
     IPermit2 public immutable permit2;
 
-    mapping(bytes32 => bool) public approvedSpends; // proposal hash => approved
+    mapping(bytes32 => bytes32) public approvedSpends; // proposal hash => calldataHash
 
     event SpendExecuted(address token, address destination, uint256 amount);
     event CapitalReturned(address token, uint256 amount);
@@ -43,9 +43,9 @@ contract VaultTreasury is ReentrancyGuard {
     }
 
     // Called by VaultDeal after staked-MP quorum approves
-    function approveSpend(bytes32 proposalHash) external {
+    function approveSpend(bytes32 proposalHash, bytes32 calldataHash) external {
         require(msg.sender == vaultDeal, "Only VaultDeal");
-        approvedSpends[proposalHash] = true;
+        approvedSpends[proposalHash] = calldataHash;
     }
 
     function executeWithPermit2(
@@ -55,21 +55,25 @@ contract VaultTreasury is ReentrancyGuard {
         bytes32 proposalHash
     ) external nonReentrant {
         require(msg.sender == vaultDeal, "Only VaultDeal");
-        require(approvedSpends[proposalHash], "Spend not approved");
+
+        bytes32 expectedCalldataHash = approvedSpends[proposalHash];
+        require(expectedCalldataHash != bytes32(0), "Spend not approved");
+
+        // Verify the executed permit matches the approved proposal
+        bytes32 executedCalldataHash = keccak256(abi.encode(permit, transferDetails));
+        require(executedCalldataHash == expectedCalldataHash, "Permit does not match approved proposal");
 
         // Verify Permit2
-        permit2.permitTransferFrom(permit, transferDetails, vaultDeal, signature);
+        permit2.permitTransferFrom(permit, transferDetails, address(this), signature);
 
-        approvedSpends[proposalHash] = false; // one-time use
+        delete approvedSpends[proposalHash]; // one-time use
 
         emit SpendExecuted(permit.token, transferDetails.to, transferDetails.requestedAmount);
     }
 
-    // For returning capital to DAC (only original funding token)
-    function returnCapitalToDAC(address token) external {
+    // For returning capital to Deal (only original funding token)
+    function returnCapitalToDeal(address token, uint256 balance) external {
         require(msg.sender == vaultDeal, "Only VaultDeal");
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        if (balance == 0) return;
 
         IERC20(token).safeTransfer(vaultDeal, balance);
         emit CapitalReturned(token, balance);

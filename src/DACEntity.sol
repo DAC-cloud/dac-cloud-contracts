@@ -67,10 +67,11 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
     // Events
     event DACCreated(address indexed creator, address indexed dac);
-    event DealCreated(uint256 indexed id, address indexed creator, address deal, address target, address evaluator);
+    event DealCreated(uint256 indexed id, address indexed creator, bytes4 kind, address deal, address target, address evaluator);
     event DealApproved(uint256 indexed id);
     event CapitalCallFulfilled(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
-    event LPMProposalCreated(uint256 indexed id, LPManagementType typ);
+    event LPMProposalCreated(uint256 indexed id, LPManagementType typ, address target, uint256 amount, bytes data);
+    event LPMProposalExecuted(uint256 indexed id, LPManagementType typ);
     event MPMinted(address indexed to, uint256 amount);
     event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
     event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
@@ -91,7 +92,6 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         address _votingFactory
     ) {
         config = Config({
-            quorumPercent: _quorum,
             lpToken: _lpToken,
             mpToken: _mpToken,
             votingFactory: _votingFactory,
@@ -99,7 +99,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             evaluatorFactory: _evaluatorFactory,
             lpFactory: _lpFactory,
             votingConfig: VotingConfig({   // DEFAULTS — change here or via governance later
-                quorumPercent: 50,
+                quorumPercent: _quorum,
                 defaultDuration: 7 days
             })
         });
@@ -170,9 +170,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         dealsMapping[dealAddr] = id;
         dealEvaluators[dealAddr] = evaluatorAddr; // optional, for easy lookup
 
-        IERC20(params.fundingToken).approve(dealAddr, params.fundingAmount);
-
-        emit DealCreated(id, msg.sender, dealAddr, params.dealTarget, evaluatorAddr);
+        emit DealCreated(id, msg.sender, params.dealKind, dealAddr, params.dealTarget, evaluatorAddr);
     }
 
     function approveDeal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
@@ -210,15 +208,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         onlyLPHolder
         returns (uint256 id)
     {
-        require(
-            !(
-                params.typ == LPManagementType.ApprovePermit2Spend ||
-                params.typ == LPManagementType.ReturnCapitalToDAC
-            ), 
-            "Unsupported proposal type"
-        );
-
         id = nextId++;
+        
         address prop = ILPManagementFactory(config.lpFactory).deployLPManagement(
             id,
             params,
@@ -229,7 +220,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         );
 
         lpProposals[id] = prop;
-        emit LPMProposalCreated(id, params.typ);
+        emit LPMProposalCreated(id, params.typ, params.target, params.amount, params.data);
         return id;
     }
 
@@ -361,11 +352,18 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     }
 
     function getQuorumPercent() external view returns (uint256) {
-        return config.quorumPercent;
+        return config.votingConfig.quorumPercent;
     }
 
     function getTreasuryBalance(address token) external view returns (uint256) {
         return treasuryBalances[token];
+    }
+
+    function getDealVoting(uint256 dealId) external view returns (address) {
+        address deal = deals[dealId];
+        require(deal != address(0), "Invalid deal");
+
+        return IDeal(deal).votingContract();
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {
