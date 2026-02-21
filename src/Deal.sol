@@ -86,6 +86,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     event CapitalReturned(uint256 amount);
     event DeadlineExtended(uint256 newDeadline);
     event DealClosed(uint256 totalMP);
+    event DealRecovered(address indexed liquidator);
     event Invited(address indexed invitee, bool canInvite);
     event StakedMPProposalCreated(uint256 indexed id, StakedMPManagementType typ, address target, uint256 targetId, bytes data);
     event StakedMPProposalExecuted(uint256 indexed id, StakedMPManagementType typ);
@@ -352,8 +353,19 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         emit DealClosed(_totalStakedMP);
     }
  
+    function _beforeRecovery(address liquidator, uint256 liquidatorStake) internal virtual {}
+
     function recoverDeal(address liquidator, uint256 liquidatorStake) external {
-        //todo: recovery
+        require(msg.sender == dacEntity, "Only DAC");
+        require(closed, "Deal is not closed");
+        
+        _beforeRecovery(liquidator, liquidatorStake);
+
+        recovery = true;
+
+        stake(liquidator, liquidatorStake);
+        
+        emit DealRecovered(liquidator);
     }
 
     function claimLP() external {
@@ -476,7 +488,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         }
 
         else if (typ == StakedMPManagementType.AddStake) {
-            // todo: implement add stake (MP holder shall approve prior)
+            address staker = StakedMPProposal(prop).target();
+            uint256 stakeAmount = StakedMPProposal(prop).getAmount();
+            
+            _stakeMP(staker, stakeAmount);
         }
 
         else if (typ == StakedMPManagementType.UpdateVotingConfig) {
@@ -487,13 +502,11 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         }
 
         else if (typ == StakedMPManagementType.ToggleEarlyReturns) {
-            bool toggleValue = StakedMPProposal(prop).getToggleValue();
-            _toggleEarlyReturns(toggleValue);
+            _toggleEarlyReturns(StakedMPProposal(prop).getToggleValue());
         }
 
         else if (typ == StakedMPManagementType.ToggleWhitelist) {
-            bool toggleValue = StakedMPProposal(prop).getToggleValue();
-            _toggleWhitelist(toggleValue);
+            _toggleWhitelist(StakedMPProposal(prop).getToggleValue());
         }
 
         else {

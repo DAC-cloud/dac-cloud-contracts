@@ -8,7 +8,8 @@ contract VaultDeal is Deal {
     VaultTreasury public immutable vaultTreasury;
 
     // Events
-    event PermitApproved(address indexed treasuryToken, bytes32 permitHash);
+    event PermitApproved(address indexed treasuryToken, uint160 amount);
+    event AgentAssigned(address indexed treasuryToken, address indexed agent, uint160 amount);
     
     constructor(
         uint256 _id,
@@ -33,9 +34,11 @@ contract VaultDeal is Deal {
     }
 
     function _afterApprove(uint256 trancheId) internal override {
-        //todo support tranches
         require(
-            IERC20(this.fundingToken()).transfer(managedEntity, this.fundingAmount(0)),
+            IERC20(this.fundingToken()).transfer(
+                managedEntity, 
+                this.fundingAmount(trancheId)
+            ),
             "Transfer failed"
         );
     }
@@ -43,7 +46,8 @@ contract VaultDeal is Deal {
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == StakedMPManagementType.ApprovePermit2Spend ||
-            params.typ == StakedMPManagementType.ReturnCapitalToDAC
+            params.typ == StakedMPManagementType.ReturnCapitalToDAC ||
+            params.typ == StakedMPManagementType.AssignClaimer
         );
     }
 
@@ -51,13 +55,14 @@ contract VaultDeal is Deal {
         StakedMPManagementType typ = proposal.typ();
 
         if (typ == StakedMPManagementType.ApprovePermit2Spend) {
-            bytes32 proposalHash = keccak256(abi.encode(proposal));
-            bytes32 permitHash = proposal.getCalldataHash();
+            address token = proposal.target();
+            (address spender, uint160 amount, uint48 expiration) = proposal.getApproveCallData();
             
-            vaultTreasury.approveSpend(proposalHash, permitHash);
+            vaultTreasury.approveSpend(token, spender, amount, expiration);
 
-            emit PermitApproved(proposal.target(), permitHash);
+            emit PermitApproved(proposal.target(), amount);
         }
+
         else if (typ == StakedMPManagementType.ReturnCapitalToDAC) {
             uint256 amount = proposal.getAmount();
             
@@ -68,6 +73,20 @@ contract VaultDeal is Deal {
             
             emit CapitalReturned(amount);
         }
+
+        else if (typ == StakedMPManagementType.AssignClaimer) {
+            address agent = proposal.target();
+            (address token, address counterparty, uint160 amount) = proposal.getApproveAgentCallData();
+            
+            vaultTreasury.approveReceive(agent, counterparty, token, amount);
+
+            emit AgentAssigned(token, agent, amount);
+        }
+
+        else if (typ == StakedMPManagementType.ApproveAgentSpend) {
+            // TODO: Approve agents to spend from treasury
+        }
+
         else {
             revert("Unsupported management proposal type for Vault Deal");
         }

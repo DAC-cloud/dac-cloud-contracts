@@ -70,14 +70,25 @@ contract StakedMPProposal {
         (params) = abi.decode(data, (LPMParams));
     }
 
-    function getCalldataHash() external view returns (bytes32 calldataHash) {
+    function getApproveCallData() external view returns (address spender, uint160 amount, uint48 expiration) {
         require(
             (
                 typ == StakedMPManagementType.ApprovePermit2Spend
             ),
             "Not applicable type"
         );
-        (calldataHash) = abi.decode(data, (bytes32));
+        (spender, amount, expiration) = abi.decode(data, (address, uint160, uint48));
+    }
+
+    function getApproveAgentCallData() external view returns (address token, address counterparty, uint160 amount) {
+        require(
+            (
+                typ == StakedMPManagementType.ApproveAgentSpend ||
+                typ == StakedMPManagementType.AssignClaimer
+            ),
+            "Not applicable type"
+        );
+        (token, counterparty, amount) = abi.decode(data, (address, address, uint160));
     }
 
     function getVotingConfiguration() external view returns (VotingConfig memory) {
@@ -92,7 +103,8 @@ contract StakedMPProposal {
     function getAmount() external view returns (uint256 amount) {
         require(
             (
-                typ == StakedMPManagementType.ReturnCapitalToDAC
+                typ == StakedMPManagementType.ReturnCapitalToDAC ||
+                typ == StakedMPManagementType.AddStake
             ),
             "Not applicable type"
         );

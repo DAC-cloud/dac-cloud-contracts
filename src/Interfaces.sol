@@ -59,6 +59,7 @@ enum StakedMPManagementType {
     ChildLPProposalVoting,          // Default quorum, blocking allowed
     // VaultDeal-specific
     ApprovePermit2Spend,            // Default quorum, blocking allowed
+    ApproveAgentSpend,              // Default quorum, blocking allowed
     ReturnCapitalToDAC,             // Default quorum
     AssignClaimer                   // Default quorum
 }

@@ -68,6 +68,8 @@ contract DACDeal is Deal {
 
             CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
             IDACEntity(managedEntity).fulfillCapitalCall(call);
+
+            _childLPAmount += call.lpAmount;
         }
     }
 

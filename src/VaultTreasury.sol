@@ -24,6 +24,8 @@ interface IPermit2 {
         address owner,
         bytes calldata signature
     ) external;
+    function approve(address token, address spender, uint160 amount, uint48 expiration) external;
+    function transferFrom(address from, address to, uint256 amount, address token) external;
 }
 
 contract VaultTreasury is ReentrancyGuard {
@@ -32,9 +34,12 @@ contract VaultTreasury is ReentrancyGuard {
     address public immutable vaultDeal;
     IPermit2 public immutable permit2;
 
-    mapping(bytes32 => bytes32) public approvedSpends; // proposal hash => calldataHash
+    mapping(bytes32 => uint256) public approvedAgents; // calldataHash, totalAmount
 
-    event SpendExecuted(address token, address destination, uint256 amount);
+    event SpendApproved(address token, address destination, uint256 amount);
+    event AgentApproved(address indexed agent, address token, address source, uint256 amount);
+    event Receipt(address indexed agent, address token, address source, uint256 amount);
+
     event CapitalReturned(address token, uint256 amount);
 
     constructor(address _vaultDeal, address _permit2) {
@@ -42,33 +47,72 @@ contract VaultTreasury is ReentrancyGuard {
         permit2 = IPermit2(_permit2);
     }
 
-    // Called by VaultDeal after staked-MP quorum approves
-    function approveSpend(bytes32 proposalHash, bytes32 calldataHash) external {
+    // Called by VaultDeal after staked-MP quorum approves a spend
+    function approveSpend(
+        address token,
+        address spender,         // e.g. Uniswap router, another contract
+        uint160 amount,
+        uint48 expiration        // short expiry (e.g. 1 hour)
+    ) external {
         require(msg.sender == vaultDeal, "Only VaultDeal");
-        approvedSpends[proposalHash] = calldataHash;
+        
+        // On-chain Permit2 approval (no signature needed to spend)
+        permit2.approve(spender, address(this), amount, expiration);
+
+        emit SpendApproved(token, spender, amount);
     }
 
-    function executeWithPermit2(
-        IPermit2.PermitTransferFrom calldata permit,
-        IPermit2.SignatureTransferDetails calldata transferDetails,
-        bytes calldata signature,
-        bytes32 proposalHash
-    ) external nonReentrant {
+    // Called by VaultDeal after staked-MP quorum approves an agent to receive funds
+    function approveReceive(
+        address agent,
+        address source,          // e.g. client of a DAC, other team treasury, etc.
+        address token,
+        uint160 amount
+    ) external {
         require(msg.sender == vaultDeal, "Only VaultDeal");
 
-        bytes32 expectedCalldataHash = approvedSpends[proposalHash];
-        require(expectedCalldataHash != bytes32(0), "Spend not approved");
+        bytes32 calldataHash = keccak256(abi.encode(agent, token, source));
+        approvedAgents[calldataHash] = amount;
 
-        // Verify the executed permit matches the approved proposal
-        bytes32 executedCalldataHash = keccak256(abi.encode(permit, transferDetails));
-        require(executedCalldataHash == expectedCalldataHash, "Permit does not match approved proposal");
+        emit AgentApproved(agent, token, source, amount);
+    }
 
-        // todo: proper signature (ERC-1271)
-        permit2.permitTransferFrom(permit, transferDetails, address(this), signature);
+    // Called by an assigned agent after approval
+    //  (e.g. our service executes gasless x402 payment receive)
+    function executeReceivePermit2(
+        address token,
+        address source,
+        uint256 amount
+    ) external nonReentrant {
+        bytes32 calldataHash = keccak256(abi.encode(msg.sender, token, source));
+        
+        require(approvedAgents[calldataHash] >= amount, "Receival not approved");
 
-        delete approvedSpends[proposalHash]; // one-time use
+        approvedAgents[calldataHash] -= amount;
 
-        emit SpendExecuted(permit.token, transferDetails.to, transferDetails.requestedAmount);
+        // Execute transfer to vault via Permit2 (uses the on-chain approval)
+        permit2.transferFrom(source, address(this), amount, token);
+
+        emit Receipt(msg.sender, token, source, amount);
+    }
+
+    function executeReceivePermit2Signature(
+        IPermit2.PermitTransferFrom calldata permit,
+        IPermit2.SignatureTransferDetails calldata transferDetails,
+        address source,
+        bytes calldata signature
+    ) external nonReentrant {
+        require(transferDetails.to == address(this), "Invalid transfer");
+        
+        bytes32 calldataHash = keccak256(abi.encode(msg.sender, permit.token, source));
+
+        require(approvedAgents[calldataHash] >= transferDetails.requestedAmount, "Receival not approved");
+        
+        approvedAgents[calldataHash] -= transferDetails.requestedAmount;
+
+        permit2.permitTransferFrom(permit, transferDetails, source, signature);
+
+        emit Receipt(msg.sender, permit.token, source, transferDetails.requestedAmount);
     }
 
     // For returning capital to Deal (only original funding token)
