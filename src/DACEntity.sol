@@ -5,11 +5,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "./IDACEntity.sol";
+import "./IDACEntityAdapter.sol";
+import "./IDealCore.sol";
+import "./IDealAdmin.sol";
 import "./IEvaluator.sol";
 import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./MPToken.sol";
-import "./IDeal.sol";
 import "./LPManagementProposal.sol";
 import "./IEvaluatorFactory.sol";
 
@@ -37,7 +39,7 @@ interface ILPManagementFactory {
     ) external returns (address);
 }
 
-contract DACEntity is IDACEntity, ReentrancyGuard {
+contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     address public immutable deployer;
 
     LPToken public immutable lpToken;
@@ -58,8 +60,6 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
     mapping(address => uint256) public dealsMapping;    // Deal address => id (for onlyDeal modifier)
     mapping(address => address) public dealEvaluators;
 
-    mapping(address => bool) public oracles;
-
     mapping(bytes32 => CapitalCall) public capitalCalls;
     mapping(bytes32 => bool) public fulfilledCalls;
 
@@ -67,8 +67,9 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
     // Events
     event DACCreated(address indexed creator, address indexed dac);
-    event DealCreated(uint256 indexed id, address indexed creator, bytes4 kind, address deal, address target, address evaluator);
-    event DealApproved(uint256 indexed id);
+    event DealCreated(uint256 indexed id, uint256 indexed proposalId, address indexed creator, bytes4 kind, address deal, address target, address evaluator);
+    event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
+    event FundingApproved(uint256 indexed id, uint256 trancheId);
     event CapitalCallFulfilled(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
     event LPMProposalCreated(uint256 indexed id, LPManagementType typ, address target, uint256 amount, bytes data);
     event LPMProposalExecuted(uint256 indexed id, LPManagementType typ);
@@ -100,6 +101,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             lpFactory: _lpFactory,
             votingConfig: VotingConfig({   // DEFAULTS — change here or via governance later
                 quorumPercent: _quorum,
+                highQuorumPercent: (100 + _quorum) / 2,
+                blockingPercent: _quorum / 2,
                 defaultDuration: 7 days
             })
         });
@@ -145,6 +148,23 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         emit TreasuryDeposit(token, amount, msg.sender);
     }
 
+    function fulfillCapitalCall(CapitalCall calldata call) external nonReentrant returns (bool) {
+        bytes32 callHash = keccak256(abi.encode(call));
+        require(!fulfilledCalls[callHash], "Already fulfilled");
+        
+        CapitalCall memory capitalCall = capitalCalls[callHash];
+        require(capitalCall.lpAmount > 0, "Invalid capital call");
+
+        IERC20(call.treasuryToken).transferFrom(msg.sender, address(this), call.cashAmount);
+        treasuryBalances[call.treasuryToken] += call.cashAmount;
+
+        lpToken.mint(call.lpRecipient, call.lpAmount);
+
+        fulfilledCalls[callHash] = true;
+        emit CapitalCallFulfilled(callHash, call.lpRecipient, call.lpAmount);
+        return true;
+    }
+
     function createDealProposal(DealParams calldata params)
         external
         onlyMPHolder
@@ -168,46 +188,82 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
         deals[id] = dealAddr;
         dealsMapping[dealAddr] = id;
-        dealEvaluators[dealAddr] = evaluatorAddr; // optional, for easy lookup
+        dealEvaluators[dealAddr] = evaluatorAddr;
 
-        emit DealCreated(id, msg.sender, params.dealKind, dealAddr, params.dealTarget, evaluatorAddr);
+        LPMParams memory dealVote = LPMParams({
+            typ: LPManagementType.ApproveDeal,
+            target: params.fundingToken,
+            amount: params.fundingAmount,
+            data: abi.encode(0, id) // tranche id 0
+        });
+
+        uint256 votingId = this.createLPManagementProposal(dealVote);
+
+        emit DealCreated(id, votingId, msg.sender, params.dealKind, dealAddr, params.dealTarget, evaluatorAddr);
     }
 
-    function approveDeal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
+    function createTrancheProposal(
+        uint256 dealId,
+        uint256 trancheId
+    ) external {
+        address deal = deals[dealId];
+        require(msg.sender == deal, "Invalid deal ID");
+
+        address fundingToken = IDealCore(deal).fundingToken();
+        uint256 fundingAmount = IDealCore(deal).fundingAmount(trancheId);
+
+        LPMParams memory trancheVote = LPMParams({
+            typ: LPManagementType.ApproveTranche,
+            target: fundingToken,
+            amount: fundingAmount,
+            data: abi.encode(trancheId, dealId)
+        });
+
+        uint256 votingId = this.createLPManagementProposal(trancheVote);
+
+        emit TrancheCreated(dealId, trancheId, votingId);
+    }
+
+    function _approveFunding(uint256 id, uint256 trancheId) internal {
         address deal = deals[id];
         require(deal != address(0), "Invalid deal ID");
 
-        uint256 amount = IDeal(deal).fundingAmount();
-        address token = IDeal(deal).fundingToken();
+        uint256 amount = IDealCore(deal).fundingAmount(trancheId);
+        address token = IDealCore(deal).fundingToken();
 
         require(treasuryBalances[token] >= amount, "Insufficient treasury");
 
         IERC20(token).transfer(deal, amount);
         treasuryBalances[token] -= amount;
 
-        IDeal(deal).onApproved();
-        emit DealApproved(id);
-    }
-
-    function fulfillCapitalCall(CapitalCall calldata call) external nonReentrant returns (bool) {
-        bytes32 callHash = keccak256(abi.encode(call));
-        require(!fulfilledCalls[callHash], "Already fulfilled");
-
-        IERC20(call.treasuryToken).transferFrom(msg.sender, address(this), call.cashAmount);
-        treasuryBalances[call.treasuryToken] += call.cashAmount;
-
-        lpToken.mint(call.lpRecipient, call.lpAmount);
-
-        fulfilledCalls[callHash] = true;
-        emit CapitalCallFulfilled(callHash, call.lpRecipient, call.lpAmount);
-        return true;
+        IDealAdmin(deal).onApproved(trancheId);
+        emit FundingApproved(id, trancheId);
     }
 
     function createLPManagementProposal(LPMParams calldata params)
         external
-        onlyLPHolder
+        onlyLPHolderOrSelf
         returns (uint256 id)
     {
+        if (msg.sender == address(this)) {
+            require(
+                (
+                    params.typ == LPManagementType.ApproveDeal ||
+                    params.typ == LPManagementType.ApproveTranche
+                ),
+                "Type not authorized"
+            );
+        }
+        else {
+            require(
+                !(
+                    params.typ == LPManagementType.ApproveDeal ||
+                    params.typ == LPManagementType.ApproveTranche
+                ),
+                "Type not authorized"
+            );
+        }
+
         id = nextId++;
         
         address prop = ILPManagementFactory(config.lpFactory).deployLPManagement(
@@ -234,6 +290,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             mpToken.mint(target, amount);
             emit MPMinted(target, amount);
         }
+
         else if (typ == LPManagementType.Dividend) {
             address token = LPManagementProposal(prop).getDividendToken();
             bytes32 merkleRoot = LPManagementProposal(prop).getMerkleRoot();
@@ -243,6 +300,7 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
             emit DividendPayout(id, token, totalPayout, merkleRoot);
         }
+
         else if (typ == LPManagementType.CapitalCall) {
             address treasuryToken = LPManagementProposal(prop).getDividendToken();
             address lpRecipient = LPManagementProposal(prop).target();
@@ -262,33 +320,44 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
             fulfilledCalls[hash] = false;
             emit CapitalCallCreated(hash, lpRecipient, lpAmount);
         }
+
         else if (typ == LPManagementType.AddTrustedEvaluatorFactory) {
             address factory = LPManagementProposal(prop).target();
             trustedEvaluatorFactories[factory] = true;
             emit TrustedEvaluatorFactoryAdded(factory);
         } 
+
         else if (typ == LPManagementType.RemoveTrustedEvaluatorFactory) {
             address factory = LPManagementProposal(prop).target();
             trustedEvaluatorFactories[factory] = false;
             emit TrustedEvaluatorFactoryRemoved(factory);
         } 
+
         else if (typ == LPManagementType.RevokeMP) {
             address target = LPManagementProposal(prop).target();
             uint256 amount = LPManagementProposal(prop).getMPAmount();
             mpToken.burnFrom(target, amount);
             emit MPRevoked(target, amount);
         }
+
+        else if (
+            typ == LPManagementType.ApproveDeal || 
+            typ == LPManagementType.ApproveTranche
+        ) {
+            uint256 dealId = LPManagementProposal(prop).getDealId();
+            uint256 trancheId = LPManagementProposal(prop).getTrancheId();
+            _approveFunding(dealId, trancheId);
+        }
     }
 
-    function mintLP(address deal, address to, uint256 amount) external {
-        require(msg.sender == address(this) || msg.sender == deal, "Only DAC/Deal");
+    function mintLP(address deal, address to, uint256 amount) external onlyDealOrSelf {
         lpToken.mint(to, amount);
     }
 
-    function forceReturnCapital(uint256 id) external onlyLPHolder {
+    function forceReturnCapital(uint256 id) external onlyLPHolderOrSelf {
         address deal = deals[id];
         require(deal != address(0), "Invalid deal");
-        IDeal(deal).returnCapitalToDAC();
+        IDealCore(deal).returnCapitalToDAC();
     }
 
     function claimDividend(
@@ -319,14 +388,14 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
 
     function _performTransformation(uint256 id, uint256 transformationPercent) internal {
         address deal = deals[id];
-        IDeal(deal).markAsSuccess(transformationPercent);
+        IDealAdmin(deal).markAsSuccess(transformationPercent);
     }
 
     function _performSlash(uint256 id, uint256 slashPercent) internal {
         address deal = deals[id];
-        uint256 totalMP = IDeal(deal).getStakedMPTotal();
+        uint256 totalMP = IDealCore(deal).getStakedMPTotal();
         MPToken(mpToken).burnFrom(deal, totalMP);
-        IDeal(deal).markAsFailed(slashPercent);
+        IDealAdmin(deal).markAsFailed(slashPercent);
     }
 
     function evaluateDeal(uint256 id) external onlyMPHolder {
@@ -341,9 +410,9 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         } else if (result.action == 1) { // convert
             _performTransformation(id, result.percent);
         } else if (result.action == 2) { // extend
-            IDeal(deal).extendDeadline(result.newDeadline);
+            IDealAdmin(deal).extendDeadline(result.newDeadline);
         } else if (result.action == 3) { // close
-            IDeal(deal).closeDeal();
+            IDealAdmin(deal).closeDeal();
         }
 
         if (result.action == 1 || result.action == 0) {
@@ -351,19 +420,8 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         }
     }
 
-    function getQuorumPercent() external view returns (uint256) {
-        return config.votingConfig.quorumPercent;
-    }
-
-    function getTreasuryBalance(address token) external view returns (uint256) {
-        return treasuryBalances[token];
-    }
-
-    function getDealVoting(uint256 dealId) external view returns (address) {
-        address deal = deals[dealId];
-        require(deal != address(0), "Invalid deal");
-
-        return IDeal(deal).votingContract();
+    function getCapitalCall(bytes32 calldataHash) external view returns (CapitalCall memory) {
+        return capitalCalls[calldataHash];
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {
@@ -374,23 +432,27 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         return address(lpToken);
     }
 
+    function getMPToken() external view returns (address) {
+        return address(lpToken);
+    }
+
     modifier onlyMPHolder() {
         _onlyMPHolder();
         _;
     }
 
-    modifier onlyLPHolder() {
-        _onlyLPHolder();
+    modifier onlyLPHolderOrSelf() {
+        _onlyLPHolderOrSelf();
         _;
     }
 
-    modifier onlyDeal() {
-        _onlyDeal();
+    modifier onlyMPOrLPHolder() {
+        _onlyMPOrLPHolder();
         _;
     }
 
-    modifier onlyOracle(address oracle) {
-        _onlyOracle(oracle);
+    modifier onlyDealOrSelf() {
+        _onlyDealOrSelf();
         _;
     }
 
@@ -403,26 +465,38 @@ contract DACEntity is IDACEntity, ReentrancyGuard {
         require(mpToken.balanceOf(msg.sender) > 0, "Not MP holder");
     }
 
-    function _onlyLPHolder() internal view {
-        require(lpToken.balanceOf(msg.sender) > 0, "Not LP holder");
+    function _onlyLPHolderOrSelf() internal view {
+        require(
+            (
+                msg.sender == address(this) ||
+                lpToken.balanceOf(msg.sender) > 0
+            ), 
+            "Not authorized"
+        );
     }
 
-    function _onlyDeal() internal view {
-        require(dealsMapping[msg.sender] != 0, "Not a Deal");
+    function _onlyMPOrLPHolder() internal view {
+        require(
+            (
+                lpToken.balanceOf(msg.sender) > 0 ||
+                mpToken.balanceOf(msg.sender) > 0
+            ), 
+            "Not MP or LP holder"
+        );
     }
 
-    function _onlyOracle(address oracle) internal view {
-        require(oracles[oracle], "Not oracle");
+    function _onlyDealOrSelf() internal view {
+        if (msg.sender != address(this)) {
+            require(dealsMapping[msg.sender] != 0, "Not a Deal");
+        }
     }
 
     function _onlyAfterVote(uint256 id, bool requiredOutcome) internal view {
-        address votingAddr = deals[id] != address(0)
-            ? IDeal(deals[id]).votingContract()
-            : LPManagementProposal(lpProposals[id]).votingContract();
+        address votingAddr = LPManagementProposal(lpProposals[id]).votingContract();
 
         require(
-            IVoting(votingAddr).isResolved(id) &&
-            IVoting(votingAddr).outcome(id) == requiredOutcome,
+            IVoting(votingAddr).isResolved() &&
+            IVoting(votingAddr).outcome() == requiredOutcome,
             "Vote not passed"
         );
     }

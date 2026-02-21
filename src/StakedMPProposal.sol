@@ -27,12 +27,25 @@ contract StakedMPProposal {
         targetId = params.id;
         data = params.data;
 
+        bool highQuorum = (
+            params.typ == StakedMPManagementType.UpdateVotingConfig ||
+            params.typ == StakedMPManagementType.RequestTranche ||
+            params.typ == StakedMPManagementType.AddStake ||
+            params.typ == StakedMPManagementType.ToggleEarlyReturns ||
+            params.typ == StakedMPManagementType.ToggleWhitelist
+        );
+
+        bool blockingQuorum = (
+            params.typ == StakedMPManagementType.ChildLPProposalVoting ||
+            params.typ == StakedMPManagementType.ApprovePermit2Spend
+        );
+
         votingContract = IVotingFactory(_votingFactory).deployVoting(
             _id, 
             votingConfig.defaultDuration, 
-            address(this), 
             _token,
-            votingConfig.quorumPercent
+            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
+            blockingQuorum ? votingConfig.blockingPercent : 0
         );
     }
 
@@ -40,8 +53,7 @@ contract StakedMPProposal {
         require(
             (
                 typ == StakedMPManagementType.ToggleEarlyReturns ||
-                typ == StakedMPManagementType.ChildLPProposalVoting ||
-                typ == StakedMPManagementType.ChildDealVoting
+                typ == StakedMPManagementType.ChildLPProposalVoting
             ),
             "Not applicable type"
         );
@@ -68,10 +80,11 @@ contract StakedMPProposal {
         (calldataHash) = abi.decode(data, (bytes32));
     }
 
-    function getAmountReturned() external view returns (uint256 amount) {
+    function getAmount() external view returns (uint256 amount) {
         require(
             (
-                typ == StakedMPManagementType.ReturnCapitalToDAC
+                typ == StakedMPManagementType.ReturnCapitalToDAC ||
+                typ == StakedMPManagementType.RequestTranche
             ),
             "Not applicable type"
         );

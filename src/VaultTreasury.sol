@@ -63,7 +63,7 @@ contract VaultTreasury is ReentrancyGuard {
         bytes32 executedCalldataHash = keccak256(abi.encode(permit, transferDetails));
         require(executedCalldataHash == expectedCalldataHash, "Permit does not match approved proposal");
 
-        // Verify Permit2
+        // todo: proper signature (ERC-1271)
         permit2.permitTransferFrom(permit, transferDetails, address(this), signature);
 
         delete approvedSpends[proposalHash]; // one-time use

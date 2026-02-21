@@ -32,10 +32,9 @@ contract VaultDeal is Deal {
         managedEntity = address(vaultTreasury);
     }
 
-    function onApproved() public override onlyDACEntity {
-        super.onApproved();
-
-        IERC20(this.fundingToken()).transfer(managedEntity, this.fundingAmount());
+    function _afterApprove(uint256 trancheId) internal override {
+        //todo support tranches
+        IERC20(this.fundingToken()).transfer(managedEntity, this.fundingAmount(0));
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
@@ -57,7 +56,7 @@ contract VaultDeal is Deal {
             emit PermitApproved(proposal.target(), permitHash);
         }
         else if (typ == StakedMPManagementType.ReturnCapitalToDAC) {
-            uint256 amount = proposal.getAmountReturned();
+            uint256 amount = proposal.getAmount();
             
             vaultTreasury.returnCapitalToDeal(super.fundingToken(), amount);
 
@@ -71,13 +70,9 @@ contract VaultDeal is Deal {
         }
     }
 
-    // Force return capital
-    function returnCapitalToDAC() public override {
+    function _beforeReturnCapitalToDAC() internal override {
         // Claiming the whole balance of fundingToken from treasury
         uint256 balance = IERC20(super.fundingToken()).balanceOf(address(vaultTreasury));
         vaultTreasury.returnCapitalToDeal(super.fundingToken(), balance);
-
-        // Transfer all capital accumulated in the Deal to DAC
-        super.returnCapitalToDAC();
     }
 }

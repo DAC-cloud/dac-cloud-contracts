@@ -4,15 +4,11 @@ pragma solidity ^0.8.20;
 import "./Interfaces.sol";
 
 interface IDACEntity {
+    function getCapitalCall(bytes32 callHash) external returns (CapitalCall memory call);
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);
     function createLPManagementProposal(LPMParams calldata params) external returns (uint256 id);
-    function getDealVoting(uint256 dealId) external view returns (address);
     function getProposalVoting(uint256 proposalId) external view returns (address);
-    function mintLP(address deal, address to, uint256 amount) external;
-    function getQuorumPercent() external view returns (uint256);
-    function getTreasuryBalance(address token) external view returns (uint256);
-    function getLPToken() external view returns (address);
-
+    
     struct Config {
         address lpToken;
         address mpToken;

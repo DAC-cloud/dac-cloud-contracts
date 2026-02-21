@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./IDeal.sol";
+import "./IDealCore.sol";
 
 contract MPToken is ERC20 {
     uint256 public immutable maxSupply;
@@ -22,9 +22,11 @@ contract MPToken is ERC20 {
     }
 
     function stakeToDeal(address deal, uint256 amount) external {
-        require(IDeal(deal).isValidDeal(), "Invalid Deal");
+        require(IDealCore(deal).isValidDeal(), "Invalid Deal");
+        //todo: check in dac if the deal is valid
+
         _transfer(msg.sender, deal, amount);           // internal only
-        IDeal(deal).onMPStaked(msg.sender, amount);
+        IDealCore(deal).onMPStaked(msg.sender, amount);
         emit Staked(msg.sender, deal, amount);
     }
 
@@ -40,6 +42,8 @@ contract MPToken is ERC20 {
         revert("MP tokens are non-transferable");
     }
     function approve(address, uint256) public pure override returns (bool) {
+        //todo allow to approve towards valid approved deal
+        //  (after deal is active, approve is the only way to stake)
         revert("MP tokens are non-transferable");
     }
 }

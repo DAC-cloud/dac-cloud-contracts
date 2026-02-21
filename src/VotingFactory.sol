@@ -7,10 +7,10 @@ contract VotingFactory {
     function deployVoting(
         uint256 id, 
         uint256 duration, 
-        address owner, 
         address token, 
-        uint256 quorum
+        uint256 quorum,
+        uint256 blockingQuorum
     ) external returns (address) {
-        return address(new Voting(id, duration, owner, token, quorum));
+        return address(new Voting(id, duration, token, quorum, blockingQuorum));
     }
 }

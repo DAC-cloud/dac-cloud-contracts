@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./MPToken.sol";
-import "./IDeal.sol";
 import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./IDACEntity.sol";
@@ -17,7 +16,6 @@ contract DACDeal is Deal {
     // Events
     event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
     event ChildLPVoteCasted(uint256 indexed childProposalId, bool support);
-    event ChildDealVoteCasted(uint256 indexed childDealId, bool support);
 
     constructor(
         uint256 _id,
@@ -40,37 +38,36 @@ contract DACDeal is Deal {
         managedEntity = _child;
     }
 
-    function initialize(
+    function _afterInitialize(
         DealParams calldata params,
         VotingConfig calldata votingConfig
-    ) public override {
-        super.initialize(params, votingConfig);
-
+    ) internal override {
         _childLPAmount = params.managedEquity;
     }
 
-    function onApproved() public override onlyDACEntity {
-        super.onApproved();
-
+    function _afterApprove(uint256 trancheId) internal override {
         CapitalCall memory call = CapitalCall({
             treasuryToken: super.fundingToken(),
-            nonce: id,
+            nonce: id, //todo:
             lpRecipient: address(this),
             lpAmount: _childLPAmount,
-            cashAmount: super.fundingAmount()
+            cashAmount: super.fundingAmount(trancheId)
         });
 
         IDACEntity(managedEntity).fulfillCapitalCall(call);
-        
-        emit DealActivated(id);
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == StakedMPManagementType.ChildLPProposalVoting ||
-            params.typ == StakedMPManagementType.CreateChildLPProposal ||
-            params.typ == StakedMPManagementType.ChildDealVoting
+            params.typ == StakedMPManagementType.CreateChildLPProposal
         );
+    }
+
+    function _beforeCreateProposal(StakedMPParams calldata params) internal virtual override {
+        if (params.typ == StakedMPManagementType.RequestTranche) {
+            //todo: check child capital call exists
+        }
     }
 
     function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual override {
@@ -99,15 +96,6 @@ contract DACDeal is Deal {
             IVoting(childVoting).vote(support);
 
             emit ChildLPVoteCasted(childProposalId, support);
-        }
-        else if (typ == StakedMPManagementType.ChildDealVoting) {
-            uint256 childDealId = proposal.targetId();
-            bool support = proposal.getToggleValue();
-
-            address childVoting = IDACEntity(managedEntity).getDealVoting(childDealId);
-            IVoting(childVoting).vote(support);
-
-            emit ChildDealVoteCasted(childDealId, support);
         }
         else {
             revert("Unsupported management proposal type for DAC Deal");

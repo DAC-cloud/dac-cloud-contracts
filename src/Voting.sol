@@ -9,6 +9,7 @@ contract Voting is IVoting {
     uint256 public immutable endTime;
     address public immutable token; // LP or StakedMP
     uint256 public immutable quorum;
+    uint256 public immutable blockingQuorum;
 
     uint256 public yesVotes;
     uint256 public noVotes;
@@ -17,11 +18,12 @@ contract Voting is IVoting {
     // Events
     event Voted(address indexed voter, bool support, uint256 weight);
 
-    constructor(uint256 _propId, uint256 _duration, address _owner, address _token, uint256 _quorum) {
+    constructor(uint256 _propId, uint256 _duration, address _token, uint256 _quorum, uint256 _blockingQuorum) {
         propId = _propId;
         endTime = block.timestamp + _duration;
         token = _token;
         quorum = _quorum;
+        blockingQuorum = _blockingQuorum;
     }
 
     function vote(bool support) external {
@@ -33,9 +35,15 @@ contract Voting is IVoting {
         emit Voted(msg.sender, support, weight);
     }
 
-    function isResolved(uint256 id) external view returns (bool) { return block.timestamp > endTime; }
-    function outcome(uint256 id) external view returns (bool) {
+    function isResolved() external view returns (bool) { return block.timestamp > endTime; }
+    function outcome() external view returns (bool) {
         uint256 total = yesVotes + noVotes;
-        return total > 0 && yesVotes * 100 >= total * quorum;
+        bool yesQuorumReached = (total > 0) && (yesVotes * 100 >= total * quorum);
+        if (blockingQuorum > 0) {
+            if (noVotes * 100 >= total * blockingQuorum) {
+                return false;
+            }
+        }
+        return yesQuorumReached;
     }
 }

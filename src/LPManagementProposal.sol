@@ -27,12 +27,26 @@ contract LPManagementProposal {
         amount = params.amount;
         data = params.data;
 
+        bool highQuorum = (
+            params.typ == LPManagementType.UpdateVotingConfig ||
+            params.typ == LPManagementType.Dividend ||
+            params.typ == LPManagementType.AddTrustedEvaluatorFactory ||
+            params.typ == LPManagementType.RemoveTrustedEvaluatorFactory
+        );
+
+        bool blockingQuorum = (
+            params.typ == LPManagementType.RevokeMP ||
+            params.typ == LPManagementType.CapitalCall ||
+            params.typ == LPManagementType.ApproveDeal ||
+            params.typ == LPManagementType.ApproveTranche
+        );
+
         votingContract = IVotingFactory(_votingFactory).deployVoting(
             _id, 
             votingConfig.defaultDuration, 
-            address(this), 
             _token,
-            votingConfig.quorumPercent
+            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
+            blockingQuorum ? votingConfig.blockingPercent : 0
         );
     }
 
@@ -64,9 +78,29 @@ contract LPManagementProposal {
         require(
             typ == LPManagementType.AddTrustedEvaluatorFactory ||
             typ == LPManagementType.RemoveTrustedEvaluatorFactory,
-            "Not factory type"
+            "Not applicable type"
         );
         return abi.decode(data, (address));
+    }
+
+    function getTrancheId() external view returns (uint256) {
+        require(
+            typ == LPManagementType.ApproveDeal ||
+            typ == LPManagementType.ApproveTranche,
+            "Not applicable type"
+        );
+        (uint256 trancheId,) = abi.decode(data, (uint256, uint256));
+        return trancheId;
+    }
+
+    function getDealId() external view returns (uint256) {
+        require(
+            typ == LPManagementType.ApproveDeal ||
+            typ == LPManagementType.ApproveTranche,
+            "Not applicable type"
+        );
+        (, uint256 dealId) = abi.decode(data, (uint256, uint256));
+        return dealId;
     }
 
     function getMPAmount() external view returns (uint256) {
