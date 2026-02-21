@@ -27,8 +27,8 @@ contract DACTest is Test {
         evaluatorFactory = new EvaluatorFactory();
         lpFactory = new LPManagementFactory();
         votingFactory = new VotingFactory();
-        lpToken = new LPToken("LP Token", "LP", address(0)); // Temp for dac creation
-        mpToken = new MPToken(1000, address(0), "MP Token", "MP");
+        lpToken = new LPToken("LP Token", "LP", address(0), 1000); // Temp for dac creation
+        mpToken = new MPToken(address(0), "MP Token", "MP");
         dac = new DACEntity(
             "DAC",
             "Decentralized Autonomous Corporation",
@@ -40,8 +40,8 @@ contract DACTest is Test {
             address(lpFactory),
             address(votingFactory)
         );
-        lpToken = new LPToken("LP Token", "LP", address(dac)); // Correct dac
-        mpToken = new MPToken(1000, address(dac), "MP Token", "MP");
+        lpToken = new LPToken("LP Token", "LP", address(dac), 1000); // Correct dac
+        mpToken = new MPToken(address(dac), "MP Token", "MP");
         vm.stopPrank();
     }
 

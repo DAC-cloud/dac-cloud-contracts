@@ -5,28 +5,25 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./IDealCore.sol";
 
 contract MPToken is ERC20 {
-    uint256 public immutable maxSupply;
     address public immutable dacEntity;
 
     event Staked(address indexed staker, address indexed deal, uint256 amount);
     event StakeRequested(address indexed staker, address indexed deal, uint256 amount);
 
-    constructor(uint256 _maxSupply, address _dacEntity, string memory name_, string memory symbol_) ERC20(name_, symbol_) {
-        maxSupply = _maxSupply;
+    constructor(address _dacEntity, string memory name_, string memory symbol_) ERC20(name_, symbol_) {
         dacEntity = _dacEntity;
     }
 
     function mint(address to, uint256 amount) external {
         require(msg.sender == dacEntity, "Only DAC");
-        require(totalSupply() + amount <= maxSupply, "Exceeds max");
         _mint(to, amount);
     }
 
     function stakeToDeal(address deal, uint256 amount) external {
         require(IDealCore(deal).isValidDeal(), "Invalid Deal");
-        // todo: check in dac if the deal is valid
-
-        _transfer(msg.sender, deal, amount);           // internal only
+        require(!IDealCore(deal).isApproved(), "Invalid Deal");
+        
+        _transfer(msg.sender, deal, amount);
         IDealCore(deal).onMPStaked(msg.sender, amount);
         emit Staked(msg.sender, deal, amount);
     }
@@ -40,12 +37,13 @@ contract MPToken is ERC20 {
         revert("MP tokens are non-transferable");
     }
 
-    function approve(address, uint256) public pure override returns (bool) {
-        // todo: allow to approve towards valid approved deal
-        //      (after deal is active, approve is the only way to stake)
+    function approve(address deal, uint256 amount) public override returns (bool) {
+        require(IDealCore(deal).isValidDeal(), "Invalid Deal");
+        require(IDealCore(deal).isApproved(), "Invalid Deal");
 
-        // emit StakeRequested(msg.sender, deal, amount);
-        
-        revert("MP tokens are non-transferable");
+        _approve(msg.sender, deal, amount);
+        emit StakeRequested(msg.sender, deal, amount);
+
+        return true;
     }
 }
