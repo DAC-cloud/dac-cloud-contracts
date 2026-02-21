@@ -12,6 +12,8 @@ interface IDealCore {
     function getReturnedCapital() external view returns (uint256);
     function getLPRewardsLimit() external view returns (uint256);
     function isValidDeal() external pure returns (bool);
+    function isApproved() external view returns (bool);
+    function isClosed() external view returns (bool);
     function fundingToken() external view returns (address);
     function fundingAmount(uint256 trancheId) external view returns (uint256);
     function approveDeadline() external view returns (uint256);

@@ -80,15 +80,43 @@ contract StakedMPProposal {
         (calldataHash) = abi.decode(data, (bytes32));
     }
 
+    function getVotingConfiguration() external view returns (VotingConfig memory) {
+        require(
+            typ == StakedMPManagementType.UpdateVotingConfig,
+            "Not applicable type"
+        );
+        (VotingConfig memory configuration) = abi.decode(data, (VotingConfig));
+        return configuration;
+    }
+
     function getAmount() external view returns (uint256 amount) {
         require(
             (
-                typ == StakedMPManagementType.ReturnCapitalToDAC ||
-                typ == StakedMPManagementType.RequestTranche
+                typ == StakedMPManagementType.ReturnCapitalToDAC
             ),
             "Not applicable type"
         );
         (amount) = abi.decode(data, (uint256));
+    }
+
+    function getFundingAmount() external view returns (uint256 amount) {
+        require(
+            (
+                typ == StakedMPManagementType.RequestTranche
+            ),
+            "Not applicable type"
+        );
+        (amount,) = abi.decode(data, (uint256, bytes32));
+    }
+
+    function getFundingCalldata() external view returns (bytes32 calldataHash) {
+        require(
+            (
+                typ == StakedMPManagementType.RequestTranche
+            ),
+            "Not applicable type"
+        );
+        (,calldataHash) = abi.decode(data, (uint256, bytes32));
     }
 
     modifier onlyDealEntity() {

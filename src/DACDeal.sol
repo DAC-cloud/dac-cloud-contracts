@@ -40,21 +40,42 @@ contract DACDeal is Deal {
 
     function _afterInitialize(
         DealParams calldata params,
-        VotingConfig calldata votingConfig
+        VotingConfig calldata
     ) internal override {
         _childLPAmount = params.managedEquity;
     }
 
     function _afterApprove(uint256 trancheId) internal override {
-        CapitalCall memory call = CapitalCall({
-            treasuryToken: super.fundingToken(),
-            nonce: id, //todo:
-            lpRecipient: address(this),
-            lpAmount: _childLPAmount,
-            cashAmount: super.fundingAmount(trancheId)
-        });
+        // Approving spend towards DAC, so child can fulfill capital call
+        // We always approve the last tranche amount, as we immediately sending the funds out
+        IERC20(fundingToken()).approve(managedEntity, super.fundingAmount(trancheId));
 
-        IDACEntity(managedEntity).fulfillCapitalCall(call);
+        if (trancheId == 0) {
+            CapitalCall memory call = CapitalCall({
+                treasuryToken: super.fundingToken(),
+                nonce: 0,
+                lpRecipient: address(this),
+                lpAmount: _childLPAmount,
+                cashAmount: super.fundingAmount(trancheId)
+            });
+
+            IDACEntity(managedEntity).fulfillCapitalCall(call);
+        }
+
+        else {
+            address prop = stakedMPProposals[trancheId];
+            bytes32 calldataHash = StakedMPProposal(prop).getFundingCalldata();
+
+            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
+            IDACEntity(managedEntity).fulfillCapitalCall(call);
+        }
+    }
+
+    function _beforeClose() internal override {
+        // todo: on close we transfer child equity LP token to our DAC
+        //  now this equity is chickens' problem
+        //  call depositTreasury on it
+        //  they can distribute it as dividends if they want
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
@@ -66,7 +87,14 @@ contract DACDeal is Deal {
 
     function _beforeCreateProposal(StakedMPParams calldata params) internal virtual override {
         if (params.typ == StakedMPManagementType.RequestTranche) {
-            //todo: check child capital call exists
+            // Checking that capital call exists
+            (uint256 fundingAmount, bytes32 calldataHash) = abi.decode(params.data, (uint256, bytes32));
+            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
+
+            // Verifying capital call parameters
+            require(call.treasuryToken == super.fundingToken());
+            require(call.cashAmount == fundingAmount);
+            require(call.lpRecipient == address(this));
         }
     }
 
@@ -88,6 +116,7 @@ contract DACDeal is Deal {
 
             emit ChildLPVoteCreated(childProposalId, proposalId);
         }
+
         else if (typ == StakedMPManagementType.ChildLPProposalVoting) {
             uint256 childProposalId = proposal.targetId();
             bool support = proposal.getToggleValue();
@@ -97,6 +126,7 @@ contract DACDeal is Deal {
 
             emit ChildLPVoteCasted(childProposalId, support);
         }
+        
         else {
             revert("Unsupported management proposal type for DAC Deal");
         }

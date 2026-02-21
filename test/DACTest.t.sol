@@ -30,6 +30,8 @@ contract DACTest is Test {
         lpToken = new LPToken("LP Token", "LP", address(0)); // Temp for dac creation
         mpToken = new MPToken(1000, address(0), "MP Token", "MP");
         dac = new DACEntity(
+            "DAC",
+            "Decentralized Autonomous Corporation",
             address(lpToken),
             address(mpToken),
             50,

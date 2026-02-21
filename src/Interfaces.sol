@@ -24,16 +24,20 @@ struct VotingConfig {
     uint256 defaultDuration;        // in seconds
 }
 
+// Quorum configuration - i.e. what are the quorum requirements can be changed by updating
+// governance factory in future in voting config
+
 enum LPManagementType {
     UpdateVotingConfig,             // High quorum
-    MintMP,                         // Default quorum, blocking not allowed
+    MintMP,                         // Default quorum
     RevokeMP,                       // Default quorum, blocking allowed
     Dividend,                       // High quorum
     CapitalCall,                    // Default quorum, blocking allowed
     AddTrustedEvaluatorFactory,     // High quorum
     RemoveTrustedEvaluatorFactory,  // High quorum
     ApproveDeal,                    // Default quorum, blocking allowed
-    ApproveTranche                  // Default quorum, blocking allowed
+    ApproveTranche,                 // Default quorum, blocking allowed
+    RecoverDeal                     // Default quorum
 }
 
 struct LPMParams {
@@ -52,9 +56,9 @@ enum StakedMPManagementType {
     ToggleWhitelist,                // High quorum
     // DACDeal-specific
     CreateChildLPProposal,          // Default quorum
-    ChildLPProposalVoting,          // Default quorum, blocking
+    ChildLPProposalVoting,          // Default quorum, blocking allowed
     // VaultDeal-specific
-    ApprovePermit2Spend,            // Default quorum, blocking
+    ApprovePermit2Spend,            // Default quorum, blocking allowed
     ReturnCapitalToDAC,             // Default quorum
     AssignClaimer                   // Default quorum
 }
@@ -78,9 +82,9 @@ struct DealParams {
     uint256 approveDeadline;
     uint256 dealDeadline;
     uint256 managedEquity;          // only for DAC based Deals (investment into child DAC LP)
-    bool isWhitelistOnly;
+    uint256 capitalCallId;          // only for DAC based Deals
     address evaluatorFactory;       // trusted factory that creates the evaluator
-    bytes evaluatorConfig;          // opaque config for evaluator (e.g. abi.encode(Milestone[]))
+    bytes evaluatorConfig;          // config for evaluator (e.g. abi.encode(Milestone[]))
     bytes dealConfig;               // future-proof field for deal-specific init data
 }
 

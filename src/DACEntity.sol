@@ -15,7 +15,6 @@ import "./MPToken.sol";
 import "./LPManagementProposal.sol";
 import "./IEvaluatorFactory.sol";
 
-// Factory interfaces (minimal)
 interface IDealFactory {
     function deployDeal(
         uint256 id,
@@ -47,6 +46,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
     Config public config;
 
+    string public name;
+    string public description;
+
     bool public rootCapitalCallInitialized;
     mapping(address => uint256) public treasuryBalances;
 
@@ -66,7 +68,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     mapping(address => bool) public trustedEvaluatorFactories;
 
     // Events
-    event DACCreated(address indexed creator, address indexed dac);
+    event DACCreated(address indexed creator, address indexed dac, Config config);
     event DealCreated(uint256 indexed id, uint256 indexed proposalId, address indexed creator, bytes4 kind, address deal, address target, address evaluator);
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 trancheId);
@@ -82,8 +84,11 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     event TrustedEvaluatorFactoryAdded(address indexed factory);
     event TrustedEvaluatorFactoryRemoved(address indexed factory);
     event MPRevoked(address indexed target, uint256 amount);
+    event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
 
     constructor(
+        string memory _name,
+        string memory _description,
         address _lpToken,
         address _mpToken,
         uint256 _quorum,
@@ -92,6 +97,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         address _lpFactory,
         address _votingFactory
     ) {
+        name = _name;
+        description = _description;
+
         config = Config({
             lpToken: _lpToken,
             mpToken: _mpToken,
@@ -113,7 +121,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         deployer = msg.sender;
         rootCapitalCallInitialized = false;
 
-        emit DACCreated(msg.sender, address(this));
+        emit DACCreated(msg.sender, address(this), config);
     }
 
     function initializeRootCapitalCall(
@@ -143,7 +151,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     }
 
     function depositTreasury(address token, uint256 amount) external nonReentrant {
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        require(IERC20(token).transferFrom(msg.sender, address(this), amount), "Transfer failed");
         treasuryBalances[token] += amount;
         emit TreasuryDeposit(token, amount, msg.sender);
     }
@@ -155,7 +163,10 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         CapitalCall memory capitalCall = capitalCalls[callHash];
         require(capitalCall.lpAmount > 0, "Invalid capital call");
 
-        IERC20(call.treasuryToken).transferFrom(msg.sender, address(this), call.cashAmount);
+        require(
+            IERC20(call.treasuryToken).transferFrom(msg.sender, address(this), call.cashAmount), 
+            "Transfer failed"
+        );
         treasuryBalances[call.treasuryToken] += call.cashAmount;
 
         lpToken.mint(call.lpRecipient, call.lpAmount);
@@ -233,7 +244,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         require(treasuryBalances[token] >= amount, "Insufficient treasury");
 
-        IERC20(token).transfer(deal, amount);
+        require(IERC20(token).transfer(deal, amount), "Transfer failed");
         treasuryBalances[token] -= amount;
 
         IDealAdmin(deal).onApproved(trancheId);
@@ -262,6 +273,23 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
                 ),
                 "Type not authorized"
             );
+
+            if (params.typ == LPManagementType.RecoverDeal) {
+                (uint256 dealId) = abi.decode(params.data, (uint256));
+
+                address deal = deals[dealId];
+                require(deal != address(0), "Invalid deal");
+                
+                require(
+                    IDealCore(deal).isClosed(),
+                    "Invalid deal state"
+                );
+
+                require(
+                    IDealCore(deal).getStakedMPTotal() == 0,
+                    "Invalid deal management state"
+                );
+            }
         }
 
         id = nextId++;
@@ -340,6 +368,23 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             emit MPRevoked(target, amount);
         }
 
+        else if (typ == LPManagementType.UpdateVotingConfig) {
+            VotingConfig memory votingConfig = LPManagementProposal(prop).getVotingConfiguration();
+
+            config.votingConfig = votingConfig;
+            emit VotingConfigUpdate(id, votingConfig);
+        }
+
+        else if (typ == LPManagementType.RecoverDeal) {
+            uint256 dealId = LPManagementProposal(prop).getRecoveredDealId();
+            address deal = deals[dealId];
+
+            address liquidator = LPManagementProposal(prop).target();
+            uint256 amount = LPManagementProposal(prop).getMPAmount();
+
+            IDealAdmin(deal).recoverDeal(liquidator, amount);
+        }
+
         else if (
             typ == LPManagementType.ApproveDeal || 
             typ == LPManagementType.ApproveTranche
@@ -351,6 +396,16 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     }
 
     function mintLP(address deal, address to, uint256 amount) external onlyDealOrSelf {
+        require(msg.sender == deal, "Invalid deal");
+        
+        // TODO: evaluator shall permint mint
+        //  thus evaluator can become an oracle for last-resort protection between
+        //  vulnerabilities in the particular Deal contract that we trust.
+        
+        // Basic logic for evaluator - revert any mintLP call, until someone presses the button on the web
+        // and signs with EOA, then there is a 12 hours window, and if no other EOA objects and provide
+        // to an AI agent reasonable claims about a hack in a Deal - evaluator approves the single mint
+
         lpToken.mint(to, amount);
     }
 
@@ -381,7 +436,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         address prop = lpProposals[proposalId];
 
         address token = LPManagementProposal(prop).getDividendToken();
-        IERC20(token).transfer(msg.sender, amount);
+        require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
 
         emit DividendClaimed(proposalId, msg.sender, amount);
     }
@@ -420,8 +475,10 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         }
     }
 
-    function getCapitalCall(bytes32 calldataHash) external view returns (CapitalCall memory) {
-        return capitalCalls[calldataHash];
+    function getCapitalCall(bytes32 calldataHash) external view returns (CapitalCall memory capitalCall) {
+        require(!fulfilledCalls[calldataHash], "Already fulfilled");
+        capitalCall = capitalCalls[calldataHash];
+        require(capitalCall.lpAmount > 0, "Invalid capital call");
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {

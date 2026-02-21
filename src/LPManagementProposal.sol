@@ -57,8 +57,10 @@ contract LPManagementProposal {
 
     function getCashAmount() external view returns (uint256) {
         require(
-            typ == LPManagementType.Dividend ||
-            typ == LPManagementType.CapitalCall,
+            (
+                typ == LPManagementType.Dividend ||
+                typ == LPManagementType.CapitalCall
+            ),
             "Not applicable type"
         );
         (, uint256 cash) = abi.decode(data, (address, uint256));
@@ -76,8 +78,10 @@ contract LPManagementProposal {
 
     function getFactoryAddress() external view returns (address) {
         require(
-            typ == LPManagementType.AddTrustedEvaluatorFactory ||
-            typ == LPManagementType.RemoveTrustedEvaluatorFactory,
+            (
+                typ == LPManagementType.AddTrustedEvaluatorFactory ||
+                typ == LPManagementType.RemoveTrustedEvaluatorFactory
+            ),
             "Not applicable type"
         );
         return abi.decode(data, (address));
@@ -85,28 +89,53 @@ contract LPManagementProposal {
 
     function getTrancheId() external view returns (uint256) {
         require(
-            typ == LPManagementType.ApproveDeal ||
-            typ == LPManagementType.ApproveTranche,
+            (
+                typ == LPManagementType.ApproveDeal ||
+                typ == LPManagementType.ApproveTranche
+            ),
             "Not applicable type"
         );
         (uint256 trancheId,) = abi.decode(data, (uint256, uint256));
         return trancheId;
     }
 
+    function getVotingConfiguration() external view returns (VotingConfig memory) {
+        require(
+            typ == LPManagementType.UpdateVotingConfig,
+            "Not applicable type"
+        );
+        (VotingConfig memory configuration) = abi.decode(data, (VotingConfig));
+        return configuration;
+    }
+
     function getDealId() external view returns (uint256) {
         require(
-            typ == LPManagementType.ApproveDeal ||
-            typ == LPManagementType.ApproveTranche,
+            (
+                typ == LPManagementType.ApproveDeal ||
+                typ == LPManagementType.ApproveTranche
+            ),
             "Not applicable type"
         );
         (, uint256 dealId) = abi.decode(data, (uint256, uint256));
         return dealId;
     }
 
+    function getRecoveredDealId() external view returns (uint256) {
+        require(
+            typ == LPManagementType.RecoverDeal,
+            "Not applicable type"
+        );
+        (uint256 dealId) = abi.decode(data, (uint256));
+        return dealId;
+    }
+
     function getMPAmount() external view returns (uint256) {
         require(
-            typ == LPManagementType.MintMP || 
-            typ == LPManagementType.RevokeMP, 
+            (
+                typ == LPManagementType.MintMP || 
+                typ == LPManagementType.RevokeMP ||
+                typ == LPManagementType.RecoverDeal
+            ), 
             "Not *MP type"
         );
         return amount; // already stored directly

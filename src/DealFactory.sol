@@ -6,6 +6,8 @@ import "./Interfaces.sol";
 import "./IEvaluatorFactory.sol";
 
 contract DealFactory {
+    //todo: mapping of trusted governance factories
+
     function deployDeal(
         uint256 id,
         DealParams calldata params,

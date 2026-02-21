@@ -90,6 +90,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     event StakedMPProposalCreated(uint256 indexed id, StakedMPManagementType typ, address target, uint256 targetId, bytes data);
     event StakedMPProposalExecuted(uint256 indexed id, StakedMPManagementType typ);
     event EarlyReturnsToggled(bool enabled);
+    event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
 
     constructor(
         uint256 _id,
@@ -152,13 +153,17 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function onMPStaked(address staker, uint256 amount) external {
         require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
 
-        // if the deal is approved no more stakes allowed
+        // if the deal is approved no more direct stakes allowed
         require(!approved, "Already approved");
 
         if (isWhitelistOnly) {
             require(isWhitelisted[staker], "Not whitelisted for this deal");
         }
 
+        stake(staker, amount);
+    }
+
+    function stake(address staker, uint256 amount) internal {
         _beforeStake(staker, amount);
 
         if (stakedMPBalance[staker] == 0) holders.push(staker);
@@ -346,6 +351,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         
         emit DealClosed(_totalStakedMP);
     }
+ 
+    function recoverDeal(address liquidator, uint256 liquidatorStake) external {
+        //todo: recovery
+    }
 
     function claimLP() external {
         uint256 amount = claimableLP[msg.sender];
@@ -367,8 +376,17 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         _beforeCreateProposal(params);
 
-        proposalId = nextId++;
-        
+        if (!approved) {
+            require(
+                (
+                    params.typ == StakedMPManagementType.UpdateVotingConfig ||
+                    params.typ == StakedMPManagementType.ToggleEarlyReturns ||
+                    params.typ == StakedMPManagementType.ToggleWhitelist
+                ),
+                "Proposal type available"
+            );
+        }
+
         if (!(
             params.typ == StakedMPManagementType.UpdateVotingConfig ||
             params.typ == StakedMPManagementType.ToggleEarlyReturns ||
@@ -376,12 +394,14 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             params.typ == StakedMPManagementType.RequestTranche ||
             params.typ == StakedMPManagementType.AddStake
         )) {
-            // If type is not a basic Deal governance type, requiring derived contracts to validate
+            // If type is not a basic Deal governance type, requiering derived contracts to validate
             require(
                 _checkStackedMPProposalSupported(params),
                 "Governance proposal type not supported"
             );
         }
+
+        proposalId = nextId++;
 
         address prop = IStakedMPProposalFactory(governanceFactory).deployProposal(
             proposalId,
@@ -420,7 +440,19 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         }
     }
 
-    function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual returns (bool supported) {
+    function _stakeMP(address staker, uint256 amount) internal {
+        // if the deal is not approved adding stakes not allowed
+        require(approved, "Deal not approved");
+
+        require(
+            IERC20(mpTokenAddr).transferFrom(staker, address(this), amount),
+            "Token not transferred"
+        );
+
+        stake(staker, amount);
+    }
+
+    function _checkStackedMPProposalSupported(StakedMPParams calldata) internal virtual returns (bool supported) {
         // Children override this to indicate if the governance proposal is supported
         supported = false;
     }
@@ -448,7 +480,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         }
 
         else if (typ == StakedMPManagementType.UpdateVotingConfig) {
-            // todo: implement voting config update
+            VotingConfig memory config = StakedMPProposal(prop).getVotingConfiguration();
+
+            _votingConfig = config;
+            emit VotingConfigUpdate(id, config);
         }
 
         else if (typ == StakedMPManagementType.ToggleEarlyReturns) {
@@ -471,7 +506,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _afterExecuteProposal(proposalId);
     }
 
-    function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual {
+    function _executeStakedMPProposal(StakedMPProposal) internal virtual {
         // Children override this to handle their specific proposals
         revert("Unsupported management proposal type in base Deal");
     }
@@ -480,6 +515,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function getReturnedCapital() external view returns (uint256) { return returnedCapital; }
     function getLPRewardsLimit() external view returns (uint256) { return _lpRewardsLimit; }
     function isValidDeal() external pure returns (bool) { return true; }
+    function isApproved() external view returns (bool) { return approved; }
+    function isClosed() external view returns (bool) { return closed; }
     function fundingToken() public view returns (address) { return _fundingToken; }
     function fundingAmount(uint256 trancheId) public view returns (uint256) { return _fundingAmount[trancheId]; }
 

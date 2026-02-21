@@ -34,7 +34,10 @@ contract VaultDeal is Deal {
 
     function _afterApprove(uint256 trancheId) internal override {
         //todo support tranches
-        IERC20(this.fundingToken()).transfer(managedEntity, this.fundingAmount(0));
+        require(
+            IERC20(this.fundingToken()).transfer(managedEntity, this.fundingAmount(0)),
+            "Transfer failed"
+        );
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
@@ -60,7 +63,7 @@ contract VaultDeal is Deal {
             
             vaultTreasury.returnCapitalToDeal(super.fundingToken(), amount);
 
-            IERC20(super.fundingToken()).transfer(dacEntity, amount);
+            require(IERC20(super.fundingToken()).transfer(dacEntity, amount), "Transfer failed");
             returnedCapital += amount;
             
             emit CapitalReturned(amount);
