@@ -47,6 +47,7 @@ enum StakedMPManagementType {
     ToggleEarlyReturns,             // High quorum
     ToggleWhitelist,                // High quorum
     // DACDeal-specific
+    ReinvestProfits,                // High quorum
     CreateChildLPProposal,          // Default quorum
     ChildLPProposalVoting,          // Default quorum, blocking allowed
     // VaultDeal-specific

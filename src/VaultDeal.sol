@@ -10,6 +10,7 @@ contract VaultDeal is Deal {
     // Events
     event PermitApproved(address indexed treasuryToken, uint160 amount);
     event AgentAssigned(address indexed treasuryToken, address indexed agent, uint160 amount);
+    event ProfitsRecovered(address indexed token, uint160 amount);
     
     constructor(
         uint256 _id,
@@ -97,8 +98,33 @@ contract VaultDeal is Deal {
     }
 
     function _beforeReturnCapitalToDAC() internal override {
+        // Return full capital for treasury deals is only possible after close
+        // even when early returns toggled on. 
+
+        // In case of treasury earlyReturns only makes capital withdraw possible,
+        // but pigs need to always use proposals to manage it.
+
+        if (earlyReturns) {
+            require(block.timestamp > dealDeadline, "Vault doesn't support full capital withdraw");
+        }
+
         // Claiming the whole balance of fundingToken from treasury
         uint256 balance = IERC20(fundingToken()).balanceOf(address(vaultTreasury));
         vaultTreasury.returnCapitalToDeal(fundingToken(), balance);
+    }
+
+    function recoverProfits(address token) external onlyStakedMPHolder nonReentrant returns (uint256 amount) {
+        require(!(token == fundingToken()), "Invalid token");
+
+        // If token is not a funding token, we allow transfering any balance
+        // to vault treasury (where this balance can be managed by chickens)
+
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        require(
+            IERC20(token).transfer(managedEntity, balance),
+            "Transfer failed"
+        );
+
+        return balance;
     }
 }

@@ -83,7 +83,8 @@ contract DACDeal is Deal {
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == StakedMPManagementType.ChildLPProposalVoting ||
-            params.typ == StakedMPManagementType.CreateChildLPProposal
+            params.typ == StakedMPManagementType.CreateChildLPProposal ||
+            params.typ == StakedMPManagementType.ReinvestProfits
         );
     }
 
@@ -95,6 +96,31 @@ contract DACDeal is Deal {
 
             // Verifying capital call parameters
             require(call.treasuryToken == fundingToken());
+            require(call.cashAmount == fundingAmount);
+            require(call.lpRecipient == address(this));
+        }
+
+        else if (params.typ == StakedMPManagementType.ReinvestProfits) {
+            // Checking a reinvest profit proposal
+            address token = params.target;
+            (uint256 fundingAmount, bytes32 capitalCallHash) = abi.decode(params.data, (uint256, bytes32));
+
+            if (token == fundingToken()) {
+                // With early returns, all capital in funding token is siphoned back to chickens
+                // and counts into returns
+                if (params.typ == StakedMPManagementType.ReinvestProfits) {
+                    require(!earlyReturns, "Early returns are toggled on");
+                }
+            }
+            
+            require(
+                IERC20(token).balanceOf(address(this)) >= fundingAmount,
+                "Balance of the token is not enough"
+            );
+
+            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(capitalCallHash);
+
+            require(call.treasuryToken == token);
             require(call.cashAmount == fundingAmount);
             require(call.lpRecipient == address(this));
         }
@@ -129,8 +155,29 @@ contract DACDeal is Deal {
             emit ChildLPVoteCasted(childProposalId, support);
         }
         
+        else if (typ == StakedMPManagementType.ReinvestProfits) {
+            address token = proposal.target();
+            uint256 amount = proposal.getFundingAmount();
+            bytes32 callHash = proposal.getFundingCalldata();
+
+            IERC20(token).approve(managedEntity, amount);
+
+            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(callHash);
+            IDACEntity(managedEntity).fulfillCapitalCall(call);
+
+            _childLPAmount += call.lpAmount;
+        }
+
         else {
             revert("Unsupported management proposal type for DAC Deal");
         }
+    }
+
+    function _beforeReturnCapitalToDAC() internal override {
+        // DAC deal always transfer capital back to parent DAC following
+        // the core return logic and earlyReturns configuration
+
+        // If early returns logic is not turned on DAC deal can reinvest
+        // profits in the funding token into a child DAC
     }
 }

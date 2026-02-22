@@ -93,7 +93,8 @@ contract StakedMPProposal is Proposal {
     function getFundingAmount() external view returns (uint256 amount) {
         require(
             (
-                typ == StakedMPManagementType.RequestTranche
+                typ == StakedMPManagementType.RequestTranche ||
+                typ == StakedMPManagementType.ReinvestProfits
             ),
             "Not applicable type"
         );
@@ -103,7 +104,8 @@ contract StakedMPProposal is Proposal {
     function getFundingCalldata() external view returns (bytes32 calldataHash) {
         require(
             (
-                typ == StakedMPManagementType.RequestTranche
+                typ == StakedMPManagementType.RequestTranche ||
+                typ == StakedMPManagementType.ReinvestProfits
             ),
             "Not applicable type"
         );

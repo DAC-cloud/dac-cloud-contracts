@@ -28,7 +28,11 @@ contract BasicEvaluator is IEvaluator {
             }
         }
 
-        //todo: returning not 100%, but as set by reward percentage in the milestone
+        // todo: for DAC deals need to also have an oracle proxy for pricing
+        //  lp equity on the balance sheet, as this equity calculates into the deal
+        //  returns
+
+        // todo: returning not 100%, but as set by reward percentage in the milestone
         //  think about calculations that makes sense economically for real projects
         
         if (returned >= expected) {
