@@ -56,8 +56,12 @@ contract VaultTreasury is ReentrancyGuard {
     ) external {
         require(msg.sender == vaultDeal, "Only VaultDeal");
         
+        // Approving the whole balance to permit2
+        IERC20(token).approve(address(permit2), type(uint160).max);
+
         // On-chain Permit2 approval (no signature needed to spend)
-        permit2.approve(spender, address(this), amount, expiration);
+        // to govern single spend transactions by routers / service providers.
+        permit2.approve(token, spender, amount, expiration);
 
         emit SpendApproved(token, spender, amount);
     }

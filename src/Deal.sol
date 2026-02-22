@@ -146,8 +146,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function transferFrom(address, address, uint256) public pure override returns (bool) { revert("StakedMP non-transferable"); }
     function approve(address, uint256) public pure override returns (bool) { revert("StakedMP non-transferable"); }
 
-    function _beforeStake(address staker, uint256 amount) internal virtual {}
-    function _afterStake(address staker, uint256 amount) internal virtual {}
+    function _beforeVoluntaryStake(address staker, uint256 amount) internal virtual {}
+    function _afterVoluntaryStake(address staker, uint256 amount) internal virtual {}
 
     function onMPStaked(address staker, uint256 amount) external {
         require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
@@ -159,11 +159,18 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             require(isWhitelisted[staker], "Not whitelisted for this deal");
         }
 
+        _beforeVoluntaryStake(staker, amount);
+
         stake(staker, amount);
+
+        _afterVoluntaryStake(staker, amount);
     }
 
+    function _beforeEveryStake(address staker, uint256 amount) internal virtual {}
+    function _afterEveryStake(address staker, uint256 amount) internal virtual {}
+
     function stake(address staker, uint256 amount) internal {
-        _beforeStake(staker, amount);
+        _beforeEveryStake(staker, amount);
 
         if (stakedMPBalance[staker] == 0) holders.push(staker);
         
@@ -174,7 +181,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         
         emit StakedMPMinted(staker, amount);
 
-        _afterStake(staker, amount);
+        _afterEveryStake(staker, amount);
     }
 
     function _beforeApprove(uint256 trancheId) internal virtual {}
@@ -205,6 +212,9 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         _afterApprove(trancheId);
     }
+
+    function _beforeInvite(address invitee, bool grantInviteRight) internal virtual {}
+    function _afterInvite(address invitee, bool grantInviteRight) internal virtual {}
 
     function invite(address invitee, bool grantInviteRight) external {
         require(isWhitelistOnly, "Deal is not whitelist-only");
@@ -317,6 +327,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         require(msg.sender == dacEntity, "Only DAC");
         require(!closed, "Deal is already closed");
 
+        _beforeMarkAsFailed(slashPercent);
+
         uint256 slashAmount = (_totalStakedMP * slashPercent) / 100;
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
@@ -327,9 +339,12 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _totalStakedMP -= slashAmount;
         
         emit StakesSlashed(slashAmount);
+
+        _afterMarkAsFailed(slashPercent);
     }
 
     function _beforeExtendDeadline(uint256 newDeadline) internal virtual {}
+    function _afterExtendDeadline() internal virtual {}
 
     function extendDeadline(uint256 newDeadline) external {
         require(msg.sender == dacEntity, "Only DAC");
@@ -340,6 +355,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         dealDeadline = newDeadline;
         
         emit DeadlineExtended(newDeadline);
+
+        _afterExtendDeadline();
     }
 
     function _beforeClose() internal virtual {}
@@ -356,6 +373,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     }
  
     function _beforeRecovery(address liquidator, uint256 liquidatorStake) internal virtual {}
+    function _afterRecovery(address liquidator, uint256 liquidatorStake) internal virtual {}
 
     function recoverDeal(address liquidator, uint256 liquidatorStake) external {
         require(msg.sender == dacEntity, "Only DAC");
@@ -368,16 +386,25 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         stake(liquidator, liquidatorStake);
         
         emit DealRecovered(liquidator);
+
+        _afterRecovery(liquidator, liquidatorStake);
     }
+
+    function _beforeClaimLP(address grantee, uint256 amount) internal virtual {}
+    function _afterClaimLP(address grantee, uint256 amount) internal virtual {}
 
     function claimLP() external {
         uint256 amount = claimableLP[msg.sender];
         require(amount > 0, "Nothing to claim");
         
+        _beforeClaimLP(msg.sender, amount);
+
         claimableLP[msg.sender] = 0;
         IDACEntityAdapter(dacEntity).mintLP(address(this), msg.sender, amount);
         
         emit LPClaimed(msg.sender, amount);
+
+        _afterClaimLP(msg.sender, amount);
     }
 
     function _beforeCreateProposal(StakedMPParams calldata params) internal virtual {}

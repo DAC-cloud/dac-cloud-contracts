@@ -230,6 +230,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         address fundingToken = IDealCore(deal).fundingToken();
         uint256 fundingAmount = IDealCore(deal).fundingAmount(trancheId);
+        require(fundingAmount > 0, "Invalid tranche");
 
         LPMParams memory trancheVote = LPMParams({
             typ: LPManagementType.ApproveTranche,
@@ -322,7 +323,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         if (typ == LPManagementType.MintMP) {
             address target = LPManagementProposal(prop).target();
             uint256 amount = LPManagementProposal(prop).getMPAmount();
+
             mpToken.mint(target, amount);
+
             emit MPMinted(target, amount);
         }
 
@@ -353,25 +356,32 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             bytes32 hash = keccak256(abi.encode(call));
             capitalCalls[hash] = call;
             fulfilledCalls[hash] = false;
+
             emit CapitalCallCreated(hash, lpRecipient, lpAmount);
         }
 
         else if (typ == LPManagementType.AddTrustedEvaluatorFactory) {
             address factory = LPManagementProposal(prop).target();
+
             evaluatorFactories[factory] = true;
+
             emit TrustedEvaluatorFactoryAdded(factory);
         } 
 
         else if (typ == LPManagementType.RemoveTrustedEvaluatorFactory) {
             address factory = LPManagementProposal(prop).target();
+
             evaluatorFactories[factory] = false;
+
             emit TrustedEvaluatorFactoryRemoved(factory);
         } 
 
         else if (typ == LPManagementType.RevokeMP) {
             address target = LPManagementProposal(prop).target();
             uint256 amount = LPManagementProposal(prop).getMPAmount();
+            
             mpToken.burnFrom(target, amount);
+
             emit MPRevoked(target, amount);
         }
 
