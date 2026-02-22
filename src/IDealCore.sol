@@ -9,12 +9,13 @@ interface IDealCore {
     function unstake() external;
     function returnCapitalToDAC() external;
     function getStakedMPTotal() external view returns (uint256);
-    function getReturnedCapital() external view returns (uint256);
+    function getReturnedCapital(address token) external view returns (uint256);
+    function getInvestedCapital(address token) external view returns (uint256);
     function getLPRewardsLimit() external view returns (uint256);
     function isValidDeal() external pure returns (bool);
     function isApproved() external view returns (bool);
     function isClosed() external view returns (bool);
-    function fundingToken() external view returns (address);
+    function fundingToken(uint256 trancheId) external view returns (address);
     function fundingAmount(uint256 trancheId) external view returns (uint256);
     function approveDeadline() external view returns (uint256);
     function dealDeadline() external view returns (uint256);

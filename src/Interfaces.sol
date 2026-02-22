@@ -92,6 +92,8 @@ struct CapitalCall {
 }
 
 struct Milestone {
+    bytes32 milestoneType;          // opaque bytes for milestone type, and byte-masked functionality encoding
+    address token;                  // token for accounting purposes
     uint256 timestamp;
     uint256 expectedReturnPercent;  // cumulative % of funding expected back
     uint256 rewardPercentage;

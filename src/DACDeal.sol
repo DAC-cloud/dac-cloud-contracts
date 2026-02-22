@@ -22,7 +22,6 @@ contract DACDeal is Deal {
         uint256 _id,
         address _governanceFactory,
         address _dac,
-        address _child,
         address _mpToken,
         address _lpToken,
         address _proposer
@@ -33,14 +32,14 @@ contract DACDeal is Deal {
         _mpToken, 
         _lpToken, 
         _proposer
-    ) {
-        managedEntity = _child;
-    }
+    ) {}
 
     function _afterInitialize(
         DealParams calldata params,
         VotingConfig calldata
     ) internal override {
+        managedEntity = params.dealTarget;
+
         _childLPAmount = params.managedEquity;
         _capitalCallId = params.capitalCallId;
     }
@@ -48,11 +47,11 @@ contract DACDeal is Deal {
     function _afterApprove(uint256 trancheId) internal override {
         // Approving spend towards DAC, so child can fulfill capital call
         // We always approve the last tranche amount, as we immediately sending the funds out
-        IERC20(fundingToken()).approve(managedEntity, fundingAmount(trancheId));
+        IERC20(fundingToken(trancheId)).approve(managedEntity, fundingAmount(trancheId));
 
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
-                treasuryToken: fundingToken(),
+                treasuryToken: fundingToken(trancheId),
                 nonce: _capitalCallId,
                 lpRecipient: address(this),
                 lpAmount: _childLPAmount,
@@ -74,10 +73,13 @@ contract DACDeal is Deal {
     }
 
     function _beforeClose() internal override {
-        // todo: on close we transfer child equity LP token to our DAC
-        //  now this equity is chickens' problem
-        //  call depositTreasury on it
-        //  they can distribute it as dividends if they want
+        // On close we transfer child equity LP token to our DAC
+        // Now this equity is chickens' problem, they can distribute 
+        // these LP tokens as dividends, or establish a new Deal
+        // with new management
+
+        //todo:
+        //  call depositTreasury on it  
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
@@ -88,6 +90,8 @@ contract DACDeal is Deal {
         );
     }
 
+    //todo: in DAC deal, need to support tranches in other tokens
+
     function _beforeCreateProposal(StakedMPParams calldata params) internal virtual override {
         if (params.typ == StakedMPManagementType.RequestTranche) {
             // Checking that capital call exists
@@ -95,7 +99,7 @@ contract DACDeal is Deal {
             CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
 
             // Verifying capital call parameters
-            require(call.treasuryToken == fundingToken());
+            require(call.treasuryToken == params.target);
             require(call.cashAmount == fundingAmount);
             require(call.lpRecipient == address(this));
         }
@@ -105,12 +109,18 @@ contract DACDeal is Deal {
             address token = params.target;
             (uint256 fundingAmount, bytes32 capitalCallHash) = abi.decode(params.data, (uint256, bytes32));
 
-            if (token == fundingToken()) {
-                // With early returns, all capital in funding token is siphoned back to chickens
-                // and counts into returns
+            // If token is our funding token
+            if (investedCapital[token] > 0) {
+                // With early returns, all capital in any of funding tokens is siphoned back
+                // to chickens by any manager will, and automatically counts into returns
+                // so we make reinvest not possible
                 if (params.typ == StakedMPManagementType.ReinvestProfits) {
                     require(!earlyReturns, "Early returns are toggled on");
                 }
+            }
+            else {
+                address lpTokenAddress = IDACEntityAdapter(managedEntity).getLPToken();
+                require(token != lpTokenAddress);
             }
             
             require(
@@ -174,10 +184,10 @@ contract DACDeal is Deal {
     }
 
     function _beforeReturnCapitalToDAC() internal override {
-        // DAC deal always transfer capital back to parent DAC following
-        // the core return logic and earlyReturns configuration
+        // DAC deal always transfer capital in all funding tokens back to parent DAC
+        // following the core return logic and `earlyReturns` configuration
 
-        // If early returns logic is not turned on DAC deal can reinvest
+        // If early returns logic is not turned-on, DAC deal can reinvest
         // profits in the funding token into a child DAC
     }
 }

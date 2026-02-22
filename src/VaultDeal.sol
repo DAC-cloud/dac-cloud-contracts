@@ -34,7 +34,7 @@ contract VaultDeal is Deal {
 
     function _afterApprove(uint256 trancheId) internal override {
         require(
-            IERC20(this.fundingToken()).transfer(
+            IERC20(this.fundingToken(trancheId)).transfer(
                 managedEntity, 
                 this.fundingAmount(trancheId)
             ),
@@ -69,14 +69,15 @@ contract VaultDeal is Deal {
         else if (typ == StakedMPManagementType.ReturnCapitalToDAC) {
             require(earlyReturns, "Early returns not allowed");
 
+            address token = proposal.target();
             uint256 amount = proposal.getAmount();
             
-            vaultTreasury.returnCapitalToDeal(fundingToken(), amount);
+            vaultTreasury.returnCapitalToDeal(token, amount);
 
-            IDACEntityAdapter(dacEntity).depositTreasury(fundingToken(), amount);
-            returnedCapital += amount;
+            IDACEntityAdapter(dacEntity).depositTreasury(token, amount);
+            returnedCapital[token] += amount;
             
-            emit CapitalReturned(amount);
+            emit CapitalReturned(token, amount);
         }
 
         else if (typ == StakedMPManagementType.AssignClaimer) {
@@ -108,13 +109,20 @@ contract VaultDeal is Deal {
             require(block.timestamp > dealDeadline, "Vault doesn't support full capital withdraw");
         }
 
-        // Claiming the whole balance of fundingToken from treasury
-        uint256 balance = IERC20(fundingToken()).balanceOf(address(vaultTreasury));
-        vaultTreasury.returnCapitalToDeal(fundingToken(), balance);
+        // Iterate through all funding tokens and return every balance
+        for (uint256 i = 0; i < fundingTokens.length; i++) {
+            address _fundingToken = fundingTokens[i];
+
+            // Claiming the whole balance of any funding token from treasury
+            uint256 balance = IERC20(_fundingToken).balanceOf(address(vaultTreasury));
+            if (balance > 0) {
+                vaultTreasury.returnCapitalToDeal(_fundingToken, balance);
+            }
+        }
     }
 
     function recoverProfits(address token) external onlyStakedMPHolder nonReentrant returns (uint256 amount) {
-        require(!(token == fundingToken()), "Invalid token");
+        require(!(investedCapital[token] > 0), "Invalid token");
 
         // If token is not a funding token, we allow transfering any balance
         // to vault treasury (where this balance can be managed by chickens)

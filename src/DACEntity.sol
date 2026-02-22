@@ -228,7 +228,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         address deal = deals[dealId];
         require(msg.sender == deal, "Invalid deal ID");
 
-        address fundingToken = IDealCore(deal).fundingToken();
+        address fundingToken = IDealCore(deal).fundingToken(trancheId);
         uint256 fundingAmount = IDealCore(deal).fundingAmount(trancheId);
         require(fundingAmount > 0, "Invalid tranche");
 
@@ -249,7 +249,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         require(deal != address(0), "Invalid deal ID");
 
         uint256 amount = IDealCore(deal).fundingAmount(trancheId);
-        address token = IDealCore(deal).fundingToken();
+        address token = IDealCore(deal).fundingToken(trancheId);
 
         require(treasuryBalances[token] >= amount, "Insufficient treasury");
 

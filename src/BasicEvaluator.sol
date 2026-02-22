@@ -15,7 +15,7 @@ contract BasicEvaluator is IEvaluator {
     }
 
     function evaluateDeal(uint256, address dealAddr, address) external view returns (EvaluationResult memory) {
-        uint256 returned = IDealCore(dealAddr).getReturnedCapital();
+        uint256 returned = 0; // IDealCore(dealAddr).getReturnedCapital(token);
         uint256 currentTime = block.timestamp;
 
         // Find the relevant milestone
@@ -29,8 +29,8 @@ contract BasicEvaluator is IEvaluator {
         }
 
         // todo: for DAC deals need to also have an oracle proxy for pricing
-        //  lp equity on the balance sheet, as this equity calculates into the deal
-        //  returns
+        //  lp equity in the escrow, as this equity calculates into the deal
+        //  and have the only way to be returned natively to DAC balance sheet
 
         // todo: returning not 100%, but as set by reward percentage in the milestone
         //  think about calculations that makes sense economically for real projects

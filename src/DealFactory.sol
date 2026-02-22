@@ -26,7 +26,7 @@ contract DealFactory {
             id,
             dac,
             params.governanceFactory,
-            params.dealTarget,
+            //params.dealTarget,
             mpToken,
             lpToken,
             params.proposer

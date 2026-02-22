@@ -119,7 +119,7 @@ contract VaultTreasury is ReentrancyGuard {
         emit Receipt(msg.sender, permit.token, source, transferDetails.requestedAmount);
     }
 
-    // For returning capital to Deal (only original funding token)
+    // For returning capital to Deal
     function returnCapitalToDeal(address token, uint256 balance) external {
         require(msg.sender == vaultDeal, "Only VaultDeal");
 
