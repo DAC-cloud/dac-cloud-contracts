@@ -21,6 +21,8 @@ contract DealFactory {
 
         //todo: check if governance factory is trusted and matching the deal type
 
+        //todo: predict deal address, create a new dac
+
         Deal deal = new DACDeal(
             id,
             dac,

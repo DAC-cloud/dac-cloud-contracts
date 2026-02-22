@@ -10,12 +10,8 @@ interface IDACEntity {
     function getProposalVoting(uint256 proposalId) external view returns (address);
     
     struct Config {
-        address lpToken;
-        address mpToken;
         address votingFactory;
-        address dealFactory;
-        address evaluatorFactory;
-        address lpFactory;
+        address proposalFactory;
         VotingConfig votingConfig;
     }
 }

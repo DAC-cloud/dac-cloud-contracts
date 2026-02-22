@@ -12,6 +12,7 @@ import "./Deal.sol";
 
 contract DACDeal is Deal {
     uint256 private _childLPAmount;
+    uint256 private _capitalCallId;
     
     // Events
     event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
@@ -43,6 +44,7 @@ contract DACDeal is Deal {
         VotingConfig calldata
     ) internal override {
         _childLPAmount = params.managedEquity;
+        _capitalCallId = params.capitalCallId;
     }
 
     function _afterApprove(uint256 trancheId) internal override {
@@ -53,7 +55,7 @@ contract DACDeal is Deal {
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
                 treasuryToken: super.fundingToken(),
-                nonce: 0,
+                nonce: _capitalCallId,
                 lpRecipient: address(this),
                 lpAmount: _childLPAmount,
                 cashAmount: super.fundingAmount(trancheId)

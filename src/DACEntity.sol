@@ -41,31 +41,32 @@ interface ILPManagementFactory {
 contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     address public immutable deployer;
 
-    LPToken public immutable lpToken;
-    MPToken public immutable mpToken;
+    LPToken public lpToken;
+    MPToken public mpToken;
 
     Config public config;
 
     string public name;
     string public description;
 
+    mapping(bytes32 => CapitalCall) public capitalCalls;
+    mapping(bytes32 => bool) public fulfilledCalls;
+
+    mapping(address => bool) public evaluatorFactories;
+    mapping(address => bool) public dealFactories;
+
     bool public rootCapitalCallInitialized;
     mapping(address => uint256) public treasuryBalances;
 
+    uint256 public nextId = 1;
     mapping(uint256 => address) public deals;           // id => Deal address
     mapping(uint256 => address) public lpProposals;     // id => LPManagementProposal address
-    uint256 public nextId = 1;
-
-    mapping(uint256 => bytes32) public dividendMerkleRoots;   // proposalId => root
-    mapping(bytes32 => bool) public dividendClaimed;           // keccak(root + leaf) => claimed
 
     mapping(address => uint256) public dealsMapping;    // Deal address => id (for onlyDeal modifier)
     mapping(address => address) public dealEvaluators;
 
-    mapping(bytes32 => CapitalCall) public capitalCalls;
-    mapping(bytes32 => bool) public fulfilledCalls;
-
-    mapping(address => bool) public trustedEvaluatorFactories;
+    mapping(uint256 => bytes32) public dividendMerkleRoots;   // proposalId => root
+    mapping(bytes32 => bool) public dividendClaimed;          // keccak(root + leaf) => claimed
 
     // Events
     event DACCreated(address indexed creator, address indexed dac, Config config);
@@ -89,25 +90,17 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     constructor(
         string memory _name,
         string memory _description,
-        address _lpToken,
-        address _mpToken,
         uint256 _quorum,
-        address _dealFactory,
-        address _evaluatorFactory,
-        address _lpFactory,
+        address _proposalFactory,
         address _votingFactory
     ) {
         name = _name;
         description = _description;
 
         config = Config({
-            lpToken: _lpToken,
-            mpToken: _mpToken,
             votingFactory: _votingFactory,
-            dealFactory: _dealFactory,
-            evaluatorFactory: _evaluatorFactory,
-            lpFactory: _lpFactory,
-            votingConfig: VotingConfig({   // DEFAULTS — change here or via governance later
+            proposalFactory: _proposalFactory,
+            votingConfig: VotingConfig({   // DEFAULTS — changed via governance later
                 quorumPercent: _quorum,
                 highQuorumPercent: (100 + _quorum) / 2,
                 blockingPercent: _quorum / 2,
@@ -115,13 +108,32 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             })
         });
 
-        lpToken = LPToken(_lpToken);
-        mpToken = MPToken(_mpToken);
-
+        initialized = false;
         deployer = msg.sender;
         rootCapitalCallInitialized = false;
 
         emit DACCreated(msg.sender, address(this), config);
+    }
+
+    bool public initialized;
+
+    function initializeAfterDeployment(
+        address _lpToken,
+        address _mpToken,
+        address dealFactory,
+        address evaluatorFactory
+    ) external {
+        require(msg.sender == deployer, "Only self");
+        require(!initialized, "Already initialized");
+
+        lpToken = LPToken(_lpToken);
+        mpToken = MPToken(_mpToken);
+
+        dealFactories[dealFactory] = true;
+        evaluatorFactories[evaluatorFactory] = true;
+
+        // Any post-deployment setup you want (e.g. set factories later via proposals)
+        initialized = true;
     }
 
     function initializeRootCapitalCall(
@@ -130,6 +142,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         uint256 lpAmount,
         uint256 cashAmount
     ) external {
+        require(initialized, "Not initialized");
         require(msg.sender == deployer, "Only deployer");
         require(!rootCapitalCallInitialized, "Already initialized");
 
@@ -181,18 +194,19 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         onlyMPHolder
         returns (uint256 id, address dealAddr, address evaluatorAddr)
     {
-        require(trustedEvaluatorFactories[params.evaluatorFactory], "Untrusted evaluator factory");
+        require(dealFactories[params.dealFactory], "Untrusted deal factory");
+        require(evaluatorFactories[params.evaluatorFactory], "Untrusted evaluator factory");
 
         require(params.proposer == msg.sender, "Proposer must be msg.sender");
 
         id = nextId++;
 
-        (dealAddr, evaluatorAddr) = IDealFactory(config.dealFactory).deployDeal(
+        (dealAddr, evaluatorAddr) = IDealFactory(params.dealFactory).deployDeal(
             id,
             params,
             address(this),
-            config.mpToken,
-            config.lpToken,
+            address(mpToken),
+            address(lpToken),
             config.votingFactory,
             config.votingConfig
         );
@@ -294,12 +308,12 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         id = nextId++;
         
-        address prop = ILPManagementFactory(config.lpFactory).deployLPManagement(
+        address prop = ILPManagementFactory(config.proposalFactory).deployLPManagement(
             id,
             params,
             address(this),
             config.votingFactory,
-            config.lpToken,
+            address(lpToken),
             config.votingConfig
         );
 
@@ -351,13 +365,13 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         else if (typ == LPManagementType.AddTrustedEvaluatorFactory) {
             address factory = LPManagementProposal(prop).target();
-            trustedEvaluatorFactories[factory] = true;
+            evaluatorFactories[factory] = true;
             emit TrustedEvaluatorFactoryAdded(factory);
         } 
 
         else if (typ == LPManagementType.RemoveTrustedEvaluatorFactory) {
             address factory = LPManagementProposal(prop).target();
-            trustedEvaluatorFactories[factory] = false;
+            evaluatorFactories[factory] = false;
             emit TrustedEvaluatorFactoryRemoved(factory);
         } 
 

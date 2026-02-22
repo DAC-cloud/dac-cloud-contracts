@@ -8,7 +8,7 @@ contract LPToken is ERC20 {
 
     uint256 public immutable maxSupply;
 
-    constructor(string memory name_, string memory symbol_, address _dacEntity, uint256 _maxSupply) ERC20(name_, symbol_) {
+    constructor(address _dacEntity, uint256 _maxSupply, string memory name_, string memory symbol_) ERC20(name_, symbol_) {
         dacEntity = _dacEntity;
         maxSupply = _maxSupply;
     }
