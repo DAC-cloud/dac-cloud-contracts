@@ -14,7 +14,6 @@ contract DealFactory {
         address dac,
         address mpToken,
         address lpToken,
-        address votingFactory,
         VotingConfig calldata votingConfig
     ) external returns (address dealAddr, address evaluatorAddr) {
         //todo: select a proper deal by params.dealKind
@@ -30,7 +29,6 @@ contract DealFactory {
             params.dealTarget,
             mpToken,
             lpToken,
-            votingFactory,
             params.proposer
         );
 

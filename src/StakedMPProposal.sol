@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 import "./Interfaces.sol";
+import "./Proposal.sol";
 
-contract StakedMPProposal {
+contract StakedMPProposal is Proposal {
     uint256 public immutable id;
     address public immutable deal;
-    address public immutable votingContract;
     StakedMPManagementType public immutable typ;
     address public immutable target;
     uint256 public immutable targetId;
@@ -16,37 +16,16 @@ contract StakedMPProposal {
         uint256 _id,
         StakedMPParams memory params,
         address _deal,
-        address _votingFactory,
-        address _token,
-        VotingConfig memory votingConfig
-    ) {
+        uint256 _votingDuration, 
+        uint256 _votingQuorum, 
+        uint256 _blockingQuorum
+    ) Proposal(_deal, _votingDuration, _votingQuorum, _blockingQuorum) {
         id = _id;
         typ = params.typ;
         deal = _deal;
         target = params.target;
         targetId = params.id;
         data = params.data;
-
-        bool highQuorum = (
-            params.typ == StakedMPManagementType.UpdateVotingConfig ||
-            params.typ == StakedMPManagementType.RequestTranche ||
-            params.typ == StakedMPManagementType.AddStake ||
-            params.typ == StakedMPManagementType.ToggleEarlyReturns ||
-            params.typ == StakedMPManagementType.ToggleWhitelist
-        );
-
-        bool blockingQuorum = (
-            params.typ == StakedMPManagementType.ChildLPProposalVoting ||
-            params.typ == StakedMPManagementType.ApprovePermit2Spend
-        );
-
-        votingContract = IVotingFactory(_votingFactory).deployVoting(
-            _id, 
-            votingConfig.defaultDuration, 
-            _token,
-            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
-            blockingQuorum ? votingConfig.blockingPercent : 0
-        );
     }
 
     function getToggleValue() external view returns (bool toggle) {

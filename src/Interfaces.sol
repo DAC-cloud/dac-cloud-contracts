@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IVotingFactory {
-    function deployVoting(
-        uint256 id, 
-        uint256 duration, 
-        address token, 
-        uint256 quorum,
-        uint256 blocking
-    ) external returns (address);
-}
-
 interface IVoting {
     function vote(bool support) external;
     function isResolved() external view returns (bool);
@@ -21,7 +11,7 @@ struct VotingConfig {
     uint256 quorumPercent;          // Quorum percent for default operations
     uint256 blockingPercent;        // Blocking percent, if applicable
     uint256 highQuorumPercent;      // Quorum percent for operations requiring "unanimous" approve
-    uint256 defaultDuration;        // in seconds
+    uint256 duration;               // in seconds
 }
 
 // Quorum configuration - i.e. what are the quorum requirements can be changed by updating

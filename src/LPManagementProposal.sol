@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 import "./Interfaces.sol";
+import "./Proposal.sol";
 
-contract LPManagementProposal {
+contract LPManagementProposal is Proposal {
     uint256 public immutable id;
     address public immutable dacEntity;
-    address public immutable votingContract;
     LPManagementType public immutable typ;
     address public immutable target;
     uint256 public immutable amount;
@@ -14,40 +14,19 @@ contract LPManagementProposal {
     
     constructor(
         uint256 _id,
-        LPMParams memory params,
         address _dac,
-        address _votingFactory,
         address _token,
-        VotingConfig memory votingConfig
-    ) {
+        LPMParams memory params,
+        uint256 _votingDuration, 
+        uint256 _votingQuorum, 
+        uint256 _blockingQuorum
+    ) Proposal(_token, _votingDuration, _votingQuorum, _blockingQuorum) {
         id = _id;
         typ = params.typ;
         dacEntity = _dac;
         target = params.target;
         amount = params.amount;
         data = params.data;
-
-        bool highQuorum = (
-            params.typ == LPManagementType.UpdateVotingConfig ||
-            params.typ == LPManagementType.Dividend ||
-            params.typ == LPManagementType.AddTrustedEvaluatorFactory ||
-            params.typ == LPManagementType.RemoveTrustedEvaluatorFactory
-        );
-
-        bool blockingQuorum = (
-            params.typ == LPManagementType.RevokeMP ||
-            params.typ == LPManagementType.CapitalCall ||
-            params.typ == LPManagementType.ApproveDeal ||
-            params.typ == LPManagementType.ApproveTranche
-        );
-
-        votingContract = IVotingFactory(_votingFactory).deployVoting(
-            _id, 
-            votingConfig.defaultDuration, 
-            _token,
-            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
-            blockingQuorum ? votingConfig.blockingPercent : 0
-        );
     }
 
     function getDividendToken() external view returns (address) {

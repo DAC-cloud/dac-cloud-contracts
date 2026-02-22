@@ -7,23 +7,34 @@ import "./Interfaces.sol";
 contract StakedMPProposalFactory {
     function deployProposal(
         uint256 id,
-        StakedMPParams calldata params,
+        StakedMPParams calldata proposal,
         address deal,
-        address votingFactory,
-        address token,
         VotingConfig calldata votingConfig
     ) external returns (address) {
-        StakedMPParams memory proposalParams = params;
-        VotingConfig memory _votingConfig = votingConfig;
+        StakedMPParams memory proposalParams = proposal;
         
+        bool highQuorum = (
+            proposal.typ == StakedMPManagementType.UpdateVotingConfig ||
+            proposal.typ == StakedMPManagementType.RequestTranche ||
+            proposal.typ == StakedMPManagementType.AddStake ||
+            proposal.typ == StakedMPManagementType.ToggleEarlyReturns ||
+            proposal.typ == StakedMPManagementType.ToggleWhitelist
+        );
+
+        bool blockingQuorum = (
+            proposal.typ == StakedMPManagementType.ChildLPProposalVoting ||
+            proposal.typ == StakedMPManagementType.ApprovePermit2Spend
+        );
+
         StakedMPProposal prop = new StakedMPProposal(
             id, 
             proposalParams, 
             deal,
-            votingFactory, 
-            token, 
-            _votingConfig
+            votingConfig.duration,
+            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
+            blockingQuorum ? votingConfig.blockingPercent : 0
         );
+
         return address(prop);
     }
 }

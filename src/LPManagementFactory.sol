@@ -9,21 +9,35 @@ contract LPManagementFactory {
         uint256 id,
         LPMParams calldata params,
         address dac,
-        address votingFactory,
         address token,
         VotingConfig calldata votingConfig
     ) external returns (address) {
         LPMParams memory proposalParams = params;
-        VotingConfig memory _votingConfig = votingConfig;
         
+        bool highQuorum = (
+            params.typ == LPManagementType.UpdateVotingConfig ||
+            params.typ == LPManagementType.Dividend ||
+            params.typ == LPManagementType.AddTrustedEvaluatorFactory ||
+            params.typ == LPManagementType.RemoveTrustedEvaluatorFactory
+        );
+
+        bool blockingQuorum = (
+            params.typ == LPManagementType.RevokeMP ||
+            params.typ == LPManagementType.CapitalCall ||
+            params.typ == LPManagementType.ApproveDeal ||
+            params.typ == LPManagementType.ApproveTranche
+        );
+
         LPManagementProposal prop = new LPManagementProposal(
             id, 
-            proposalParams, 
             dac, 
-            votingFactory, 
             token, 
-            _votingConfig
+            proposalParams, 
+            votingConfig.duration,
+            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
+            blockingQuorum ? votingConfig.blockingPercent : 0
         );
+
         return address(prop);
     }
 }

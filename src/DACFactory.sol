@@ -7,7 +7,6 @@ import "./LPToken.sol";
 import "./MPToken.sol";
 
 contract DACFactory is IDACFactory {
-    address public votingFactory;
     address public governanceFactory;
     address public dealFactory;
     address public evaluatorFactory;
@@ -15,12 +14,10 @@ contract DACFactory is IDACFactory {
     event DACDeployed(address indexed dac, address lpToken, address mpToken);
 
     constructor(
-        address _votingFactory,
         address _governanceFactory,
         address _dealFactory,
         address _evaluatorFactory
     ) {
-        votingFactory = _votingFactory;
         governanceFactory = _governanceFactory;
         dealFactory = _dealFactory;
         evaluatorFactory = _evaluatorFactory;
@@ -35,8 +32,7 @@ contract DACFactory is IDACFactory {
             config.name,
             config.description,
             config.defaultQuorum,
-            governanceFactory,
-            votingFactory
+            governanceFactory
         );
 
         dacAddr = predictDACAddress(salt, constructorParams);
@@ -61,8 +57,7 @@ contract DACFactory is IDACFactory {
             config.name,
             config.description,
             config.defaultQuorum,
-            governanceFactory,
-            votingFactory
+            governanceFactory
         );
 
         require(address(dac) == dacAddr, "CREATE2 address mismatch");

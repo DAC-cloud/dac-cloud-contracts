@@ -17,7 +17,6 @@ contract VaultDeal is Deal {
         address _governanceFactory,
         address _mpToken,
         address _lpToken,
-        address _votingFactory,
         address _proposer,
         address _permit2
     ) Deal(
@@ -26,7 +25,6 @@ contract VaultDeal is Deal {
         _governanceFactory,
         _mpToken, 
         _lpToken, 
-        _votingFactory, 
         _proposer
     ) {
         vaultTreasury = new VaultTreasury(address(this), _permit2);
@@ -49,6 +47,10 @@ contract VaultDeal is Deal {
             params.typ == StakedMPManagementType.ReturnCapitalToDAC ||
             params.typ == StakedMPManagementType.AssignClaimer
         );
+
+        if (params.typ == StakedMPManagementType.ReturnCapitalToDAC) {
+            require(earlyReturns, "Early returns not allowed");
+        }
     }
 
     function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual override {
@@ -64,11 +66,13 @@ contract VaultDeal is Deal {
         }
 
         else if (typ == StakedMPManagementType.ReturnCapitalToDAC) {
+            require(earlyReturns, "Early returns not allowed");
+
             uint256 amount = proposal.getAmount();
             
-            vaultTreasury.returnCapitalToDeal(super.fundingToken(), amount);
+            vaultTreasury.returnCapitalToDeal(fundingToken(), amount);
 
-            require(IERC20(super.fundingToken()).transfer(dacEntity, amount), "Transfer failed");
+            IDACEntityAdapter(dacEntity).depositTreasury(fundingToken(), amount);
             returnedCapital += amount;
             
             emit CapitalReturned(amount);
@@ -94,7 +98,7 @@ contract VaultDeal is Deal {
 
     function _beforeReturnCapitalToDAC() internal override {
         // Claiming the whole balance of fundingToken from treasury
-        uint256 balance = IERC20(super.fundingToken()).balanceOf(address(vaultTreasury));
-        vaultTreasury.returnCapitalToDeal(super.fundingToken(), balance);
+        uint256 balance = IERC20(fundingToken()).balanceOf(address(vaultTreasury));
+        vaultTreasury.returnCapitalToDeal(fundingToken(), balance);
     }
 }

@@ -22,7 +22,6 @@ interface IDealFactory {
         address dac,
         address mpToken,
         address lpToken,
-        address votingFactory,
         VotingConfig calldata votingConfig
     ) external returns (address, address);
 }
@@ -32,7 +31,6 @@ interface ILPManagementFactory {
         uint256 id,
         LPMParams calldata params,
         address dac,
-        address votingFactory,
         address token,
         VotingConfig calldata votingConfig
     ) external returns (address);
@@ -44,7 +42,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     LPToken public lpToken;
     MPToken public mpToken;
 
-    Config public config;
+    address public proposalFactory;
+    VotingConfig public votingConfig;
 
     string public name;
     string public description;
@@ -69,7 +68,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     mapping(bytes32 => bool) public dividendClaimed;          // keccak(root + leaf) => claimed
 
     // Events
-    event DACCreated(address indexed creator, address indexed dac, Config config);
+    event DACCreated(address indexed creator, address indexed dac, string name);
     event DealCreated(uint256 indexed id, uint256 indexed proposalId, address indexed creator, bytes4 kind, address deal, address target, address evaluator);
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 trancheId);
@@ -91,28 +90,24 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         string memory _name,
         string memory _description,
         uint256 _quorum,
-        address _proposalFactory,
-        address _votingFactory
+        address _proposalFactory
     ) {
         name = _name;
         description = _description;
 
-        config = Config({
-            votingFactory: _votingFactory,
-            proposalFactory: _proposalFactory,
-            votingConfig: VotingConfig({   // DEFAULTS — changed via governance later
-                quorumPercent: _quorum,
-                highQuorumPercent: (100 + _quorum) / 2,
-                blockingPercent: _quorum / 2,
-                defaultDuration: 7 days
-            })
+        proposalFactory = _proposalFactory;
+        votingConfig = VotingConfig({   // DEFAULTS — changed via governance later
+            quorumPercent: _quorum,
+            highQuorumPercent: (100 + _quorum) / 2,
+            blockingPercent: _quorum / 2,
+            duration: 7 days
         });
 
         initialized = false;
         deployer = msg.sender;
         rootCapitalCallInitialized = false;
 
-        emit DACCreated(msg.sender, address(this), config);
+        emit DACCreated(msg.sender, address(this), name);
     }
 
     bool public initialized;
@@ -207,8 +202,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             address(this),
             address(mpToken),
             address(lpToken),
-            config.votingFactory,
-            config.votingConfig
+            votingConfig
         );
 
         deals[id] = dealAddr;
@@ -308,13 +302,12 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         id = nextId++;
         
-        address prop = ILPManagementFactory(config.proposalFactory).deployLPManagement(
+        address prop = ILPManagementFactory(proposalFactory).deployLPManagement(
             id,
             params,
             address(this),
-            config.votingFactory,
             address(lpToken),
-            config.votingConfig
+            votingConfig
         );
 
         lpProposals[id] = prop;
@@ -383,9 +376,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         }
 
         else if (typ == LPManagementType.UpdateVotingConfig) {
-            VotingConfig memory votingConfig = LPManagementProposal(prop).getVotingConfiguration();
+            votingConfig = LPManagementProposal(prop).getVotingConfiguration();
 
-            config.votingConfig = votingConfig;
             emit VotingConfigUpdate(id, votingConfig);
         }
 
@@ -496,7 +488,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {
-        return LPManagementProposal(lpProposals[proposalId]).votingContract();
+        return lpProposals[proposalId];
     }
 
     function getLPToken() external view returns (address) {
@@ -563,11 +555,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     }
 
     function _onlyAfterVote(uint256 id, bool requiredOutcome) internal view {
-        address votingAddr = LPManagementProposal(lpProposals[id]).votingContract();
-
         require(
-            IVoting(votingAddr).isResolved() &&
-            IVoting(votingAddr).outcome() == requiredOutcome,
+            IVoting(lpProposals[id]).isResolved() &&
+            IVoting(lpProposals[id]).outcome() == requiredOutcome,
             "Vote not passed"
         );
     }

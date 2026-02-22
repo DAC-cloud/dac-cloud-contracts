@@ -9,7 +9,6 @@ import "../src/MPToken.sol";
 import "../src/DealFactory.sol";
 import "../src/EvaluatorFactory.sol";
 import "../src/LPManagementFactory.sol";
-import "../src/VotingFactory.sol";
 import "../src/DACFactory.sol";
 import "../src/IDACFactory.sol";
 
@@ -17,11 +16,12 @@ contract DACTest is Test {
     DACEntity dac;
     LPToken lpToken;
     MPToken mpToken;
+
     DealFactory dealFactory;
     EvaluatorFactory evaluatorFactory;
     LPManagementFactory lpFactory;
-    VotingFactory votingFactory;
     DACFactory dacFactory;
+    
     address owner = address(1);
     address user = address(2);
 
@@ -31,10 +31,8 @@ contract DACTest is Test {
         dealFactory = new DealFactory();
         evaluatorFactory = new EvaluatorFactory();
         lpFactory = new LPManagementFactory();
-        votingFactory = new VotingFactory();
 
         dacFactory = new DACFactory(
-            address(votingFactory), 
             address(lpFactory), 
             address(dealFactory),
             address(evaluatorFactory)

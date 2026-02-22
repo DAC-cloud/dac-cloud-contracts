@@ -17,7 +17,6 @@ interface IStakedMPProposalFactory {
         uint256 id,
         StakedMPParams calldata params,
         address dac,
-        address votingFactory,
         address token,
         VotingConfig calldata votingConfig
     ) external returns (address);
@@ -34,10 +33,11 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
     address public immutable mpTokenAddr;
     address public immutable lpTokenAddr;
-    address public immutable votingFactoryAddr;
+
     address public immutable proposer;
     
     string public linkHash;
+
     address private _fundingToken;
     uint256 public approveDeadline;
     uint256 private _lpRewardsLimit;
@@ -99,7 +99,6 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         address _governanceFactory,
         address _mpToken,
         address _lpToken,
-        address _votingFactory,
         address _proposer
     ) ERC20("Staked MP for Deal", "sMP") {
         factory = msg.sender;
@@ -108,7 +107,6 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         dacEntity = _dac;
         mpTokenAddr = _mpToken;
         lpTokenAddr = _lpToken;
-        votingFactoryAddr = _votingFactory;
         proposer = _proposer;
     }
 
@@ -232,6 +230,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             // of if the deal is not approved within deadline
             require(!approved, "Already approved");
             require(block.timestamp > approveDeadline, "Approve deadline not passed");
+        }
+        else {
+            // if the recovery is on, no more unstakes
+            require(!recovery, "Deal recovered");
         }
         
         address staker = msg.sender;
@@ -419,7 +421,6 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             proposalId,
             params,
             address(this),
-            votingFactoryAddr,
             address(this),
             _votingConfig
         );
@@ -559,11 +560,9 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     }
     
     function _onlyAfterStakedMPVote(uint256 proposalId) internal view {
-        address votingAddr = StakedMPProposal(stakedMPProposals[proposalId]).votingContract();
-
         require(
-            IVoting(votingAddr).isResolved() &&
-            IVoting(votingAddr).outcome(),
+            IVoting(stakedMPProposals[proposalId]).isResolved() &&
+            IVoting(stakedMPProposals[proposalId]).outcome(),
             "Vote not passed"
         );
     }

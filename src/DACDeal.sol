@@ -25,7 +25,6 @@ contract DACDeal is Deal {
         address _child,
         address _mpToken,
         address _lpToken,
-        address _votingFactory,
         address _proposer
     ) Deal(
         _id, 
@@ -33,7 +32,6 @@ contract DACDeal is Deal {
         _governanceFactory, 
         _mpToken, 
         _lpToken, 
-        _votingFactory, 
         _proposer
     ) {
         managedEntity = _child;
@@ -50,15 +48,15 @@ contract DACDeal is Deal {
     function _afterApprove(uint256 trancheId) internal override {
         // Approving spend towards DAC, so child can fulfill capital call
         // We always approve the last tranche amount, as we immediately sending the funds out
-        IERC20(fundingToken()).approve(managedEntity, super.fundingAmount(trancheId));
+        IERC20(fundingToken()).approve(managedEntity, fundingAmount(trancheId));
 
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
-                treasuryToken: super.fundingToken(),
+                treasuryToken: fundingToken(),
                 nonce: _capitalCallId,
                 lpRecipient: address(this),
                 lpAmount: _childLPAmount,
-                cashAmount: super.fundingAmount(trancheId)
+                cashAmount: fundingAmount(trancheId)
             });
 
             IDACEntity(managedEntity).fulfillCapitalCall(call);
@@ -96,7 +94,7 @@ contract DACDeal is Deal {
             CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
 
             // Verifying capital call parameters
-            require(call.treasuryToken == super.fundingToken());
+            require(call.treasuryToken == fundingToken());
             require(call.cashAmount == fundingAmount);
             require(call.lpRecipient == address(this));
         }
