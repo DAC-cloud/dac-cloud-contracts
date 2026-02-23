@@ -4,13 +4,13 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./MPToken.sol";
+import "./Structs.sol";
+import "./IDACEntityAdapter.sol";
 import "./IDealCore.sol";
 import "./IDealAdmin.sol";
 import "./IStakedMPProposalFactory.sol";
-import "./Interfaces.sol";
+import "./MPToken.sol";
 import "./LPToken.sol";
-import "./IDACEntityAdapter.sol";
 import "./StakedMPProposal.sol";
 
 abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {

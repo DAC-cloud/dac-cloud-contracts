@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./Structs.sol";
 import "./LPManagementProposal.sol";
-import "./Interfaces.sol";
 
 contract LPManagementFactory {
     function deployLPManagement(

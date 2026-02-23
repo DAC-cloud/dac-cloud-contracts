@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./Structs.sol";
 import "./IEvaluator.sol";
-import "./Interfaces.sol";
 import "./IDealCore.sol";
 
 contract BasicEvaluator is IEvaluator {

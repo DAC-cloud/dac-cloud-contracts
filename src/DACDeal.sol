@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./MPToken.sol";
-import "./Interfaces.sol";
-import "./LPToken.sol";
+import "./Structs.sol";
 import "./IDACEntity.sol";
+import "./MPToken.sol";
+import "./LPToken.sol";
 import "./Deal.sol";
 
 contract DACDeal is Deal {

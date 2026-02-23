@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./DACDeal.sol";
-import "./Interfaces.sol";
+import "./Structs.sol";
 import "./IEvaluatorFactory.sol";
+import "./DACDeal.sol";
 
 contract DealFactory {
     //todo: mapping of trusted governance factories
