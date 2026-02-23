@@ -16,12 +16,14 @@ contract LPManagementFactory {
         
         bool highQuorum = (
             params.typ == LPManagementType.UpdateVotingConfig ||
+            params.typ == LPManagementType.UpdateLegalWrapper || 
             params.typ == LPManagementType.Dividend ||
             params.typ == LPManagementType.AddTrustedEvaluatorFactory ||
             params.typ == LPManagementType.RemoveTrustedEvaluatorFactory
         );
 
         bool blockingQuorum = (
+            params.typ == LPManagementType.ApproveOffchainAction ||
             params.typ == LPManagementType.RevokeMP ||
             params.typ == LPManagementType.CapitalCall ||
             params.typ == LPManagementType.ApproveDeal ||

@@ -125,6 +125,26 @@ contract LPManagementProposal is Proposal {
         return amount; // already stored directly
     }
 
+    function getLegalWrapper() external view returns (LegalWrapper memory wrapper) {
+        require(
+            (
+                typ == LPManagementType.UpdateLegalWrapper
+            ),
+            "Not applicable type"
+        );
+        (wrapper) = abi.decode(data, (LegalWrapper));
+    }
+
+    function getOffchainActionData() external view returns (bytes4 action, bytes memory actionData) {
+        require(
+            (
+                typ == LPManagementType.ApproveOffchainAction
+            ),
+            "Not applicable type"
+        );
+        (action, actionData) = abi.decode(data, (bytes4, bytes));
+    }
+
     modifier onlyDACEntity() {
         _onlyDACEntity();
         _;

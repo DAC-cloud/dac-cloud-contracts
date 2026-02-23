@@ -78,8 +78,12 @@ contract DACDeal is Deal {
         // these LP tokens as dividends, or establish a new Deal
         // with new management
 
-        //todo:
-        //  call depositTreasury on it  
+        address token = IDACEntityAdapter(managedEntity).getLPToken();
+
+        IERC20(token).approve(dacEntity, _childLPAmount);
+
+        IDACEntityAdapter(dacEntity).depositTreasury(token, _childLPAmount);
+        returnedCapital[token] += _childLPAmount;
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {

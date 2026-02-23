@@ -312,6 +312,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;
 
+            IERC20(_fundingToken).approve(dacEntity, balance);
+
             IDACEntityAdapter(dacEntity).depositTreasury(_fundingToken, balance);
             returnedCapital[_fundingToken] += balance;
             

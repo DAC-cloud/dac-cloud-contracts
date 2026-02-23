@@ -7,6 +7,9 @@ interface IVoting {
     function outcome() external view returns (bool);
 }
 
+// Quorum configuration - i.e. "what are the quorum requirements for a proposal type" 
+// can be changed by updating governance factory in future in voting config
+
 struct VotingConfig {
     uint256 quorumPercent;          // Quorum percent for default operations
     uint256 blockingPercent;        // Blocking percent, if applicable
@@ -14,11 +17,17 @@ struct VotingConfig {
     uint256 duration;               // in seconds
 }
 
-// Quorum configuration - i.e. what are the quorum requirements can be changed by updating
-// governance factory in future in voting config
+struct LegalWrapper {
+    address wrapperAddr; 
+    string operatingAgreementIPFS;
+    string registeredAgent;
+    bytes data;
+}
 
 enum LPManagementType {
     UpdateVotingConfig,             // High quorum
+    UpdateLegalWrapper,             // High quorum
+    ApproveOffchainAction,          // Default quorum, blocking allowed
     MintMP,                         // Default quorum
     RevokeMP,                       // Default quorum, blocking allowed
     Dividend,                       // High quorum
@@ -34,9 +43,9 @@ enum LPManagementType {
 
 struct LPMParams {
     LPManagementType typ;
-    address target;      // For RevokeMP / Add/RemoveFactory
-    uint256 amount;      // For RevokeMP (amount to burn)
-    bytes data;          // Future-proof opaque data
+    address target;                 // For RevokeMP / Add/RemoveFactory
+    uint256 amount;                 // For RevokeMP (amount to burn)
+    bytes data;
 }
 
 enum StakedMPManagementType {
@@ -59,13 +68,13 @@ enum StakedMPManagementType {
 
 struct StakedMPParams {
     StakedMPManagementType typ;
-    address target;      // For ApprovePermit2Spend (treasury token), etc.
-    uint256 id;          // For governance ops
-    bytes data;          // Opaque type-specific data (calldataHash, etc.)
+    address target;                 // For ApprovePermit2Spend (treasury token), etc.
+    uint256 id;                     // For governance ops
+    bytes data;
 }
 
 struct DealParams {
-    bytes4 dealKind;
+    bytes4 dealKind;                // Indexed 0 (DAC), 1 (Vault), ...
     address dealFactory;
     address governanceFactory;
     address dealTarget;             // childDAC or Vault-based deal address
@@ -95,7 +104,7 @@ struct Milestone {
     bytes32 milestoneType;          // opaque bytes for milestone type, and byte-masked functionality encoding
     address token;                  // token for accounting purposes
     uint256 timestamp;
-    uint256 expectedReturnPercent;  // cumulative % of funding expected back
+    uint256 expectedReturnPercent;  // cumulative % or amount of funding expected back
     uint256 rewardPercentage;
     uint256 penalty;                // slash % applied
 }

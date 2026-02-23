@@ -48,6 +48,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     string public name;
     string public description;
 
+    LegalWrapper public legalWrapper;
+
     mapping(bytes32 => CapitalCall) public capitalCalls;
     mapping(bytes32 => bool) public fulfilledCalls;
 
@@ -85,6 +87,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     event TrustedEvaluatorFactoryRemoved(address indexed factory);
     event MPRevoked(address indexed target, uint256 amount);
     event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
+    event LegalWrapperSet(uint256 indexed id, LegalWrapper legalWrapper);
+    event LegalWrapperMessage(address indexed wrapper, bytes4 messageKind, bytes message);
+    event OffchainActionApproved(uint256 indexed id, bytes4 action, bytes data);
 
     constructor(
         string memory _name,
@@ -260,6 +265,10 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         emit FundingApproved(id, trancheId);
     }
 
+    function logLegalWrapperMessage(bytes4 kind, bytes calldata message) external onlyLegalWrapper {
+        emit LegalWrapperMessage(msg.sender, kind, message);
+    }
+
     function createLPManagementProposal(LPMParams calldata params)
         external
         onlyLPHolderOrSelf
@@ -320,7 +329,19 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         address prop = lpProposals[id];
         LPManagementType typ = LPManagementProposal(prop).typ();
 
-        if (typ == LPManagementType.MintMP) {
+        if (typ == LPManagementType.UpdateLegalWrapper) {
+            legalWrapper = LPManagementProposal(prop).getLegalWrapper();
+            
+            emit LegalWrapperSet(id, legalWrapper);
+        }
+
+        else if (typ == LPManagementType.ApproveOffchainAction) {
+            (bytes4 action, bytes memory actionData) = LPManagementProposal(prop).getOffchainActionData();
+
+            emit OffchainActionApproved(id, action, actionData);
+        }
+
+        else if (typ == LPManagementType.MintMP) {
             address target = LPManagementProposal(prop).target();
             uint256 amount = LPManagementProposal(prop).getMPAmount();
 
@@ -529,6 +550,11 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         _;
     }
 
+    modifier onlyLegalWrapper() {
+        _onlyLegalWrapper();
+        _;
+    }
+
     modifier onlyAfterVote(uint256 id, bool requiredOutcome) {
         _onlyAfterVote(id, requiredOutcome);
         _;
@@ -562,6 +588,11 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         if (msg.sender != address(this)) {
             require(dealsMapping[msg.sender] != 0, "Not a Deal");
         }
+    }
+
+    function _onlyLegalWrapper() internal view {
+        require(legalWrapper.wrapperAddr != address(0), "Legal Wrapper not set");
+        require(legalWrapper.wrapperAddr == msg.sender, "Not a Legal Wrapper");
     }
 
     function _onlyAfterVote(uint256 id, bool requiredOutcome) internal view {

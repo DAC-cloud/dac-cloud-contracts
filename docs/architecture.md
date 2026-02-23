@@ -131,6 +131,9 @@ flowchart TD
     class Agent agent
 ```
 
+> DAC Engine organizes corporations as composable trees of autonomous DACs. Each team or function becomes a Lego brick (Deal) that connects via capital calls, service agreements, and agent payments (x402 + Permit2). Root DAC governs factories and high-level capital; child DACs operate independently but stay economically aligned.
+
+
 **Connectors (How Bricks Snap Together)**
 
 - **Capital Calls** – standardized way for one DAC to fund another (tranches, LP minting to the Deal contract).
