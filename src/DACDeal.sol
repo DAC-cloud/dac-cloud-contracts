@@ -69,7 +69,7 @@ contract DACDeal is Deal {
         }
 
         else {
-            address prop = stakedMPProposals[trancheId];
+            address prop = getProposal(trancheId);
             bytes32 calldataHash = StakedMPProposal(prop).getFundingCalldata();
 
             CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);

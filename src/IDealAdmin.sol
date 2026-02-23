@@ -12,4 +12,6 @@ interface IDealAdmin {
     function extendDeadline(uint256 newDeadline) external;
     function closeDeal() external;
     function recoverDeal(address liquidator, uint256 stakedAmount) external;
+    // Messages - special LP-governed actions for modules
+    function messageDeal(bytes4 message, bytes calldata data) external;
 }

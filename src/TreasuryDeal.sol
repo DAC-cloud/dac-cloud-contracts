@@ -36,17 +36,21 @@ contract TreasuryDeal is Deal {
         DealParams calldata params,
         VotingConfig calldata
     ) internal override pure {
-        require(params.fundingAmount > 0, "Treasury deal should include funding");
+        // Treasury Deal supports opening the wallet without initial funding
     }
 
     function _afterApprove(uint256 trancheId) internal override {
-        require(
-            IERC20(this.fundingToken(trancheId)).transfer(
-                managedEntity, 
-                this.fundingAmount(trancheId)
-            ),
-            "Transfer failed"
-        );
+        if (trancheId > 0) {
+            require(this.fundingAmount(trancheId) > 0, "Invalid tranche");
+            
+            require(
+                IERC20(this.fundingToken(trancheId)).transfer(
+                    managedEntity, 
+                    this.fundingAmount(trancheId)
+                ),
+                "Transfer failed"
+            );
+        }
     }
 
     function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
@@ -113,10 +117,11 @@ contract TreasuryDeal is Deal {
         // but pigs need to always use proposals to manage it.
 
         if (earlyReturns) {
-            require(block.timestamp > dealDeadline, "Treasury doesn't support full capital withdraw");
+            require(block.timestamp > this.dealDeadline(), "Treasury doesn't support full capital withdraw");
         }
 
         // Iterate through all funding tokens and return every balance
+        address[] memory fundingTokens = this.fundingTokens();
         for (uint256 i = 0; i < fundingTokens.length; i++) {
             address _fundingToken = fundingTokens[i];
 

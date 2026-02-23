@@ -7,20 +7,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./MPToken.sol";
 import "./IDealCore.sol";
 import "./IDealAdmin.sol";
+import "./IStakedMPProposalFactory.sol";
 import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./IDACEntityAdapter.sol";
 import "./StakedMPProposal.sol";
-
-interface IStakedMPProposalFactory {
-    function deployProposal(
-        uint256 id,
-        StakedMPParams calldata params,
-        address dac,
-        address token,
-        VotingConfig calldata votingConfig
-    ) external returns (address);
-}
 
 abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     address public immutable factory;
@@ -41,20 +32,20 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
     // Entity connected on initialization to enable Create2 address prediction
     // of the Deal for bootstrapping child-DACs
-    address public managedEntity;
+    address internal managedEntity;
     
     uint256 private _lpRewardsLimit;
     
     uint256 private startTime;
-    uint256 public approveDeadline;
-    uint256 public dealDeadline;
+    uint256 private _approveDeadline;
+    uint256 private _dealDeadline;
 
     // Link with document management system
     string public linkHash;
 
     // Funding
-    address[] public fundingTokens;
-    mapping(address => uint256) public _requestedFunding;
+    address[] private _fundingTokens;
+    mapping(address => uint256) private _requestedFunding;
 
     struct Tranche {
         address token;
@@ -66,34 +57,35 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     mapping(uint256 => Tranche) private _fundingTranches;
 
     // Deal state
-    bool public approved;
-    bool public closed;
-    bool public recovery;
-    bool public earlyReturns;
-    bool public isWhitelistOnly; 
+    bool private approved;
+    bool private closed;
+    bool private recovery;
+    bool private isWhitelistOnly; 
+    
+    bool internal earlyReturns;
     
     // General metrics for abstract Deal
-    uint256 public rewardsConverted;
+    uint256 private rewardsConverted;
 
     // Indexed by funding token
-    mapping(address => uint256) public investedCapital;
-    mapping(address => uint256) public returnedCapital;
+    mapping(address => uint256) internal investedCapital;
+    mapping(address => uint256) internal returnedCapital;
 
     // MP tokens staking
     uint256 private _totalStakedMP;
-    mapping(address => uint256) public stakedRealMP;
-    mapping(address => uint256) public stakedMPBalance;
-    mapping(address => uint256) public claimableLP;
+    mapping(address => uint256) private stakedRealMP;
+    mapping(address => uint256) private stakedMPBalance;
+    mapping(address => uint256) private claimableLP;
 
     // Whitelist
-    mapping(address => bool) public isWhitelisted;
-    mapping(address => bool) public canInviteOthers;
+    mapping(address => bool) private isWhitelisted;
+    mapping(address => bool) private canInviteOthers;
 
-    address[] public holders; // only for claimable tracking
+    address[] private holders; // only for claimable tracking
 
     // Governance
-    uint256 public nextId = 1;
-    mapping(uint256 => address) public stakedMPProposals;
+    uint256 private nextId = 1;
+    mapping(uint256 => address) private stakedMPProposals;
 
     VotingConfig private _votingConfig;
     
@@ -109,6 +101,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     event DeadlineExtended(uint256 newDeadline);
     event DealClosed(uint256 totalMP);
     event DealRecovered(address indexed liquidator);
+    event MessageReceived(bytes4 messageKind, bytes message);
+    event LegalWrapperMessageReceived(address indexed wrapper, bytes4 messageKind, bytes message);
     event Invited(address indexed invitee, bool canInvite);
     event StakedMPProposalCreated(uint256 indexed id, StakedMPManagementType typ, address target, uint256 targetId, bytes data);
     event StakedMPProposalExecuted(uint256 indexed id, StakedMPManagementType typ);
@@ -155,13 +149,13 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         linkHash = params.linkHash;
         _lpRewardsLimit = params.lpRewardsLimit;
-        approveDeadline = params.approveDeadline;
-        dealDeadline = params.dealDeadline;
+        _approveDeadline = params.approveDeadline;
+        _dealDeadline = params.dealDeadline;
         _votingConfig = defaultVotingConfig;
 
         if (params.fundingAmount > 0) {
             if (_requestedFunding[params.fundingToken] == 0) {
-                fundingTokens.push(params.fundingToken);
+                _fundingTokens.push(params.fundingToken);
             }
             _requestedFunding[params.fundingToken] = params.fundingAmount;
         }
@@ -181,7 +175,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         _afterInitialize(params, defaultVotingConfig);
     }
-
+ 
     function totalSupply() public view override returns (uint256) { return _totalStakedMP; }
     function balanceOf(address account) public view override returns (uint256) { return stakedMPBalance[account]; }
     function transfer(address, uint256) public pure override returns (bool) { revert("StakedMP non-transferable"); }
@@ -211,7 +205,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _beforeEveryStake(address staker, uint256 amount) internal virtual {}
     function _afterEveryStake(address staker, uint256 amount) internal virtual {}
 
-    function stake(address staker, uint256 amount) internal {
+    function stake(address staker, uint256 amount) private {
         _beforeEveryStake(staker, amount);
 
         if (stakedMPBalance[staker] == 0) holders.push(staker);
@@ -234,7 +228,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         if (trancheId == 0) {
             require(!approved, "Already approved");
-            require(block.timestamp > approveDeadline, "Approve deadline not passed");
+            require(block.timestamp > _approveDeadline, "Approve deadline not passed");
         }
         else {
             require(_fundingTranches[trancheId].amount > 0, "Tranche not exist");
@@ -283,7 +277,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         if (!closed) {
             // of if the deal is not approved within deadline
             require(!approved, "Already approved");
-            require(block.timestamp > approveDeadline, "Approve deadline not passed");
+            require(block.timestamp > _approveDeadline, "Approve deadline not passed");
         }
         else {
             // if the recovery is on, no more unstakes
@@ -310,20 +304,20 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
     function returnCapitalToDAC() external {
         if (msg.sender == dacEntity) {
-            require(block.timestamp > dealDeadline, "Deadline not passed");
+            require(block.timestamp > _dealDeadline, "Deadline not passed");
         }
         else {
             require(stakedMPBalance[msg.sender] != 0, "Not a staked-MP holder");
             if (!earlyReturns) {
-                require(block.timestamp > dealDeadline, "Deadline not passed");
+                require(block.timestamp > _dealDeadline, "Deadline not passed");
             }
         }
         
         _beforeReturnCapitalToDAC();
 
         // Iterate through all funding tokens and return every balance
-        for (uint256 i = 0; i < fundingTokens.length; i++) {
-            address _fundingToken = fundingTokens[i];
+        for (uint256 i = 0; i < _fundingTokens.length; i++) {
+            address _fundingToken = _fundingTokens[i];
 
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;
@@ -403,7 +397,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         
         _beforeExtendDeadline(newDeadline);
 
-        dealDeadline = newDeadline;
+        _dealDeadline = newDeadline;
         
         emit DeadlineExtended(newDeadline);
 
@@ -510,14 +504,14 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _afterCreateProposal(proposalId, params);
     }
 
-    function _toggleEarlyReturns(bool allowEarlyReturn) internal {
+    function _toggleEarlyReturns(bool allowEarlyReturn) private {
         if (earlyReturns != allowEarlyReturn) {
             earlyReturns = allowEarlyReturn;
             emit EarlyReturnsToggled(earlyReturns);
         }
     }
 
-    function _toggleWhitelist(bool whitelistOnly) internal {
+    function _toggleWhitelist(bool whitelistOnly) private {
         if (isWhitelistOnly != whitelistOnly) {
             isWhitelistOnly = whitelistOnly;
             
@@ -531,7 +525,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         }
     }
 
-    function _stakeMP(address staker, uint256 amount) internal {
+    function _stakeMP(address staker, uint256 amount) private {
         // if the deal is not approved adding stakes not allowed
         require(approved, "Deal not approved");
 
@@ -562,8 +556,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             uint256 amountFunding = StakedMPProposal(prop).getAmount();
 
             // Creating tranche state
-            if (_requestedFunding[_fundingToken] == 0) fundingTokens.push(_fundingToken);
-            _requestedFunding[_fundingToken] = amountFunding;
+            if (_requestedFunding[_fundingToken] == 0) {
+                _fundingTokens.push(_fundingToken);
+            }
+            _requestedFunding[_fundingToken] += amountFunding;
             
             _fundingTranches[proposalId] = Tranche({
                 token: _fundingToken,
@@ -611,13 +607,42 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         revert("Unsupported management proposal type in base Deal");
     }
 
+    function onMessageDeal(bytes4, bytes calldata) internal virtual returns (bool) {
+        // Basic deal accepts all messages, assuming they pass for the governance perspective
+        // and makes sense on chain.
+        
+        return true;
+    }
+    
+    function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDACEntity {
+        require(onMessageDeal(messageKind, message), "Message not accepted");
+
+        emit MessageReceived(messageKind, message);
+    }
+
+    function onLegalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) internal virtual {}
+
+    function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external onlyDACEntity {
+        onLegalWrapperMessage(legalWrapper, messageKind, message);
+        
+        emit LegalWrapperMessageReceived(legalWrapper, messageKind, message);
+    }
+
+    function approveDeadline() external view returns (uint256) { return _approveDeadline; }
+    function dealDeadline() external view returns (uint256) { return _dealDeadline; }
+
     function getStakedMPTotal() external view returns (uint256) { return _totalStakedMP; }
     function getReturnedCapital(address token) external view returns (uint256) { return returnedCapital[token]; }
     function getInvestedCapital(address token) external view returns (uint256) { return investedCapital[token]; }
     function getLPRewardsLimit() external view returns (uint256) { return _lpRewardsLimit; }
+    
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external view returns (bool) { return approved; }
     function isClosed() external view returns (bool) { return closed; }
+
+    function fundingTokens() public view returns (address[] memory) {
+        return _fundingTokens;
+    }
     function fundingSettled(uint256 trancheId) public view returns (bool) {
         Tranche memory tranche = _fundingTranches[trancheId];
         if (trancheId != 0) {
@@ -640,6 +665,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         return tranche.amount; 
     }
 
+    function getProposal(uint256 proposalId) public view returns (address) {
+        require(stakedMPProposals[proposalId] != address(0), "Invalid proposal");
+        return stakedMPProposals[proposalId];
+    }
     function votingConfig() public view returns (VotingConfig memory) { return _votingConfig; }
 
     modifier onlyDACEntity() {

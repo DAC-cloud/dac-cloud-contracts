@@ -8,33 +8,14 @@ import "./IDACEntity.sol";
 import "./IDACEntityAdapter.sol";
 import "./IDealCore.sol";
 import "./IDealAdmin.sol";
+import "./IDealFactory.sol";
 import "./IEvaluator.sol";
+import "./ILPManagementFactory.sol";
 import "./Interfaces.sol";
 import "./LPToken.sol";
 import "./MPToken.sol";
 import "./LPManagementProposal.sol";
 import "./IEvaluatorFactory.sol";
-
-interface IDealFactory {
-    function deployDeal(
-        uint256 id,
-        DealParams calldata params,
-        address dac,
-        address mpToken,
-        address lpToken,
-        VotingConfig calldata votingConfig
-    ) external returns (address, address);
-}
-
-interface ILPManagementFactory {
-    function deployLPManagement(
-        uint256 id,
-        LPMParams calldata params,
-        address dac,
-        address token,
-        VotingConfig calldata votingConfig
-    ) external returns (address);
-}
 
 contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     address public immutable deployer;
@@ -60,14 +41,14 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     mapping(address => uint256) public treasuryBalances;
 
     uint256 public nextId = 1;
-    mapping(uint256 => address) public deals;           // id => Deal address
-    mapping(uint256 => address) public lpProposals;     // id => LPManagementProposal address
+    mapping(uint256 => address) public deals;                   // id => Deal address
+    mapping(uint256 => address) public lpProposals;             // id => LPManagementProposal address
 
-    mapping(address => uint256) public dealsMapping;    // Deal address => id (for onlyDeal modifier)
+    mapping(address => IDealFactory) public dealFactory;        // Deal address => id (for onlyDeal modifier)
     mapping(address => address) public dealEvaluators;
 
-    mapping(uint256 => bytes32) public dividendMerkleRoots;   // proposalId => root
-    mapping(bytes32 => bool) public dividendClaimed;          // keccak(root + leaf) => claimed
+    mapping(uint256 => bytes32) public dividendMerkleRoots;     // proposalId => root
+    mapping(bytes32 => bool) public dividendClaimed;            // keccak(root + leaf) => claimed
 
     // Events
     event DACCreated(address indexed creator, address indexed dac, string name);
@@ -120,8 +101,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     function initializeAfterDeployment(
         address _lpToken,
         address _mpToken,
-        address dealFactory,
-        address evaluatorFactory
+        address _dealFactory,
+        address _evaluatorFactory
     ) external {
         require(msg.sender == deployer, "Only self");
         require(!initialized, "Already initialized");
@@ -129,8 +110,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         lpToken = LPToken(_lpToken);
         mpToken = MPToken(_mpToken);
 
-        dealFactories[dealFactory] = true;
-        evaluatorFactories[evaluatorFactory] = true;
+        dealFactories[_dealFactory] = true;
+        evaluatorFactories[_evaluatorFactory] = true;
 
         // Any post-deployment setup you want (e.g. set factories later via proposals)
         initialized = true;
@@ -199,6 +180,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         require(params.proposer == msg.sender, "Proposer must be msg.sender");
 
+        require(IDealFactory(params.dealFactory).isActive(), "Deal factory is paused");
+
         id = nextId++;
 
         (dealAddr, evaluatorAddr) = IDealFactory(params.dealFactory).deployDeal(
@@ -211,7 +194,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         );
 
         deals[id] = dealAddr;
-        dealsMapping[dealAddr] = id;
+        dealFactory[dealAddr] = IDealFactory(params.dealFactory);
         dealEvaluators[dealAddr] = evaluatorAddr;
 
         LPMParams memory dealVote = LPMParams({
@@ -229,7 +212,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     function createTrancheProposal(
         uint256 dealId,
         uint256 trancheId
-    ) external {
+    ) external onlyDeal {
         address deal = deals[dealId];
         require(msg.sender == deal, "Invalid deal ID");
 
@@ -270,8 +253,13 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         emit FundingApproved(id, trancheId);
     }
 
-    function logLegalWrapperMessage(bytes4 kind, bytes calldata message) external onlyLegalWrapper {
-        emit LegalWrapperMessage(msg.sender, kind, message);
+    function logLegalWrapperMessage(uint256 id, bytes4 kind, bytes calldata message) external onlyLegalWrapper {
+        if (id == 0) {
+            emit LegalWrapperMessage(msg.sender, kind, message);
+        }
+        else {
+            //todo send message to deal
+        }
     }
 
     function createLPManagementProposal(LPMParams calldata params)
@@ -435,11 +423,17 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             uint256 trancheId = LPManagementProposal(prop).getTrancheId();
             _approveFunding(dealId, trancheId);
         }
+
+        // todo: add/remove trusted deal factory (for remove, if legal wrapper active, require legal wrapper to execute)
+
+        // todo: message deal
+
+        emit LPMProposalExecuted(id, typ);
     }
 
-    function mintLP(address deal, address to, uint256 amount) external onlyDealOrSelf {
+    function mintLP(address deal, address to, uint256 amount) external onlyDeal {
         require(msg.sender == deal, "Invalid deal");
-        
+
         // TODO: evaluator shall permint mint
         //  thus evaluator can become an oracle for last-resort protection between
         //  vulnerabilities in the particular Deal contract that we trust.
@@ -550,6 +544,11 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         _;
     }
 
+    modifier onlyDeal() {
+        _onlyDeal(msg.sender);
+        _;
+    }
+
     modifier onlyDealOrSelf() {
         _onlyDealOrSelf();
         _;
@@ -591,8 +590,15 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
     function _onlyDealOrSelf() internal view {
         if (msg.sender != address(this)) {
-            require(dealsMapping[msg.sender] != 0, "Not a Deal");
+            _onlyDeal(msg.sender);
         }
+    }
+
+    function _onlyDeal(address deal) internal view {
+        require(
+            IDealFactory(dealFactory[deal]).isActive(), 
+            "Not a valid Deal"
+        );
     }
 
     function _onlyLegalWrapper() internal view {

@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IVoting {
-    function vote(bool support) external;
-    function isResolved() external view returns (bool);
-    function outcome() external view returns (bool);
-}
-
 // Quorum configuration - i.e. "what are the quorum requirements for a proposal type" 
 // can be changed by updating governance factory in future in voting config
 
@@ -34,12 +28,13 @@ enum LPManagementType {
     Dividend,                       // High quorum
     CapitalCall,                    // Default quorum, blocking allowed
     AddTrustedDealFactory,          // High quorum
-    RemoveTrustedDealFactory,       // High quorum
+    RemoveTrustedDealFactory,       // High quorum, requires additional authorization by legal wrapper address
     AddTrustedEvaluatorFactory,     // High quorum
     RemoveTrustedEvaluatorFactory,  // High quorum
     ApproveDeal,                    // Default quorum, blocking allowed
     ApproveTranche,                 // Default quorum, blocking allowed
-    RecoverDeal                     // Default quorum
+    RecoverDeal,                    // Default quorum
+    PassDealMessage                 // Default quorum
 }
 
 struct LPMParams {

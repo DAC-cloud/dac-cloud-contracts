@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./Interfaces.sol";
+import "./IVoting.sol";
 
 abstract contract Proposal is IVoting {
     address public immutable token;
