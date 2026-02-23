@@ -258,8 +258,13 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         require(treasuryBalances[token] >= amount, "Insufficient treasury");
 
-        require(IERC20(token).transfer(deal, amount), "Transfer failed");
-        treasuryBalances[token] -= amount;
+        if (amount > 0) {
+            require(IERC20(token).transfer(deal, amount), "Transfer failed");
+            treasuryBalances[token] -= amount;
+        }
+        else {
+            require(trancheId == 0, "Invalid tranche");
+        }
 
         IDealAdmin(deal).onApproved(trancheId);
         emit FundingApproved(id, trancheId);

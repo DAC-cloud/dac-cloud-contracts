@@ -2,10 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "./Deal.sol";
-import "./VaultTreasury.sol";
+import "./Permit2Treasury.sol";
 
-contract VaultDeal is Deal {
-    VaultTreasury public immutable vaultTreasury;
+contract TreasuryDeal is Deal {
+    Permit2Treasury public immutable treasury;
 
     // Events
     event PermitApproved(address indexed treasuryToken, uint160 amount);
@@ -28,8 +28,15 @@ contract VaultDeal is Deal {
         _lpToken, 
         _proposer
     ) {
-        vaultTreasury = new VaultTreasury(address(this), _permit2);
-        managedEntity = address(vaultTreasury);
+        treasury = new Permit2Treasury(address(this), _permit2);
+        managedEntity = address(treasury);
+    }
+
+    function _beforeInitialize(
+        DealParams calldata params,
+        VotingConfig calldata
+    ) internal override pure {
+        require(params.fundingAmount > 0, "Treasury deal should include funding");
     }
 
     function _afterApprove(uint256 trancheId) internal override {
@@ -61,7 +68,7 @@ contract VaultDeal is Deal {
             address token = proposal.target();
             (address spender, uint160 amount, uint48 expiration) = proposal.getApproveCallData();
             
-            vaultTreasury.approveSpend(token, spender, amount, expiration);
+            treasury.approveSpend(token, spender, amount, expiration);
 
             emit PermitApproved(proposal.target(), amount);
         }
@@ -72,7 +79,7 @@ contract VaultDeal is Deal {
             address token = proposal.target();
             uint256 amount = proposal.getAmount();
             
-            vaultTreasury.returnCapitalToDeal(token, amount);
+            treasury.returnCapitalToDeal(token, amount);
 
             IDACEntityAdapter(dacEntity).depositTreasury(token, amount);
             returnedCapital[token] += amount;
@@ -84,7 +91,7 @@ contract VaultDeal is Deal {
             address agent = proposal.target();
             (address token, address counterparty, uint160 amount) = proposal.getApproveAgentCallData();
             
-            vaultTreasury.approveReceive(agent, counterparty, token, amount);
+            treasury.approveReceive(agent, counterparty, token, amount);
 
             emit AgentAssigned(token, agent, amount);
         }
@@ -94,7 +101,7 @@ contract VaultDeal is Deal {
         }
 
         else {
-            revert("Unsupported management proposal type for Vault Deal");
+            revert("Unsupported management proposal type for Treasury Deal");
         }
     }
 
@@ -106,7 +113,7 @@ contract VaultDeal is Deal {
         // but pigs need to always use proposals to manage it.
 
         if (earlyReturns) {
-            require(block.timestamp > dealDeadline, "Vault doesn't support full capital withdraw");
+            require(block.timestamp > dealDeadline, "Treasury doesn't support full capital withdraw");
         }
 
         // Iterate through all funding tokens and return every balance
@@ -114,9 +121,9 @@ contract VaultDeal is Deal {
             address _fundingToken = fundingTokens[i];
 
             // Claiming the whole balance of any funding token from treasury
-            uint256 balance = IERC20(_fundingToken).balanceOf(address(vaultTreasury));
+            uint256 balance = IERC20(_fundingToken).balanceOf(address(treasury));
             if (balance > 0) {
-                vaultTreasury.returnCapitalToDeal(_fundingToken, balance);
+                treasury.returnCapitalToDeal(_fundingToken, balance);
             }
         }
     }
@@ -125,7 +132,7 @@ contract VaultDeal is Deal {
         require(!(investedCapital[token] > 0), "Invalid token");
 
         // If token is not a funding token, we allow transfering any balance
-        // to vault treasury (where this balance can be managed by chickens)
+        // to treasury (where this balance can be managed by chickens)
 
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(

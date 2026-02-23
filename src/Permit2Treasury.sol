@@ -28,10 +28,10 @@ interface IPermit2 {
     function transferFrom(address from, address to, uint256 amount, address token) external;
 }
 
-contract VaultTreasury is ReentrancyGuard {
+contract Permit2Treasury is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    address public immutable vaultDeal;
+    address public immutable treasuryDeal;
     IPermit2 public immutable permit2;
 
     mapping(bytes32 => uint256) public approvedAgents; // calldataHash, totalAmount
@@ -42,19 +42,19 @@ contract VaultTreasury is ReentrancyGuard {
 
     event CapitalReturned(address token, uint256 amount);
 
-    constructor(address _vaultDeal, address _permit2) {
-        vaultDeal = _vaultDeal;
+    constructor(address _treasuryDeal, address _permit2) {
+        treasuryDeal = _treasuryDeal;
         permit2 = IPermit2(_permit2);
     }
 
-    // Called by VaultDeal after staked-MP quorum approves a spend
+    // Called by TreasuryDeal after staked-MP quorum approves a spend
     function approveSpend(
         address token,
         address spender,         // e.g. Uniswap router, another contract
         uint160 amount,
         uint48 expiration        // short expiry (e.g. 1 hour)
     ) external {
-        require(msg.sender == vaultDeal, "Only VaultDeal");
+        require(msg.sender == treasuryDeal, "Only TreasuryDeal");
         
         // Approving the whole balance to permit2
         IERC20(token).approve(address(permit2), type(uint160).max);
@@ -66,14 +66,14 @@ contract VaultTreasury is ReentrancyGuard {
         emit SpendApproved(token, spender, amount);
     }
 
-    // Called by VaultDeal after staked-MP quorum approves an agent to receive funds
+    // Called by TreasuryDeal after staked-MP quorum approves an agent to receive funds
     function approveReceive(
         address agent,
         address source,          // e.g. client of a DAC, other team treasury, etc.
         address token,
         uint160 amount
     ) external {
-        require(msg.sender == vaultDeal, "Only VaultDeal");
+        require(msg.sender == treasuryDeal, "Only TreasuryDeal");
 
         bytes32 calldataHash = keccak256(abi.encode(agent, token, source));
         approvedAgents[calldataHash] = amount;
@@ -94,7 +94,7 @@ contract VaultTreasury is ReentrancyGuard {
 
         approvedAgents[calldataHash] -= amount;
 
-        // Execute transfer to vault via Permit2 (uses the on-chain approval)
+        // Execute transfer to treasury via Permit2 (uses the on-chain approval)
         permit2.transferFrom(source, address(this), amount, token);
 
         emit Receipt(msg.sender, token, source, amount);
@@ -121,9 +121,9 @@ contract VaultTreasury is ReentrancyGuard {
 
     // For returning capital to Deal
     function returnCapitalToDeal(address token, uint256 balance) external {
-        require(msg.sender == vaultDeal, "Only VaultDeal");
+        require(msg.sender == treasuryDeal, "Only TreasuryDeal");
 
-        IERC20(token).safeTransfer(vaultDeal, balance);
+        IERC20(token).safeTransfer(treasuryDeal, balance);
         emit CapitalReturned(token, balance);
     }
 }

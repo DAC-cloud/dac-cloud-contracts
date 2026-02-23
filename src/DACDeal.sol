@@ -34,6 +34,13 @@ contract DACDeal is Deal {
         _proposer
     ) {}
 
+    function _beforeInitialize(
+        DealParams calldata params,
+        VotingConfig calldata
+    ) internal override pure {
+        require(params.fundingAmount > 0, "DAC deal should include funding");
+    }
+
     function _afterInitialize(
         DealParams calldata params,
         VotingConfig calldata
@@ -93,8 +100,6 @@ contract DACDeal is Deal {
             params.typ == StakedMPManagementType.ReinvestProfits
         );
     }
-
-    //todo: in DAC deal, need to support tranches in other tokens
 
     function _beforeCreateProposal(StakedMPParams calldata params) internal virtual override {
         if (params.typ == StakedMPManagementType.RequestTranche) {

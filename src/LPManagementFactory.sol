@@ -15,6 +15,7 @@ contract LPManagementFactory {
         LPMParams memory proposalParams = params;
         
         bool highQuorum = (
+            params.typ == LPManagementType.MintLP ||
             params.typ == LPManagementType.UpdateVotingConfig ||
             params.typ == LPManagementType.UpdateLegalWrapper || 
             params.typ == LPManagementType.Dividend ||

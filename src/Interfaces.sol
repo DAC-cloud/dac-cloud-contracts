@@ -28,6 +28,7 @@ enum LPManagementType {
     UpdateVotingConfig,             // High quorum
     UpdateLegalWrapper,             // High quorum
     ApproveOffchainAction,          // Default quorum, blocking allowed
+    MintLP,                         // High quorum
     MintMP,                         // Default quorum
     RevokeMP,                       // Default quorum, blocking allowed
     Dividend,                       // High quorum

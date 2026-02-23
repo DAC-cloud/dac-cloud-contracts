@@ -132,6 +132,11 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         proposer = _proposer;
     }
 
+    function _beforeInitialize(
+        DealParams calldata params,
+        VotingConfig calldata defaultVotingConfig
+    ) internal virtual {}
+
     function _afterInitialize(
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
@@ -143,6 +148,9 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     ) external {
         require(msg.sender == factory, "Only factory");
         require(startTime == 0, "Already initialized");
+
+        _beforeInitialize(params, defaultVotingConfig);
+
         startTime = block.timestamp;
 
         linkHash = params.linkHash;
@@ -151,8 +159,12 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         dealDeadline = params.dealDeadline;
         _votingConfig = defaultVotingConfig;
 
-        if (_requestedFunding[params.fundingToken] == 0) fundingTokens.push(params.fundingToken);
-        _requestedFunding[params.fundingToken] = params.fundingAmount;
+        if (params.fundingAmount > 0) {
+            if (_requestedFunding[params.fundingToken] == 0) {
+                fundingTokens.push(params.fundingToken);
+            }
+            _requestedFunding[params.fundingToken] = params.fundingAmount;
+        }
 
         _fundingTranches[0] = Tranche({
             token: params.fundingToken,
@@ -166,6 +178,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         emit Invited(proposer, true);
 
         emit DealInitialized(id, params);
+
+        _afterInitialize(params, defaultVotingConfig);
     }
 
     function totalSupply() public view override returns (uint256) { return _totalStakedMP; }
@@ -224,7 +238,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         }
         else {
             require(_fundingTranches[trancheId].amount > 0, "Tranche not exist");
-            require(!_fundingTranches[trancheId].settled, "Tranche not exist");
+            require(!_fundingTranches[trancheId].settled, "Tranche already settled");
         }
         
         _beforeApprove(trancheId);
@@ -235,7 +249,9 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             emit DealActivated(id);
         }
         
-        investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
+        if (_fundingTranches[trancheId].amount > 0) {
+            investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
+        }
         _fundingTranches[trancheId].settled = true;
 
         _afterApprove(trancheId);
@@ -604,17 +620,23 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function isClosed() external view returns (bool) { return closed; }
     function fundingSettled(uint256 trancheId) public view returns (bool) {
         Tranche memory tranche = _fundingTranches[trancheId];
-        require(tranche.amount > 0, "Invalid tranche");
+        if (trancheId != 0) {
+            require(tranche.amount > 0, "Invalid tranche");
+        }
         return tranche.settled; 
     }
     function fundingToken(uint256 trancheId) public view returns (address) { 
         Tranche memory tranche = _fundingTranches[trancheId];
-        require(tranche.amount > 0, "Invalid tranche");
+        if (trancheId != 0) {
+            require(tranche.amount > 0, "Invalid tranche");
+        }
         return tranche.token; 
     }
     function fundingAmount(uint256 trancheId) public view returns (uint256) { 
         Tranche memory tranche = _fundingTranches[trancheId];
-        require(tranche.amount > 0, "Invalid tranche");
+        if (trancheId != 0) {
+            require(tranche.amount > 0, "Invalid tranche");
+        }
         return tranche.amount; 
     }
 
