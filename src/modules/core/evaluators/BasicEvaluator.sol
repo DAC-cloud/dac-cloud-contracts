@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
-import "./IEvaluator.sol";
-import "./IDealCore.sol";
+import "../../../interfaces/Structs.sol";
+import "../../../interfaces/IEvaluator.sol";
+import "../../../interfaces/IDealCore.sol";
 
 contract BasicEvaluator is IEvaluator {
     Milestone[] public schedule;

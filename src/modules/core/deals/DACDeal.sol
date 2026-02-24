@@ -4,11 +4,14 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./Structs.sol";
-import "./IDACEntity.sol";
-import "./MPToken.sol";
-import "./LPToken.sol";
-import "./Deal.sol";
+import "../../../interfaces/Structs.sol";
+import "../../../interfaces/IDACEntity.sol";
+import "../../../kernel/governance/DealManagementProposal.sol";
+import "../../../kernel/governance/AbstractDealManagementProposals.sol";
+import "../../../kernel/tokens/MPToken.sol";
+import "../../../kernel/tokens/LPToken.sol";
+import "../../../kernel/Deal.sol";
+import "../governance/CoreDealManagementProposals.sol";
 
 contract DACDeal is Deal {
     uint256 private _childLPAmount;
@@ -70,7 +73,11 @@ contract DACDeal is Deal {
 
         else {
             address prop = getProposal(trancheId);
-            bytes32 calldataHash = StakedMPProposal(prop).getFundingCalldata();
+
+            (, bytes32 calldataHash) = abi.decode(
+                DealManagementProposal(prop).data(), 
+                (uint256, bytes32)
+            );
 
             CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
             IDACEntity(managedEntity).fulfillCapitalCall(call);
@@ -93,16 +100,16 @@ contract DACDeal is Deal {
         returnedCapital[token] += _childLPAmount;
     }
 
-    function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
+    function _checkStackedMPProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
-            params.typ == StakedMPManagementType.ChildLPProposalVoting ||
-            params.typ == StakedMPManagementType.CreateChildLPProposal ||
-            params.typ == StakedMPManagementType.ReinvestProfits
+            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
+            params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
+            params.typ == CoreDealManagementType.REINVEST_PROFITS
         );
     }
 
-    function _beforeCreateProposal(StakedMPParams calldata params) internal virtual override {
-        if (params.typ == StakedMPManagementType.RequestTranche) {
+    function _beforeCreateProposal(ProposalParams calldata params) internal virtual override {
+        if (params.typ == AbstractDealManagementType.REQUEST_TRANCHE) {
             // Checking that capital call exists
             (uint256 fundingAmount, bytes32 calldataHash) = abi.decode(params.data, (uint256, bytes32));
             CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
@@ -113,7 +120,7 @@ contract DACDeal is Deal {
             require(call.lpRecipient == address(this));
         }
 
-        else if (params.typ == StakedMPManagementType.ReinvestProfits) {
+        else if (params.typ == CoreDealManagementType.REINVEST_PROFITS) {
             // Checking a reinvest profit proposal
             address token = params.target;
             (uint256 fundingAmount, bytes32 capitalCallHash) = abi.decode(params.data, (uint256, bytes32));
@@ -123,9 +130,7 @@ contract DACDeal is Deal {
                 // With early returns, all capital in any of funding tokens is siphoned back
                 // to chickens by any manager will, and automatically counts into returns
                 // so we make reinvest not possible
-                if (params.typ == StakedMPManagementType.ReinvestProfits) {
-                    require(!earlyReturns, "Early returns are toggled on");
-                }
+                require(!earlyReturns, "Early returns are toggled on");
             }
             else {
                 address lpTokenAddress = IDACEntityAdapter(managedEntity).getLPToken();
@@ -145,17 +150,21 @@ contract DACDeal is Deal {
         }
     }
 
-    function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual override {
-        StakedMPManagementType typ = proposal.typ();
+    function _executeModuleManagementProposal(DealManagementProposal proposal) internal virtual override {
+        bytes4 typ = proposal.typ();
 
-        if (typ == StakedMPManagementType.CreateChildLPProposal) {
-            LPMParams memory childProposal = proposal.getLPMParams();
+        if (typ == CoreDealManagementType.CREATE_DAC_PROPOSAL) {
+            (ProposalParams memory childProposal) = abi.decode(
+                proposal.data(), 
+                (ProposalParams)
+            );
+
             uint256 childProposalId = IDACEntity(managedEntity).createLPManagementProposal(childProposal);
 
-            StakedMPParams memory dealProposalParams = StakedMPParams({
-                typ: StakedMPManagementType.ChildLPProposalVoting,
+            ProposalParams memory dealProposalParams = ProposalParams({
+                typ: CoreDealManagementType.VOTE_DAC_PROPOSAL,
                 target: address(0),
-                id: childProposalId,
+                i: bytes32(childProposalId),
                 data: abi.encode(true)
             });
 
@@ -164,9 +173,12 @@ contract DACDeal is Deal {
             emit ChildLPVoteCreated(childProposalId, proposalId);
         }
 
-        else if (typ == StakedMPManagementType.ChildLPProposalVoting) {
-            uint256 childProposalId = proposal.targetId();
-            bool support = proposal.getToggleValue();
+        else if (typ == CoreDealManagementType.VOTE_DAC_PROPOSAL) {
+            uint256 childProposalId = uint256(proposal.i());
+            (bool support) = abi.decode(
+                proposal.data(), 
+                (bool)
+            );
 
             address childVoting = IDACEntity(managedEntity).getProposalVoting(childProposalId);
             IVoting(childVoting).vote(support);
@@ -174,10 +186,9 @@ contract DACDeal is Deal {
             emit ChildLPVoteCasted(childProposalId, support);
         }
         
-        else if (typ == StakedMPManagementType.ReinvestProfits) {
+        else if (typ == CoreDealManagementType.REINVEST_PROFITS) {
             address token = proposal.target();
-            uint256 amount = proposal.getFundingAmount();
-            bytes32 callHash = proposal.getFundingCalldata();
+            (uint256 amount, bytes32 callHash) = abi.decode(proposal.data(), (uint256, bytes32));
 
             IERC20(token).approve(managedEntity, amount);
 

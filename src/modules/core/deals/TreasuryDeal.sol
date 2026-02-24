@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Deal.sol";
+import "../../../interfaces/Structs.sol";
+
+import "../../../kernel/Deal.sol";
+import "../../../kernel/governance/DealManagementProposal.sol";
+import "../governance/CoreDealManagementProposals.sol";
 import "./Permit2Treasury.sol";
 
 contract TreasuryDeal is Deal {
@@ -53,35 +57,44 @@ contract TreasuryDeal is Deal {
         }
     }
 
-    function _checkStackedMPProposalSupported(StakedMPParams calldata params) internal virtual override returns (bool supported) {
+    function _checkStackedMPProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
-            params.typ == StakedMPManagementType.ApprovePermit2Spend ||
-            params.typ == StakedMPManagementType.ReturnCapitalToDAC ||
-            params.typ == StakedMPManagementType.AssignClaimer
+            params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||
+            params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
+            params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND ||
+            params.typ == CoreDealManagementType.ASSIGN_CLAIMER ||
+            params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC
         );
 
-        if (params.typ == StakedMPManagementType.ReturnCapitalToDAC) {
+        if (params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {
             require(earlyReturns, "Early returns not allowed");
         }
     }
 
-    function _executeStakedMPProposal(StakedMPProposal proposal) internal virtual override {
-        StakedMPManagementType typ = proposal.typ();
+    function _executeModuleManagementProposal(DealManagementProposal proposal) internal virtual override {
+        bytes4 typ = proposal.typ();
 
-        if (typ == StakedMPManagementType.ApprovePermit2Spend) {
+        if (typ == CoreDealManagementType.APPROVE_DIRECT_SPEND) {
+            // TODO: Send transfer from treasury
+        }
+
+        else if (typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND) {
             address token = proposal.target();
-            (address spender, uint160 amount, uint48 expiration) = proposal.getApproveCallData();
+            (address spender, uint160 amount, uint48 expiration) = abi.decode(
+                proposal.data(),
+                (address, uint160, uint48)
+            );
             
             treasury.approveSpend(token, spender, amount, expiration);
 
             emit PermitApproved(proposal.target(), amount);
         }
 
-        else if (typ == StakedMPManagementType.ReturnCapitalToDAC) {
+        else if (typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {
             require(earlyReturns, "Early returns not allowed");
 
             address token = proposal.target();
-            uint256 amount = proposal.getAmount();
+            (uint256 amount) = abi.decode(proposal.data(), (uint256));
             
             treasury.returnCapitalToDeal(token, amount);
 
@@ -91,16 +104,19 @@ contract TreasuryDeal is Deal {
             emit CapitalReturned(token, amount);
         }
 
-        else if (typ == StakedMPManagementType.AssignClaimer) {
+        else if (typ == CoreDealManagementType.ASSIGN_CLAIMER) {
             address agent = proposal.target();
-            (address token, address counterparty, uint160 amount) = proposal.getApproveAgentCallData();
+            (address token, address counterparty, uint160 amount) = abi.decode(
+                proposal.data(), 
+                (address, address, uint160)
+            );
             
             treasury.approveReceive(agent, counterparty, token, amount);
 
             emit AgentAssigned(token, agent, amount);
         }
 
-        else if (typ == StakedMPManagementType.ApproveAgentSpend) {
+        else if (typ == CoreDealManagementType.APPROVE_AGENT_SPEND) {
             // TODO: Approve agents to spend from treasury
         }
 

@@ -2,27 +2,34 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./IVoting.sol";
+import "../../interfaces/IVoting.sol";
+import "../../interfaces/Structs.sol";
 
 abstract contract Proposal is IVoting {
     address public immutable token;
 
+    // Voting configuration
     uint256 public immutable endTime;
     uint256 public immutable quorum;
     uint256 public immutable blockingQuorum;
 
+    // Voting state
     uint256 public yesVotes;
     uint256 public noVotes;
     mapping(address => bool) public voted;
 
+    // Proposal
+    ProposalParams public proposal;
+
     // Events
     event Voted(address indexed voter, bool support, uint256 weight);
 
-    constructor(address _token, uint256 _duration, uint256 _quorum, uint256 _blockingQuorum) {
+    constructor(ProposalParams memory _proposal, address _token, uint256 _duration, uint256 _quorum, uint256 _blockingQuorum) {
         endTime = block.timestamp + _duration;
         token = _token;
         quorum = _quorum;
         blockingQuorum = _blockingQuorum;
+        proposal = _proposal;
     }
 
     function vote(bool support) external {
@@ -59,5 +66,21 @@ abstract contract Proposal is IVoting {
         }
 
         return yesQuorumReached;
+    }
+
+    function typ() external view returns (bytes4) {
+        return proposal.typ;
+    }
+
+    function target() external view returns (address) {
+        return proposal.target;
+    }
+
+    function i() external view returns (bytes32) {
+        return proposal.i;
+    }
+
+    function data() external view returns (bytes memory) {
+        return proposal.data;
     }
 }

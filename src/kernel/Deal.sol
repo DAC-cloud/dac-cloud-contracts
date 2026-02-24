@@ -4,14 +4,15 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./Structs.sol";
-import "./IDACEntityAdapter.sol";
-import "./IDealCore.sol";
-import "./IDealAdmin.sol";
-import "./IStakedMPProposalFactory.sol";
-import "./MPToken.sol";
-import "./LPToken.sol";
-import "./StakedMPProposal.sol";
+import "../interfaces/Structs.sol";
+import "../interfaces/IDACEntityAdapter.sol";
+import "../interfaces/IDealCore.sol";
+import "../interfaces/IDealAdmin.sol";
+import "../interfaces/IDealManagementProposalFactory.sol";
+import "./tokens/MPToken.sol";
+import "./tokens/LPToken.sol";
+import "./governance/DealManagementProposal.sol";
+import "./governance/AbstractDealManagementProposals.sol";
 
 abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     address public immutable factory;
@@ -104,8 +105,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     event MessageReceived(bytes4 messageKind, bytes message);
     event LegalWrapperMessageReceived(address indexed wrapper, bytes4 messageKind, bytes message);
     event Invited(address indexed invitee, bool canInvite);
-    event StakedMPProposalCreated(uint256 indexed id, StakedMPManagementType typ, address target, uint256 targetId, bytes data);
-    event StakedMPProposalExecuted(uint256 indexed id, StakedMPManagementType typ);
+    event DealManagementProposalCreated(uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
+    event DealManagementProposalExecuted(uint256 indexed id, bytes4 indexed typ);
     event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
     event EarlyReturnsToggled(bool enabled);
 
@@ -452,10 +453,10 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _afterClaimLP(msg.sender, amount);
     }
 
-    function _beforeCreateProposal(StakedMPParams calldata params) internal virtual {}
-    function _afterCreateProposal(uint256 proposalId, StakedMPParams calldata params) internal virtual {}
+    function _beforeCreateProposal(ProposalParams calldata params) internal virtual {}
+    function _afterCreateProposal(uint256 proposalId, ProposalParams calldata params) internal virtual {}
 
-    function createStakedMPProposal(StakedMPParams calldata params) external returns (uint256 proposalId) {
+    function createStakedMPProposal(ProposalParams calldata params) external returns (uint256 proposalId) {
         if (msg.sender != address(this)) {
             _onlyStakedMPHolder();
         }
@@ -465,20 +466,20 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         if (!approved) {
             require(
                 (
-                    params.typ == StakedMPManagementType.UpdateVotingConfig ||
-                    params.typ == StakedMPManagementType.ToggleEarlyReturns ||
-                    params.typ == StakedMPManagementType.ToggleWhitelist
+                    params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
+                    params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
+                    params.typ == AbstractDealManagementType.TOGGLE_WHITELIST
                 ),
                 "Proposal type available"
             );
         }
 
         if (!(
-            params.typ == StakedMPManagementType.UpdateVotingConfig ||
-            params.typ == StakedMPManagementType.ToggleEarlyReturns ||
-            params.typ == StakedMPManagementType.ToggleWhitelist ||
-            params.typ == StakedMPManagementType.RequestTranche ||
-            params.typ == StakedMPManagementType.AddStake
+            params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
+            params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
+            params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
+            params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
+            params.typ == AbstractDealManagementType.ADD_STAKE
         )) {
             // If type is not a basic Deal governance type, requiering derived contracts to validate
             require(
@@ -489,7 +490,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         proposalId = nextId++;
 
-        address prop = IStakedMPProposalFactory(governanceFactory).deployProposal(
+        address prop = IDealManagementProposalFactory(governanceFactory).deployProposal(
             proposalId,
             params,
             address(this),
@@ -499,7 +500,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
         stakedMPProposals[proposalId] = prop;
 
-        emit StakedMPProposalCreated(proposalId, params.typ, params.target, params.id, params.data);
+        emit DealManagementProposalCreated(proposalId, params.typ, params.target, params.i, params.data);
 
         _afterCreateProposal(proposalId, params);
     }
@@ -537,7 +538,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         stake(staker, amount);
     }
 
-    function _checkStackedMPProposalSupported(StakedMPParams calldata) internal virtual returns (bool supported) {
+    function _checkStackedMPProposalSupported(ProposalParams calldata) internal virtual returns (bool supported) {
         // Children override this to indicate if the governance proposal is supported
         supported = false;
     }
@@ -549,11 +550,20 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _beforeExecuteProposal(proposalId);
 
         address prop = stakedMPProposals[proposalId];
-        StakedMPManagementType typ = StakedMPProposal(prop).typ();
+        bytes4 typ = DealManagementProposal(prop).typ();
 
-        if (typ == StakedMPManagementType.RequestTranche) {
-            address _fundingToken = StakedMPProposal(prop).target();
-            uint256 amountFunding = StakedMPProposal(prop).getAmount();
+        if (typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG) {
+            _votingConfig = abi.decode(
+                DealManagementProposal(prop).data(), 
+                (VotingConfig)
+            );
+
+            emit VotingConfigUpdate(proposalId, _votingConfig);
+        }
+
+        else if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
+            address _fundingToken = DealManagementProposal(prop).target();
+            uint256 amountFunding = uint256(DealManagementProposal(prop).i());
 
             // Creating tranche state
             if (_requestedFunding[_fundingToken] == 0) {
@@ -570,39 +580,34 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             IDACEntityAdapter(dacEntity).createTrancheProposal(id, proposalId);
         }
 
-        else if (typ == StakedMPManagementType.AddStake) {
-            address staker = StakedMPProposal(prop).target();
-            uint256 stakeAmount = StakedMPProposal(prop).getAmount();
+        else if (typ == AbstractDealManagementType.ADD_STAKE) {
+            address staker = DealManagementProposal(prop).target();
+            uint256 stakeAmount = uint256(DealManagementProposal(prop).i());
             
             _stakeMP(staker, stakeAmount);
         }
 
-        else if (typ == StakedMPManagementType.UpdateVotingConfig) {
-            VotingConfig memory config = StakedMPProposal(prop).getVotingConfiguration();
-
-            _votingConfig = config;
-            emit VotingConfigUpdate(id, config);
+        else if (typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS) {
+            bool toggle = abi.decode(DealManagementProposal(prop).data(), (bool));
+            _toggleEarlyReturns(toggle);
         }
 
-        else if (typ == StakedMPManagementType.ToggleEarlyReturns) {
-            _toggleEarlyReturns(StakedMPProposal(prop).getToggleValue());
-        }
-
-        else if (typ == StakedMPManagementType.ToggleWhitelist) {
-            _toggleWhitelist(StakedMPProposal(prop).getToggleValue());
+        else if (typ == AbstractDealManagementType.TOGGLE_WHITELIST) {
+            bool toggle = abi.decode(DealManagementProposal(prop).data(), (bool));
+            _toggleWhitelist(toggle);
         }
 
         else {
-            // Forward to child for specific types
-            _executeStakedMPProposal(StakedMPProposal(prop));
+            // Forward to module for specific types
+            _executeModuleManagementProposal(DealManagementProposal(prop));
         }
         
-        emit StakedMPProposalExecuted(proposalId, typ);
+        emit DealManagementProposalExecuted(proposalId, typ);
 
         _afterExecuteProposal(proposalId);
     }
 
-    function _executeStakedMPProposal(StakedMPProposal) internal virtual {
+    function _executeModuleManagementProposal(DealManagementProposal) internal virtual {
         // Children override this to handle their specific proposals
         revert("Unsupported management proposal type in base Deal");
     }

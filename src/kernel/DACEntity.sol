@@ -4,18 +4,19 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "./Structs.sol";
-import "./IDACEntity.sol";
-import "./IDACEntityAdapter.sol";
-import "./IDealCore.sol";
-import "./IDealAdmin.sol";
-import "./IDealFactory.sol";
-import "./IEvaluator.sol";
-import "./ILPManagementFactory.sol";
-import "./LPToken.sol";
-import "./MPToken.sol";
-import "./LPManagementProposal.sol";
-import "./IEvaluatorFactory.sol";
+import "../interfaces/Structs.sol";
+import "../interfaces/IDACEntity.sol";
+import "../interfaces/IDACEntityAdapter.sol";
+import "../interfaces/IDealCore.sol";
+import "../interfaces/IDealAdmin.sol";
+import "../interfaces/IDealFactory.sol";
+import "../interfaces/IEvaluator.sol";
+import "../interfaces/ILPManagementFactory.sol";
+import "../interfaces/IEvaluatorFactory.sol";
+import "./tokens/LPToken.sol";
+import "./tokens/MPToken.sol";
+import "./governance/LPManagementProposal.sol";
+import "./governance/LPManagementProposals.sol";
 
 contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     address public immutable deployer;
@@ -56,8 +57,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 trancheId);
     event CapitalCallFulfilled(bytes32 indexed callHash, address indexed recipient, uint256 lpAmount);
-    event LPMProposalCreated(uint256 indexed id, LPManagementType typ, address target, uint256 amount, bytes data);
-    event LPMProposalExecuted(uint256 indexed id, LPManagementType typ);
+    event LPMProposalCreated(uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
+    event LPMProposalExecuted(uint256 indexed id, bytes4 typ);
     event MPMinted(address indexed to, uint256 amount);
     event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
     event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
@@ -197,14 +198,14 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         dealFactory[dealAddr] = IDealFactory(params.dealFactory);
         dealEvaluators[dealAddr] = evaluatorAddr;
 
-        LPMParams memory dealVote = LPMParams({
-            typ: LPManagementType.ApproveDeal,
+        ProposalParams memory dealProposal = ProposalParams({
+            typ: LPManagementProposalType.APPROVE_DEAL,
             target: params.fundingToken,
-            amount: params.fundingAmount,
-            data: abi.encode(0, id) // tranche id 0
+            i: bytes32(params.fundingAmount),
+            data: abi.encode(id, 0) // tranche id 0
         });
 
-        uint256 votingId = this.createLPManagementProposal(dealVote);
+        uint256 votingId = this.createLPManagementProposal(dealProposal);
 
         emit DealCreated(id, votingId, msg.sender, params.dealKind, dealAddr, params.dealTarget, evaluatorAddr);
     }
@@ -220,14 +221,14 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         uint256 fundingAmount = IDealCore(deal).fundingAmount(trancheId);
         require(fundingAmount > 0, "Invalid tranche");
 
-        LPMParams memory trancheVote = LPMParams({
-            typ: LPManagementType.ApproveTranche,
+        ProposalParams memory trancheProposal = ProposalParams({
+            typ: LPManagementProposalType.APPROVE_TRANCHE,
             target: fundingToken,
-            amount: fundingAmount,
-            data: abi.encode(trancheId, dealId)
+            i: bytes32(fundingAmount),
+            data: abi.encode(dealId, trancheId)
         });
 
-        uint256 votingId = this.createLPManagementProposal(trancheVote);
+        uint256 votingId = this.createLPManagementProposal(trancheProposal);
 
         emit TrancheCreated(dealId, trancheId, votingId);
     }
@@ -262,7 +263,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         }
     }
 
-    function createLPManagementProposal(LPMParams calldata params)
+    function createLPManagementProposal(ProposalParams calldata params)
         external
         onlyLPHolderOrSelf
         returns (uint256 id)
@@ -270,8 +271,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         if (msg.sender == address(this)) {
             require(
                 (
-                    params.typ == LPManagementType.ApproveDeal ||
-                    params.typ == LPManagementType.ApproveTranche
+                    params.typ == LPManagementProposalType.APPROVE_DEAL ||
+                    params.typ == LPManagementProposalType.APPROVE_TRANCHE
                 ),
                 "Type not authorized"
             );
@@ -279,13 +280,13 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         else {
             require(
                 !(
-                    params.typ == LPManagementType.ApproveDeal ||
-                    params.typ == LPManagementType.ApproveTranche
+                    params.typ == LPManagementProposalType.APPROVE_DEAL ||
+                    params.typ == LPManagementProposalType.APPROVE_TRANCHE
                 ),
                 "Type not authorized"
             );
 
-            if (params.typ == LPManagementType.RecoverDeal) {
+            if (params.typ == LPManagementProposalType.RECOVER_DEAL) {
                 (uint256 dealId) = abi.decode(params.data, (uint256));
 
                 address deal = deals[dealId];
@@ -314,50 +315,75 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         );
 
         lpProposals[id] = prop;
-        emit LPMProposalCreated(id, params.typ, params.target, params.amount, params.data);
+        emit LPMProposalCreated(id, params.typ, params.target, params.i, params.data);
         return id;
     }
 
     function executeLPMProposal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
         address prop = lpProposals[id];
-        LPManagementType typ = LPManagementProposal(prop).typ();
+        bytes4 typ = LPManagementProposal(prop).typ();
 
-        if (typ == LPManagementType.UpdateLegalWrapper) {
-            legalWrapper = LPManagementProposal(prop).getLegalWrapper();
+        if (typ == LPManagementProposalType.UPDATE_VOTING_CONFIG) {
+            votingConfig = abi.decode(
+                LPManagementProposal(prop).data(), 
+                (VotingConfig)
+            );
+
+            emit VotingConfigUpdate(id, votingConfig);
+        }
+        
+        else if (typ == LPManagementProposalType.UPDATE_LEGAL_WRAPPER) {
+            legalWrapper = abi.decode(LPManagementProposal(prop).data(), (LegalWrapper));
             
             emit LegalWrapperSet(id, legalWrapper);
         }
 
-        else if (typ == LPManagementType.ApproveOffchainAction) {
-            (bytes4 action, bytes memory actionData) = LPManagementProposal(prop).getOffchainActionData();
+        else if (typ == LPManagementProposalType.APPROVE_OFFCHAIN_ACTION) {
+            (bytes4 action, bytes memory actionData) = abi.decode(
+                LPManagementProposal(prop).data(), 
+                (bytes4, bytes)
+            );
 
             emit OffchainActionApproved(id, action, actionData);
         }
 
-        else if (typ == LPManagementType.MintMP) {
-            address target = LPManagementProposal(prop).target();
-            uint256 amount = LPManagementProposal(prop).getMPAmount();
+        else if (typ == LPManagementProposalType.MINT_LP_TOKENS) {
+            uint256 amount = uint256(LPManagementProposal(prop).i());
 
-            mpToken.mint(target, amount);
+            lpToken.mint(address(this), amount);
 
-            emit MPMinted(target, amount);
+            treasuryBalances[address(lpToken)] += amount;
+            emit TreasuryDeposit(address(lpToken), amount, address(this));
         }
 
-        else if (typ == LPManagementType.Dividend) {
-            address token = LPManagementProposal(prop).getDividendToken();
-            bytes32 merkleRoot = LPManagementProposal(prop).getMerkleRoot();
-            uint256 totalPayout = LPManagementProposal(prop).getCashAmount();
+        else if (typ == LPManagementProposalType.REVOKE_MP_TOKENS) {
+            address target = LPManagementProposal(prop).target();
+            uint256 amount = uint256(LPManagementProposal(prop).i());
+            
+            mpToken.burnFrom(target, amount);
+
+            emit MPRevoked(target, amount);
+        }
+
+        else if (typ == LPManagementProposalType.DIVIDEND_PAYOUT) {
+            (address token, uint256 totalPayout, bytes32 merkleRoot) = abi.decode(
+                LPManagementProposal(prop).data(), 
+                (address, uint256, bytes32)
+            );
             
             dividendMerkleRoots[id] = merkleRoot;
 
             emit DividendPayout(id, token, totalPayout, merkleRoot);
         }
 
-        else if (typ == LPManagementType.CapitalCall) {
-            address treasuryToken = LPManagementProposal(prop).getDividendToken();
+        else if (typ == LPManagementProposalType.CAPITAL_CALL) {
             address lpRecipient = LPManagementProposal(prop).target();
-            uint256 lpAmount = LPManagementProposal(prop).getLPAmount();
-            uint256 cashAmount = LPManagementProposal(prop).getCashAmount();
+            uint256 lpAmount = uint256(LPManagementProposal(prop).i());
+
+            (address treasuryToken, uint256 cashAmount) = abi.decode(
+                LPManagementProposal(prop).data(), 
+                (address, uint256)
+            );
 
             CapitalCall memory call = CapitalCall({
                 treasuryToken: treasuryToken,
@@ -374,7 +400,27 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             emit CapitalCallCreated(hash, lpRecipient, lpAmount);
         }
 
-        else if (typ == LPManagementType.AddTrustedEvaluatorFactory) {
+        else if (typ == LPManagementProposalType.ADD_DEAL_FACTORY) {
+            address factory = LPManagementProposal(prop).target();
+
+            dealFactories[factory] = true;
+
+            emit TrustedEvaluatorFactoryAdded(factory);
+        } 
+
+        else if (typ == LPManagementProposalType.REMOVE_DEAL_FACTORY) {
+            if (legalWrapper.wrapperAddr != address(0)) {
+                require(msg.sender == legalWrapper.wrapperAddr, "Legal wrapper should execute");
+            }
+
+            address factory = LPManagementProposal(prop).target();
+
+            dealFactories[factory] = false;
+
+            emit TrustedEvaluatorFactoryRemoved(factory);
+        }
+
+        else if (typ == LPManagementProposalType.ADD_EVALUATOR_FACTORY) {
             address factory = LPManagementProposal(prop).target();
 
             evaluatorFactories[factory] = true;
@@ -382,51 +428,38 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             emit TrustedEvaluatorFactoryAdded(factory);
         } 
 
-        else if (typ == LPManagementType.RemoveTrustedEvaluatorFactory) {
+        else if (typ == LPManagementProposalType.REMOVE_EVALUATOR_FACTORY) {
             address factory = LPManagementProposal(prop).target();
 
             evaluatorFactories[factory] = false;
 
             emit TrustedEvaluatorFactoryRemoved(factory);
-        } 
-
-        else if (typ == LPManagementType.RevokeMP) {
-            address target = LPManagementProposal(prop).target();
-            uint256 amount = LPManagementProposal(prop).getMPAmount();
-            
-            mpToken.burnFrom(target, amount);
-
-            emit MPRevoked(target, amount);
-        }
-
-        else if (typ == LPManagementType.UpdateVotingConfig) {
-            votingConfig = LPManagementProposal(prop).getVotingConfiguration();
-
-            emit VotingConfigUpdate(id, votingConfig);
-        }
-
-        else if (typ == LPManagementType.RecoverDeal) {
-            uint256 dealId = LPManagementProposal(prop).getRecoveredDealId();
-            address deal = deals[dealId];
-
-            address liquidator = LPManagementProposal(prop).target();
-            uint256 amount = LPManagementProposal(prop).getMPAmount();
-
-            IDealAdmin(deal).recoverDeal(liquidator, amount);
         }
 
         else if (
-            typ == LPManagementType.ApproveDeal || 
-            typ == LPManagementType.ApproveTranche
+            typ == LPManagementProposalType.APPROVE_DEAL || 
+            typ == LPManagementProposalType.APPROVE_TRANCHE
         ) {
-            uint256 dealId = LPManagementProposal(prop).getDealId();
-            uint256 trancheId = LPManagementProposal(prop).getTrancheId();
+            (uint256 dealId, uint256 trancheId) = abi.decode(
+                LPManagementProposal(prop).data(),
+                (uint256, uint256)
+            );
             _approveFunding(dealId, trancheId);
         }
 
-        // todo: add/remove trusted deal factory (for remove, if legal wrapper active, require legal wrapper to execute)
+        else if (typ == LPManagementProposalType.DEAL_MESSAGE) {
+            // todo: message deal   
+        }
 
-        // todo: message deal
+        else if (typ == LPManagementProposalType.RECOVER_DEAL) {
+            (uint256 dealId) = abi.decode(LPManagementProposal(prop).data(), (uint256));
+            address deal = deals[dealId];
+
+            address liquidator = LPManagementProposal(prop).target();
+            uint256 amount = uint256(LPManagementProposal(prop).i());
+
+            IDealAdmin(deal).recoverDeal(liquidator, amount);
+        }
 
         emit LPMProposalExecuted(id, typ);
     }
@@ -471,7 +504,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
         address prop = lpProposals[proposalId];
 
-        address token = LPManagementProposal(prop).getDividendToken();
+        (address token) = abi.decode(LPManagementProposal(prop).data(), (address));
         require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
 
         emit DividendClaimed(proposalId, msg.sender, amount);

@@ -3,10 +3,10 @@ pragma solidity ^0.8.20;
 
 import "./Structs.sol";
 
-interface IStakedMPProposalFactory {
-    function deployProposal(
+interface ILPManagementFactory {
+    function deployLPManagement(
         uint256 id,
-        StakedMPParams calldata params,
+        ProposalParams calldata params,
         address dac,
         address token,
         VotingConfig calldata votingConfig

@@ -3,14 +3,14 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../src/DACEntity.sol";
-import "../src/LPToken.sol";
-import "../src/MPToken.sol";
-import "../src/DealFactory.sol";
-import "../src/EvaluatorFactory.sol";
-import "../src/LPManagementFactory.sol";
-import "../src/DACFactory.sol";
-import "../src/IDACFactory.sol";
+import "../src/kernel/DACEntity.sol";
+import "../src/kernel/tokens/LPToken.sol";
+import "../src/kernel/tokens/MPToken.sol";
+import "../src/modules/core/factories/DealFactory.sol";
+import "../src/modules/core/factories/EvaluatorFactory.sol";
+import "../src/kernel/governance/factories/LPManagementProposalFactory.sol";
+import "../src/kernel/DACFactory.sol";
+import "../src/interfaces/IDACFactory.sol";
 
 contract DACTest is Test {
     DACEntity dac;
@@ -19,7 +19,7 @@ contract DACTest is Test {
 
     DealFactory dealFactory;
     EvaluatorFactory evaluatorFactory;
-    LPManagementFactory lpFactory;
+    LPManagementProposalFactory lpFactory;
     DACFactory dacFactory;
     
     address owner = address(1);
@@ -30,7 +30,7 @@ contract DACTest is Test {
 
         dealFactory = new DealFactory();
         evaluatorFactory = new EvaluatorFactory();
-        lpFactory = new LPManagementFactory();
+        lpFactory = new LPManagementProposalFactory();
 
         dacFactory = new DACFactory(
             address(lpFactory), 

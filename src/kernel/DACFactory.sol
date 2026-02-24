@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./IDACFactory.sol";
+import "../interfaces/IDACFactory.sol";
 import "./DACEntity.sol";
-import "./LPToken.sol";
-import "./MPToken.sol";
+import "./tokens/LPToken.sol";
+import "./tokens/MPToken.sol";
 
 contract DACFactory is IDACFactory {
     address public governanceFactory;

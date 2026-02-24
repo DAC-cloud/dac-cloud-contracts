@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "../../../interfaces/Structs.sol";
+import "../AbstractDealManagementProposals.sol";
+import "../DealManagementProposal.sol";
+
+abstract contract DealManagementProposalFactory {
+    function deployManagementProposal(
+        uint256 id,
+        ProposalParams calldata params,
+        address dac,
+        address deal,
+        address token,
+        VotingConfig calldata votingConfig
+    ) external returns (address) {
+        ProposalParams memory proposalParams = params;
+        
+        bool isAbstract = (
+            params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
+            params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
+            params.typ == AbstractDealManagementType.ADD_STAKE || 
+            params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
+            params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
+        );
+
+        if (isAbstract) {
+            bool highQuorum = (
+                params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
+                params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
+                params.typ == AbstractDealManagementType.ADD_STAKE || 
+                params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
+                params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
+            );
+
+            Proposal prop = new DealManagementProposal(
+                id, 
+                dac,
+                deal,
+                token, 
+                proposalParams, 
+                votingConfig.duration,
+                highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
+                0
+            );
+
+            return address(prop);
+        }
+
+        // Module proposal
+        else {
+            (bool ok, bool highQuorum, bool blockingQuorum) = moduleManagementProposalQuorum(
+                id,
+                params,
+                dac,
+                deal,
+                token,
+                votingConfig
+            );
+
+            require(!ok, "Proposal not supported");
+
+            Proposal prop = new DealManagementProposal(
+                id, 
+                dac,
+                deal,
+                token, 
+                proposalParams, 
+                votingConfig.duration,
+                highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
+                blockingQuorum ? votingConfig.blockingPercent : 0
+            );
+
+            return address(prop);
+        }
+    }
+
+    function moduleManagementProposalQuorum(
+        uint256 id,
+        ProposalParams calldata params,
+        address dac,
+        address deal,
+        address token,
+        VotingConfig calldata votingConfig
+    ) internal virtual returns (
+        bool ok, 
+        bool highQuorum, 
+        bool allowBlocking
+    ) {}
+}
