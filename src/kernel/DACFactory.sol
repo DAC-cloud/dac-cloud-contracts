@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IDACFactory.sol";
-import "./DACEntity.sol";
+import "./DACCell.sol";
 import "./tokens/LPToken.sol";
 import "./tokens/MPToken.sol";
 
@@ -52,7 +52,7 @@ contract DACFactory is IDACFactory {
         ));
 
         // 4. Deploy DACEntity at the exact predicted address using CREATE2
-        DACEntity dac = new DACEntity{salt: salt}(
+        DACCell dac = new DACCell{salt: salt}(
             config.name,
             config.description,
             config.defaultQuorum,
@@ -61,7 +61,7 @@ contract DACFactory is IDACFactory {
 
         require(address(dac) == dacAddr, "CREATE2 address mismatch");
 
-        // 5. Call initialize on DACEntity (two-phase)
+        // 5. Call initialize on DACCell (two-phase)
         dac.initializeAfterDeployment(
             lpAddr,
             mpAddr,
@@ -82,7 +82,7 @@ contract DACFactory is IDACFactory {
 
     // Helper to pre-compute address (useful for frontend / agents)
     function predictDACAddress(bytes32 salt, bytes memory constructorArgs) public view returns (address) {
-        bytes32 bytecodeHash = keccak256(abi.encodePacked(type(DACEntity).creationCode, constructorArgs));
+        bytes32 bytecodeHash = keccak256(abi.encodePacked(type(DACCell).creationCode, constructorArgs));
         bytes32 hash = keccak256(abi.encodePacked(
             bytes1(0xff),
             address(this),

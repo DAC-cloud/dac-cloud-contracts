@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "../../../interfaces/Structs.sol";
-
 import "../../../kernel/Deal.sol";
 import "../../../kernel/governance/DealManagementProposal.sol";
 import "../governance/CoreDealManagementProposals.sol";
@@ -98,7 +97,7 @@ contract TreasuryDeal is Deal {
             
             treasury.returnCapitalToDeal(token, amount);
 
-            IDACEntityAdapter(dacEntity).depositTreasury(token, amount);
+            IDACCellAdapter(dacCell).depositTreasury(token, amount);
             returnedCapital[token] += amount;
             
             emit CapitalReturned(token, amount);

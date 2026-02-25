@@ -5,8 +5,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "../interfaces/Structs.sol";
-import "../interfaces/IDACEntity.sol";
-import "../interfaces/IDACEntityAdapter.sol";
+import "../interfaces/IDACCell.sol";
+import "../interfaces/IDACCellAdapter.sol";
 import "../interfaces/IDealCore.sol";
 import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IModuleFactory.sol";
@@ -17,7 +17,7 @@ import "./tokens/MPToken.sol";
 import "./governance/LPManagementProposal.sol";
 import "./governance/LPManagementProposals.sol";
 
-contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
+contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     address public immutable deployer;
 
     LPToken public lpToken;

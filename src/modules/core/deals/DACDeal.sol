@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../../../interfaces/Structs.sol";
-import "../../../interfaces/IDACEntity.sol";
+import "../../../interfaces/IDACCell.sol";
 import "../../../interfaces/IDACFactory.sol";
 import "../../../kernel/governance/DealManagementProposal.sol";
 import "../../../kernel/governance/AbstractDealManagementProposals.sol";
@@ -90,7 +90,7 @@ contract DACDeal is Deal {
                 cashAmount: fundingAmount(trancheId)
             });
 
-            IDACEntity(managedEntity).fulfillCapitalCall(call);
+            IDACCell(managedEntity).fulfillCapitalCall(call);
         }
 
         else {
@@ -101,8 +101,8 @@ contract DACDeal is Deal {
                 (uint256, bytes32)
             );
 
-            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
-            IDACEntity(managedEntity).fulfillCapitalCall(call);
+            CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(calldataHash);
+            IDACCell(managedEntity).fulfillCapitalCall(call);
 
             _childLPAmount += call.lpAmount;
         }
@@ -114,11 +114,11 @@ contract DACDeal is Deal {
         // these LP tokens as dividends, or establish a new Deal
         // with new management
 
-        address token = IDACEntityAdapter(managedEntity).getLPToken();
+        address token = IDACCellAdapter(managedEntity).getLPToken();
 
-        IERC20(token).approve(dacEntity, _childLPAmount);
+        IERC20(token).approve(dacCell, _childLPAmount);
 
-        IDACEntityAdapter(dacEntity).depositTreasury(token, _childLPAmount);
+        IDACCellAdapter(dacCell).depositTreasury(token, _childLPAmount);
         returnedCapital[token] += _childLPAmount;
     }
 
@@ -134,7 +134,7 @@ contract DACDeal is Deal {
         if (params.typ == AbstractDealManagementType.REQUEST_TRANCHE) {
             // Checking that capital call exists
             (uint256 fundingAmount, bytes32 calldataHash) = abi.decode(params.data, (uint256, bytes32));
-            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(calldataHash);
+            CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(calldataHash);
 
             // Verifying capital call parameters
             require(call.treasuryToken == params.target);
@@ -155,7 +155,7 @@ contract DACDeal is Deal {
                 require(!earlyReturns, "Early returns are toggled on");
             }
             else {
-                address lpTokenAddress = IDACEntityAdapter(managedEntity).getLPToken();
+                address lpTokenAddress = IDACCellAdapter(managedEntity).getLPToken();
                 require(token != lpTokenAddress);
             }
             
@@ -164,7 +164,7 @@ contract DACDeal is Deal {
                 "Balance of the token is not enough"
             );
 
-            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(capitalCallHash);
+            CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(capitalCallHash);
 
             require(call.treasuryToken == token);
             require(call.cashAmount == fundingAmount);
@@ -181,7 +181,7 @@ contract DACDeal is Deal {
                 (ProposalParams)
             );
 
-            uint256 childProposalId = IDACEntity(managedEntity).createLPManagementProposal(childProposal);
+            uint256 childProposalId = IDACCell(managedEntity).createLPManagementProposal(childProposal);
 
             ProposalParams memory dealProposalParams = ProposalParams({
                 typ: CoreDealManagementType.VOTE_DAC_PROPOSAL,
@@ -202,7 +202,7 @@ contract DACDeal is Deal {
                 (bool)
             );
 
-            address childVoting = IDACEntity(managedEntity).getProposalVoting(childProposalId);
+            address childVoting = IDACCell(managedEntity).getProposalVoting(childProposalId);
             IVoting(childVoting).vote(support);
 
             emit ChildLPVoteCasted(childProposalId, support);
@@ -214,8 +214,8 @@ contract DACDeal is Deal {
 
             IERC20(token).approve(managedEntity, amount);
 
-            CapitalCall memory call = IDACEntity(managedEntity).getCapitalCall(callHash);
-            IDACEntity(managedEntity).fulfillCapitalCall(call);
+            CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(callHash);
+            IDACCell(managedEntity).fulfillCapitalCall(call);
 
             _childLPAmount += call.lpAmount;
         }

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../src/kernel/DACEntity.sol";
+import "../src/kernel/DACCell.sol";
 import "../src/kernel/tokens/LPToken.sol";
 import "../src/kernel/tokens/MPToken.sol";
 import "../src/modules/core/CoreModuleFactory.sol";
@@ -13,7 +13,7 @@ import "../src/interfaces/IDACFactory.sol";
 import "../src/interfaces/Structs.sol";
 
 contract DACTest is Test {
-    DACEntity dac;
+    DACCell dac;
     LPToken lpToken;
     MPToken mpToken;
 
@@ -60,7 +60,7 @@ contract DACTest is Test {
         lpToken = LPToken(lpAddress);
         mpToken = MPToken(mpAddress);
 
-        dac = DACEntity(dacAddress);
+        dac = DACCell(dacAddress);
     }
 
     function testDeployment() public {

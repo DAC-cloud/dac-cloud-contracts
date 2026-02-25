@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interfaces/Structs.sol";
-import "../interfaces/IDACEntityAdapter.sol";
+import "../interfaces/IDACCellAdapter.sol";
 import "../interfaces/IDealCore.sol";
 import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IDealManagementProposalFactory.sol";
@@ -18,7 +18,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     address public immutable factory;
     
     uint256 public immutable id;
-    address public immutable dacEntity;
+    address public immutable dacCell;
     address public immutable governanceFactory;
     
     address public immutable mpTokenAddr;
@@ -121,7 +121,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         factory = msg.sender;
         id = _id;
         governanceFactory = _governanceFactory;
-        dacEntity = _dac;
+        dacCell = _dac;
         mpTokenAddr = _mpToken;
         lpTokenAddr = _lpToken;
         proposer = _proposer;
@@ -187,7 +187,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterVoluntaryStake(address staker, uint256 amount) internal virtual {}
 
     function onMPStaked(address staker, uint256 amount) external {
-        require(msg.sender == mpTokenAddr || msg.sender == dacEntity, "Unauthorized");
+        require(msg.sender == mpTokenAddr || msg.sender == dacCell, "Unauthorized");
 
         // if the deal is approved no more direct stakes allowed
         require(!approved, "Already approved");
@@ -225,7 +225,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterApprove(uint256 trancheId) internal virtual {}
 
     function onApproved(uint256 trancheId) external {
-        require(msg.sender == dacEntity, "Only DAC");
+        require(msg.sender == dacCell, "Only DAC");
 
         if (trancheId == 0) {
             require(!approved, "Already approved");
@@ -304,7 +304,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterReturnCapitalToDAC() internal virtual {}
 
     function returnCapitalToDAC() external {
-        if (msg.sender == dacEntity) {
+        if (msg.sender == dacCell) {
             require(block.timestamp > _dealDeadline, "Deadline not passed");
         }
         else {
@@ -323,9 +323,9 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;
 
-            IERC20(_fundingToken).approve(dacEntity, balance);
+            IERC20(_fundingToken).approve(dacCell, balance);
 
-            IDACEntityAdapter(dacEntity).depositTreasury(_fundingToken, balance);
+            IDACCellAdapter(dacCell).depositTreasury(_fundingToken, balance);
             returnedCapital[_fundingToken] += balance;
             
             emit CapitalReturned(_fundingToken, balance);
@@ -338,7 +338,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterMarkAsSuccess(uint256 rewardPercent) internal virtual {}
 
     function markAsSuccess(uint256 rewardPercent) external {
-        require(msg.sender == dacEntity, "Only DAC");
+        require(msg.sender == dacCell, "Only DAC");
         require(!closed, "Deal is already closed");
         require(rewardsConverted + rewardPercent <= 100, "Insufficient remaining rewards");
 
@@ -370,7 +370,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterMarkAsFailed(uint256 slashPercent) internal virtual {}
 
     function markAsFailed(uint256 slashPercent) external {
-        require(msg.sender == dacEntity, "Only DAC");
+        require(msg.sender == dacCell, "Only DAC");
         require(!closed, "Deal is already closed");
 
         _beforeMarkAsFailed(slashPercent);
@@ -393,7 +393,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterExtendDeadline() internal virtual {}
 
     function extendDeadline(uint256 newDeadline) external {
-        require(msg.sender == dacEntity, "Only DAC");
+        require(msg.sender == dacCell, "Only DAC");
         require(!closed, "Deal is already closed");
         
         _beforeExtendDeadline(newDeadline);
@@ -408,7 +408,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _beforeClose() internal virtual {}
 
     function closeDeal() external {
-        require(msg.sender == address(this) || msg.sender == dacEntity, "Only DAC");
+        require(msg.sender == address(this) || msg.sender == dacCell, "Only DAC");
         require(!closed, "Deal is already closed");
         
         _beforeClose();
@@ -422,7 +422,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function _afterRecovery(address liquidator, uint256 liquidatorStake) internal virtual {}
 
     function recoverDeal(address liquidator, uint256 liquidatorStake) external {
-        require(msg.sender == dacEntity, "Only DAC");
+        require(msg.sender == dacCell, "Only DAC");
         require(closed, "Deal is not closed");
         
         _beforeRecovery(liquidator, liquidatorStake);
@@ -446,7 +446,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _beforeClaimLP(msg.sender, amount);
 
         claimableLP[msg.sender] = 0;
-        IDACEntityAdapter(dacEntity).mintLP(address(this), msg.sender, amount);
+        IDACCellAdapter(dacCell).mintLP(address(this), msg.sender, amount);
         
         emit LPClaimed(msg.sender, amount);
 
@@ -579,7 +579,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
                 settled: false
             });
 
-            IDACEntityAdapter(dacEntity).createTrancheProposal(id, proposalId);
+            IDACCellAdapter(dacCell).createTrancheProposal(id, proposalId);
         }
 
         else if (typ == AbstractDealManagementType.ADD_STAKE) {
@@ -621,7 +621,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         return true;
     }
     
-    function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDACEntity {
+    function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDACCell {
         require(onMessageDeal(messageKind, message), "Message not accepted");
 
         emit MessageReceived(messageKind, message);
@@ -629,7 +629,7 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
 
     function onLegalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) internal virtual {}
 
-    function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external onlyDACEntity {
+    function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external onlyDACCell {
         onLegalWrapperMessage(legalWrapper, messageKind, message);
         
         emit LegalWrapperMessageReceived(legalWrapper, messageKind, message);
@@ -678,8 +678,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     }
     function votingConfig() public view returns (VotingConfig memory) { return _votingConfig; }
 
-    modifier onlyDACEntity() {
-        _onlyDACEntity();
+    modifier onlyDACCell() {
+        _onlyDACCell();
         _;
     }
 
@@ -693,8 +693,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
         _;
     }
 
-    function _onlyDACEntity() internal view {
-        require(msg.sender == dacEntity, "Only DAC");
+    function _onlyDACCell() internal view {
+        require(msg.sender == dacCell, "Only DAC");
     }
 
     function _onlyStakedMPHolder() internal view {

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./Structs.sol";
 
-interface IDACEntity {
+interface IDACCell {
     function getCapitalCall(bytes32 callHash) external returns (CapitalCall memory call);
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);
     function createLPManagementProposal(ProposalParams calldata params) external returns (uint256 id);
