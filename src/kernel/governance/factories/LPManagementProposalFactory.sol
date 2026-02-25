@@ -20,10 +20,9 @@ contract LPManagementProposalFactory {
             params.typ == LPManagementProposalType.UPDATE_VOTING_CONFIG ||
             params.typ == LPManagementProposalType.UPDATE_LEGAL_WRAPPER || 
             params.typ == LPManagementProposalType.DIVIDEND_PAYOUT ||
-            params.typ == LPManagementProposalType.ADD_DEAL_FACTORY ||
-            params.typ == LPManagementProposalType.REMOVE_DEAL_FACTORY ||
-            params.typ == LPManagementProposalType.ADD_EVALUATOR_FACTORY ||
-            params.typ == LPManagementProposalType.REMOVE_EVALUATOR_FACTORY
+            params.typ == LPManagementProposalType.ADD_MODULE ||
+            params.typ == LPManagementProposalType.REMOVE_MODULE ||
+            params.typ == LPManagementProposalType.TOGGLE_DIVIDENDS
         );
 
         bool blockingQuorum = (
@@ -31,7 +30,8 @@ contract LPManagementProposalFactory {
             params.typ == LPManagementProposalType.REVOKE_MP_TOKENS ||
             params.typ == LPManagementProposalType.CAPITAL_CALL ||
             params.typ == LPManagementProposalType.APPROVE_DEAL ||
-            params.typ == LPManagementProposalType.APPROVE_TRANCHE
+            params.typ == LPManagementProposalType.APPROVE_TRANCHE ||
+            params.typ == LPManagementProposalType.BURN_LP_TOKENS
         );
 
         Proposal prop = new LPManagementProposal(

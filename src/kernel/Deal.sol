@@ -459,6 +459,8 @@ abstract contract Deal is ERC20, ReentrancyGuard, IDealCore, IDealAdmin {
     function createStakedMPProposal(ProposalParams calldata params) external returns (uint256 proposalId) {
         if (msg.sender != address(this)) {
             _onlyStakedMPHolder();
+
+            //todo: anti-spam qualification check
         }
 
         _beforeCreateProposal(params);

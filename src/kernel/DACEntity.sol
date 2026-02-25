@@ -9,10 +9,9 @@ import "../interfaces/IDACEntity.sol";
 import "../interfaces/IDACEntityAdapter.sol";
 import "../interfaces/IDealCore.sol";
 import "../interfaces/IDealAdmin.sol";
-import "../interfaces/IDealFactory.sol";
+import "../interfaces/IModuleFactory.sol";
 import "../interfaces/IEvaluator.sol";
 import "../interfaces/ILPManagementFactory.sol";
-import "../interfaces/IEvaluatorFactory.sol";
 import "./tokens/LPToken.sol";
 import "./tokens/MPToken.sol";
 import "./governance/LPManagementProposal.sol";
@@ -35,9 +34,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     mapping(bytes32 => CapitalCall) public capitalCalls;
     mapping(bytes32 => bool) public fulfilledCalls;
 
-    mapping(address => bool) public evaluatorFactories;
-    mapping(address => bool) public dealFactories;
-
+    address public coreModuleFactory;
+    mapping(address => bool) public moduleFactories;
+    
     bool public rootCapitalCallInitialized;
     mapping(address => uint256) public treasuryBalances;
 
@@ -45,7 +44,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     mapping(uint256 => address) public deals;                   // id => Deal address
     mapping(uint256 => address) public lpProposals;             // id => LPManagementProposal address
 
-    mapping(address => IDealFactory) public dealFactory;        // Deal address => id (for onlyDeal modifier)
+    mapping(address => IModuleFactory) public dealFactory;      // Deal address => module (for onlyDeal modifier)
     mapping(address => address) public dealEvaluators;
 
     mapping(uint256 => bytes32) public dividendMerkleRoots;     // proposalId => root
@@ -87,7 +86,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             quorumPercent: _quorum,
             highQuorumPercent: (100 + _quorum) / 2,
             blockingPercent: _quorum / 2,
-            duration: 7 days
+            duration: 7 days,
+            qualification: 0
         });
 
         initialized = false;
@@ -102,8 +102,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
     function initializeAfterDeployment(
         address _lpToken,
         address _mpToken,
-        address _dealFactory,
-        address _evaluatorFactory
+        address coreModule
     ) external {
         require(msg.sender == deployer, "Only self");
         require(!initialized, "Already initialized");
@@ -111,9 +110,9 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         lpToken = LPToken(_lpToken);
         mpToken = MPToken(_mpToken);
 
-        dealFactories[_dealFactory] = true;
-        evaluatorFactories[_evaluatorFactory] = true;
-
+        coreModuleFactory = coreModule;
+        moduleFactories[coreModule] = true;
+        
         // Any post-deployment setup you want (e.g. set factories later via proposals)
         initialized = true;
     }
@@ -176,16 +175,15 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         onlyMPHolder
         returns (uint256 id, address dealAddr, address evaluatorAddr)
     {
-        require(dealFactories[params.dealFactory], "Untrusted deal factory");
-        require(evaluatorFactories[params.evaluatorFactory], "Untrusted evaluator factory");
+        require(moduleFactories[params.moduleFactory], "Untrusted module");
 
         require(params.proposer == msg.sender, "Proposer must be msg.sender");
 
-        require(IDealFactory(params.dealFactory).isActive(), "Deal factory is paused");
+        require(IModuleFactory(params.moduleFactory).isActive(), "Module is paused");
 
         id = nextId++;
 
-        (dealAddr, evaluatorAddr) = IDealFactory(params.dealFactory).deployDeal(
+        (dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
             id,
             params,
             address(this),
@@ -195,7 +193,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         );
 
         deals[id] = dealAddr;
-        dealFactory[dealAddr] = IDealFactory(params.dealFactory);
+        dealFactory[dealAddr] = IModuleFactory(params.moduleFactory);
         dealEvaluators[dealAddr] = evaluatorAddr;
 
         ProposalParams memory dealProposal = ProposalParams({
@@ -258,6 +256,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
         if (id == 0) {
             emit LegalWrapperMessage(msg.sender, kind, message);
         }
+        
         else {
             //todo send message to deal
         }
@@ -285,6 +284,8 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
                 ),
                 "Type not authorized"
             );
+
+            //todo: anti-spam qualification check
 
             if (params.typ == LPManagementProposalType.RECOVER_DEAL) {
                 (uint256 dealId) = abi.decode(params.data, (uint256));
@@ -356,6 +357,10 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             emit TreasuryDeposit(address(lpToken), amount, address(this));
         }
 
+        //todo burn lp tokens
+
+        //todo mint mp
+
         else if (typ == LPManagementProposalType.REVOKE_MP_TOKENS) {
             address target = LPManagementProposal(prop).target();
             uint256 amount = uint256(LPManagementProposal(prop).i());
@@ -363,17 +368,6 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             mpToken.burnFrom(target, amount);
 
             emit MPRevoked(target, amount);
-        }
-
-        else if (typ == LPManagementProposalType.DIVIDEND_PAYOUT) {
-            (address token, uint256 totalPayout, bytes32 merkleRoot) = abi.decode(
-                LPManagementProposal(prop).data(), 
-                (address, uint256, bytes32)
-            );
-            
-            dividendMerkleRoots[id] = merkleRoot;
-
-            emit DividendPayout(id, token, totalPayout, merkleRoot);
         }
 
         else if (typ == LPManagementProposalType.CAPITAL_CALL) {
@@ -400,40 +394,17 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             emit CapitalCallCreated(hash, lpRecipient, lpAmount);
         }
 
-        else if (typ == LPManagementProposalType.ADD_DEAL_FACTORY) {
-            address factory = LPManagementProposal(prop).target();
+        //todo toggle dividends
 
-            dealFactories[factory] = true;
+        else if (typ == LPManagementProposalType.DIVIDEND_PAYOUT) {
+            (address token, uint256 totalPayout, bytes32 merkleRoot) = abi.decode(
+                LPManagementProposal(prop).data(), 
+                (address, uint256, bytes32)
+            );
+            
+            dividendMerkleRoots[id] = merkleRoot;
 
-            emit TrustedEvaluatorFactoryAdded(factory);
-        } 
-
-        else if (typ == LPManagementProposalType.REMOVE_DEAL_FACTORY) {
-            if (legalWrapper.wrapperAddr != address(0)) {
-                require(msg.sender == legalWrapper.wrapperAddr, "Legal wrapper should execute");
-            }
-
-            address factory = LPManagementProposal(prop).target();
-
-            dealFactories[factory] = false;
-
-            emit TrustedEvaluatorFactoryRemoved(factory);
-        }
-
-        else if (typ == LPManagementProposalType.ADD_EVALUATOR_FACTORY) {
-            address factory = LPManagementProposal(prop).target();
-
-            evaluatorFactories[factory] = true;
-
-            emit TrustedEvaluatorFactoryAdded(factory);
-        } 
-
-        else if (typ == LPManagementProposalType.REMOVE_EVALUATOR_FACTORY) {
-            address factory = LPManagementProposal(prop).target();
-
-            evaluatorFactories[factory] = false;
-
-            emit TrustedEvaluatorFactoryRemoved(factory);
+            emit DividendPayout(id, token, totalPayout, merkleRoot);
         }
 
         else if (
@@ -447,10 +418,6 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             _approveFunding(dealId, trancheId);
         }
 
-        else if (typ == LPManagementProposalType.DEAL_MESSAGE) {
-            // todo: message deal   
-        }
-
         else if (typ == LPManagementProposalType.RECOVER_DEAL) {
             (uint256 dealId) = abi.decode(LPManagementProposal(prop).data(), (uint256));
             address deal = deals[dealId];
@@ -459,6 +426,32 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
             uint256 amount = uint256(LPManagementProposal(prop).i());
 
             IDealAdmin(deal).recoverDeal(liquidator, amount);
+        }
+
+        else if (typ == LPManagementProposalType.DEAL_MESSAGE) {
+            // todo: message deal   
+        }
+
+        else if (typ == LPManagementProposalType.ADD_MODULE) {
+            address factory = LPManagementProposal(prop).target();
+
+            moduleFactories[factory] = true;
+
+            emit TrustedEvaluatorFactoryAdded(factory);
+        } 
+
+        else if (typ == LPManagementProposalType.REMOVE_MODULE) {
+            if (legalWrapper.wrapperAddr != address(0)) {
+                require(msg.sender == legalWrapper.wrapperAddr, "Legal wrapper should execute");
+            }
+
+            address factory = LPManagementProposal(prop).target();
+
+            require(factory != coreModuleFactory, "Core module can not be removed");
+
+            moduleFactories[factory] = false;
+
+            emit TrustedEvaluatorFactoryRemoved(factory);
         }
 
         emit LPMProposalExecuted(id, typ);
@@ -629,7 +622,7 @@ contract DACEntity is IDACEntity, IDACEntityAdapter, ReentrancyGuard {
 
     function _onlyDeal(address deal) internal view {
         require(
-            IDealFactory(dealFactory[deal]).isActive(), 
+            IModuleFactory(dealFactory[deal]).isActive(), 
             "Not a valid Deal"
         );
     }

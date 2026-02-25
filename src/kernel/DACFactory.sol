@@ -8,25 +8,24 @@ import "./tokens/MPToken.sol";
 
 contract DACFactory is IDACFactory {
     address public governanceFactory;
-    address public dealFactory;
-    address public evaluatorFactory;
-
+    address public coreModuleFactory;
+    
     event DACDeployed(address indexed dac, address lpToken, address mpToken);
 
     constructor(
         address _governanceFactory,
-        address _dealFactory,
-        address _evaluatorFactory
+        address _coreModuleFactory
     ) {
         governanceFactory = _governanceFactory;
-        dealFactory = _dealFactory;
-        evaluatorFactory = _evaluatorFactory;
+        coreModuleFactory = _coreModuleFactory;
     }
 
     function deployDAC(
         DACConfig calldata config,
         bytes32 salt
     ) external returns (address dacAddr, address lpAddr, address mpAddr) {
+        require(config.lpMaxSupply > config.founderLP);
+
         // 1. Compute deterministic DAC address using CREATE2
         bytes memory constructorParams = abi.encode(
             config.name,
@@ -66,8 +65,7 @@ contract DACFactory is IDACFactory {
         dac.initializeAfterDeployment(
             lpAddr,
             mpAddr,
-            dealFactory,
-            evaluatorFactory
+            coreModuleFactory
         );
 
         emit DACDeployed(dacAddr, lpAddr, mpAddr);

@@ -86,5 +86,8 @@ abstract contract DealManagementProposalFactory {
         bool ok, 
         bool highQuorum, 
         bool allowBlocking
-    ) {}
+    ) {
+        // default is - not `ok`, so any module need to override this method
+        // to fill quorum configuration for custom proposal types
+    }
 }

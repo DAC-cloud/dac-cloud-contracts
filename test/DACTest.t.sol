@@ -6,19 +6,19 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../src/kernel/DACEntity.sol";
 import "../src/kernel/tokens/LPToken.sol";
 import "../src/kernel/tokens/MPToken.sol";
-import "../src/modules/core/factories/DealFactory.sol";
-import "../src/modules/core/factories/EvaluatorFactory.sol";
+import "../src/modules/core/CoreModuleFactory.sol";
 import "../src/kernel/governance/factories/LPManagementProposalFactory.sol";
 import "../src/kernel/DACFactory.sol";
 import "../src/interfaces/IDACFactory.sol";
+import "../src/interfaces/Structs.sol";
 
 contract DACTest is Test {
     DACEntity dac;
     LPToken lpToken;
     MPToken mpToken;
 
-    DealFactory dealFactory;
-    EvaluatorFactory evaluatorFactory;
+    CoreModuleFactory coreModule;
+    
     LPManagementProposalFactory lpFactory;
     DACFactory dacFactory;
     
@@ -28,19 +28,18 @@ contract DACTest is Test {
     function setUp() public {
         vm.startPrank(owner);
 
-        dealFactory = new DealFactory();
-        evaluatorFactory = new EvaluatorFactory();
+        coreModule = new CoreModuleFactory();
+        
         lpFactory = new LPManagementProposalFactory();
 
         dacFactory = new DACFactory(
             address(lpFactory), 
-            address(dealFactory),
-            address(evaluatorFactory)
+            address(coreModule)
         );
 
         vm.stopPrank();
 
-        IDACFactory.DACConfig memory config = IDACFactory.DACConfig({
+        DACConfig memory config = DACConfig({
             symbol: "",
             name: "",
             description: "",

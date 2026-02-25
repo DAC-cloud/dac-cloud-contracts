@@ -4,11 +4,16 @@ pragma solidity ^0.8.20;
 import "../../../interfaces/Structs.sol";
 import "../../../interfaces/IEvaluator.sol";
 import "../../../interfaces/IDealCore.sol";
+import "../interfaces/Structs.sol";
 
 contract BasicEvaluator is IEvaluator {
+    address public immutable dac;
+    uint256 public immutable deal;
     Milestone[] public schedule;
 
-    constructor(Milestone[] memory _schedule) {
+    constructor(address _dac, uint256 _deal, Milestone[] memory _schedule) {
+        dac = _dac;
+        deal = _deal;
         for (uint256 i = 0; i < _schedule.length; i++) {
             schedule.push(_schedule[i]);
         }

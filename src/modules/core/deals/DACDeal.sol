@@ -6,16 +6,18 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../../../interfaces/Structs.sol";
 import "../../../interfaces/IDACEntity.sol";
+import "../../../interfaces/IDACFactory.sol";
 import "../../../kernel/governance/DealManagementProposal.sol";
 import "../../../kernel/governance/AbstractDealManagementProposals.sol";
 import "../../../kernel/tokens/MPToken.sol";
 import "../../../kernel/tokens/LPToken.sol";
 import "../../../kernel/Deal.sol";
+import "../interfaces/Structs.sol";
 import "../governance/CoreDealManagementProposals.sol";
 
 contract DACDeal is Deal {
     uint256 private _childLPAmount;
-    uint256 private _capitalCallId;
+    uint256 private _rootCapitalCallId;
     
     // Events
     event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
@@ -40,18 +42,38 @@ contract DACDeal is Deal {
     function _beforeInitialize(
         DealParams calldata params,
         VotingConfig calldata
-    ) internal override pure {
+    ) internal override {
         require(params.fundingAmount > 0, "DAC deal should include funding");
+
+        if (params.dealTarget == address(0)) {
+            (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
+            (address dacFactory, bytes32 salt, DACConfig memory config) = abi.decode(dacDeal.config, (address, bytes32, DACConfig));
+
+            require(config.founderLP == dacDeal.managedEquity, "Config mismatch deal parameters");
+            require(config.treasuryToken == params.fundingToken, "Config mismatch deal parameters");
+            require(config.founderCommitment == params.fundingAmount, "Config mismatch deal parameters");
+
+            config.founder = address(this);
+
+            (address dacAddr,,) = IDACFactory(dacFactory).deployDAC(config, salt);
+
+            managedEntity = dacAddr;
+            _childLPAmount = config.founderLP;
+        }
     }
 
     function _afterInitialize(
         DealParams calldata params,
         VotingConfig calldata
     ) internal override {
-        managedEntity = params.dealTarget;
+        (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
 
-        _childLPAmount = params.managedEquity;
-        _capitalCallId = params.capitalCallId;
+        if (params.dealTarget != address(0)) {
+            managedEntity = params.dealTarget;
+
+            _rootCapitalCallId = dacDeal.capitalCallId;
+            _childLPAmount = dacDeal.managedEquity;
+        }
     }
 
     function _afterApprove(uint256 trancheId) internal override {
@@ -62,7 +84,7 @@ contract DACDeal is Deal {
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
                 treasuryToken: fundingToken(trancheId),
-                nonce: _capitalCallId,
+                nonce: _rootCapitalCallId,
                 lpRecipient: address(this),
                 lpAmount: _childLPAmount,
                 cashAmount: fundingAmount(trancheId)

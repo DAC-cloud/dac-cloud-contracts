@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./Structs.sol";
 
-interface IDealFactory {
+interface IModuleFactory {
     function isActive() external view returns (bool);
     function safetyCheck(address deal) external view returns (bool);
 
