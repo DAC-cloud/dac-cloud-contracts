@@ -3,12 +3,13 @@ pragma solidity ^0.8.20;
 
 import "./Structs.sol";
 
-interface ILPManagementFactory {
-    function deployLPManagement(
+interface IDACManagementFactory {
+    function deployProposal(
         uint256 id,
         ProposalParams calldata params,
         address dac,
         address token,
+        uint256 unreleasedBalance,
         VotingConfig calldata votingConfig
     ) external returns (address);
 }

@@ -9,14 +9,20 @@ import "../../../interfaces/IDACCell.sol";
 import "../../../interfaces/IDACFactory.sol";
 import "../../../kernel/governance/DealManagementProposal.sol";
 import "../../../kernel/governance/AbstractDealManagementProposals.sol";
-import "../../../kernel/tokens/MPToken.sol";
-import "../../../kernel/tokens/LPToken.sol";
+import "../../../kernel/tokens/AgentToken.sol";
+import "../../../kernel/tokens/MainToken.sol";
 import "../../../kernel/Deal.sol";
 import "../interfaces/Structs.sol";
 import "../governance/CoreDealManagementProposals.sol";
 
 contract DACDeal is Deal {
-    uint256 private _childLPAmount;
+
+    error NoFunding();
+    error ConfigMismatchParams();
+    error NotAllowed();
+    error UnsupportedProposal();
+
+    uint256 private _allocation;
     uint256 private _rootCapitalCallId;
     
     // Events
@@ -43,22 +49,22 @@ contract DACDeal is Deal {
         DealParams calldata params,
         VotingConfig calldata
     ) internal override {
-        require(params.fundingAmount > 0, "DAC deal should include funding");
+        require(params.fundingAmount > 0, NoFunding());
 
         if (params.dealTarget == address(0)) {
             (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
             (address dacFactory, bytes32 salt, DACConfig memory config) = abi.decode(dacDeal.config, (address, bytes32, DACConfig));
 
-            require(config.founderLP == dacDeal.managedEquity, "Config mismatch deal parameters");
-            require(config.treasuryToken == params.fundingToken, "Config mismatch deal parameters");
-            require(config.founderCommitment == params.fundingAmount, "Config mismatch deal parameters");
+            require(config.founderAllocation == dacDeal.managedEquity, ConfigMismatchParams());
+            require(config.treasuryToken == params.fundingToken, ConfigMismatchParams());
+            require(config.founderCommitment == params.fundingAmount, ConfigMismatchParams());
 
             config.founder = address(this);
 
             (address dacAddr,,) = IDACFactory(dacFactory).deployDAC(config, salt);
 
             managedEntity = dacAddr;
-            _childLPAmount = config.founderLP;
+            _allocation = config.founderAllocation;
         }
     }
 
@@ -72,7 +78,7 @@ contract DACDeal is Deal {
             managedEntity = params.dealTarget;
 
             _rootCapitalCallId = dacDeal.capitalCallId;
-            _childLPAmount = dacDeal.managedEquity;
+            _allocation = dacDeal.managedEquity;
         }
     }
 
@@ -85,8 +91,8 @@ contract DACDeal is Deal {
             CapitalCall memory call = CapitalCall({
                 treasuryToken: fundingToken(trancheId),
                 nonce: _rootCapitalCallId,
-                lpRecipient: address(this),
-                lpAmount: _childLPAmount,
+                tokenRecipient: address(this),
+                tokenAmount: _allocation,
                 cashAmount: fundingAmount(trancheId)
             });
 
@@ -104,7 +110,7 @@ contract DACDeal is Deal {
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(calldataHash);
             IDACCell(managedEntity).fulfillCapitalCall(call);
 
-            _childLPAmount += call.lpAmount;
+            _allocation += call.tokenAmount;
         }
     }
 
@@ -114,12 +120,12 @@ contract DACDeal is Deal {
         // these LP tokens as dividends, or establish a new Deal
         // with new management
 
-        address token = IDACCellAdapter(managedEntity).getLPToken();
+        address token = IDACCellAdapter(managedEntity).getMainToken();
 
-        IERC20(token).approve(dacCell, _childLPAmount);
+        IERC20(token).approve(dacCell, _allocation);
 
-        IDACCellAdapter(dacCell).depositTreasury(token, _childLPAmount);
-        returnedCapital[token] += _childLPAmount;
+        IDACCellAdapter(dacCell).depositTreasury(token, _allocation);
+        returnedCapital[token] += _allocation;
     }
 
     function _checkStackedMPProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
@@ -139,7 +145,7 @@ contract DACDeal is Deal {
             // Verifying capital call parameters
             require(call.treasuryToken == params.target);
             require(call.cashAmount == fundingAmount);
-            require(call.lpRecipient == address(this));
+            require(call.tokenRecipient == address(this));
         }
 
         else if (params.typ == CoreDealManagementType.REINVEST_PROFITS) {
@@ -152,23 +158,23 @@ contract DACDeal is Deal {
                 // With early returns, all capital in any of funding tokens is siphoned back
                 // to chickens by any manager will, and automatically counts into returns
                 // so we make reinvest not possible
-                require(!earlyReturns, "Early returns are toggled on");
+                require(!earlyReturns, NotAllowed());
             }
             else {
-                address lpTokenAddress = IDACCellAdapter(managedEntity).getLPToken();
+                address lpTokenAddress = IDACCellAdapter(managedEntity).getMainToken();
                 require(token != lpTokenAddress);
             }
             
             require(
                 IERC20(token).balanceOf(address(this)) >= fundingAmount,
-                "Balance of the token is not enough"
+                NotEnoughBalance()
             );
 
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(capitalCallHash);
 
             require(call.treasuryToken == token);
             require(call.cashAmount == fundingAmount);
-            require(call.lpRecipient == address(this));
+            require(call.tokenRecipient == address(this));
         }
     }
 
@@ -181,7 +187,7 @@ contract DACDeal is Deal {
                 (ProposalParams)
             );
 
-            uint256 childProposalId = IDACCell(managedEntity).createLPManagementProposal(childProposal);
+            uint256 childProposalId = IDACCell(managedEntity).createManagementProposal(childProposal);
 
             ProposalParams memory dealProposalParams = ProposalParams({
                 typ: CoreDealManagementType.VOTE_DAC_PROPOSAL,
@@ -217,11 +223,11 @@ contract DACDeal is Deal {
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(callHash);
             IDACCell(managedEntity).fulfillCapitalCall(call);
 
-            _childLPAmount += call.lpAmount;
+            _allocation += call.tokenAmount;
         }
 
         else {
-            revert("Unsupported management proposal type for DAC Deal");
+            require(false, UnsupportedProposal());
         }
     }
 

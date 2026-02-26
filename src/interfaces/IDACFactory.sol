@@ -8,5 +8,9 @@ interface IDACFactory {
     function deployDAC(
         DACConfig calldata config,
         bytes32 salt
-    ) external returns (address dacAddr, address lpAddr, address mpAddr);
+    ) external returns (
+        address dacAddr, 
+        address mainTokenAddr, 
+        address agentTokenAddr
+    );
 }

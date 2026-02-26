@@ -3,14 +3,14 @@ pragma solidity ^0.8.20;
 
 import "../interfaces/IDACFactory.sol";
 import "./DACCell.sol";
-import "./tokens/LPToken.sol";
-import "./tokens/MPToken.sol";
+import "./tokens/MainToken.sol";
+import "./tokens/AgentToken.sol";
 
 contract DACFactory is IDACFactory {
     address public governanceFactory;
     address public coreModuleFactory;
     
-    event DACDeployed(address indexed dac, address lpToken, address mpToken);
+    event DACDeployed(address indexed dac, address mainToken, address agentToken);
 
     constructor(
         address _governanceFactory,
@@ -23,8 +23,8 @@ contract DACFactory is IDACFactory {
     function deployDAC(
         DACConfig calldata config,
         bytes32 salt
-    ) external returns (address dacAddr, address lpAddr, address mpAddr) {
-        require(config.lpMaxSupply > config.founderLP);
+    ) external returns (address dacAddr, address mainAddr, address agentAddr) {
+        require(config.mainTokenMaxSupply > config.founderAllocation);
 
         // 1. Compute deterministic DAC address using CREATE2
         bytes memory constructorParams = abi.encode(
@@ -37,18 +37,18 @@ contract DACFactory is IDACFactory {
         dacAddr = predictDACAddress(salt, constructorParams);
 
         // 2. Deploy LPToken with the predicted DAC address
-        lpAddr = address(new LPToken(
+        mainAddr = address(new MainToken(
             dacAddr, 
-            config.lpMaxSupply, 
-            string.concat(config.name, " Limited Partner"), 
-            string.concat(config.symbol, "L")
+            config.mainTokenMaxSupply, 
+            string.concat(config.name, " Token"), 
+            config.symbol
         ));
 
         // 3. Deploy MPToken with the predicted DAC address
-        mpAddr = address(new MPToken(
+        agentAddr = address(new AgentToken(
             dacAddr, 
-            string.concat(config.name, " Managing Partner"), 
-            string.concat(config.symbol, "M")
+            string.concat(config.name, " Agent Token"), 
+            string.concat(config.symbol, "A")
         ));
 
         // 4. Deploy DACEntity at the exact predicted address using CREATE2
@@ -63,21 +63,20 @@ contract DACFactory is IDACFactory {
 
         // 5. Call initialize on DACCell (two-phase)
         dac.initializeAfterDeployment(
-            lpAddr,
-            mpAddr,
-            coreModuleFactory
+            mainAddr,
+            agentAddr,
+            coreModuleFactory,
+            config.dividendsEnabled
         );
 
-        emit DACDeployed(dacAddr, lpAddr, mpAddr);
+        emit DACDeployed(dacAddr, mainAddr, agentAddr);
 
         dac.initializeRootCapitalCall(
             config.treasuryToken,
             config.founder,
-            config.founderLP,
+            config.founderAllocation,
             config.founderCommitment
         );
-
-        return (dacAddr, lpAddr, mpAddr);
     }
 
     // Helper to pre-compute address (useful for frontend / agents)

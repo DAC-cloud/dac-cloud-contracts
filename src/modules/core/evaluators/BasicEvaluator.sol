@@ -19,6 +19,20 @@ contract BasicEvaluator is IEvaluator {
         }
     }
 
+    function permitMint(address, address, uint256) external pure returns (bool permit) {
+        // Basic evaluator will not do any additional authorization for unlocking LP rewards.
+        // However it would be a good practice for external modules to allow such a protection.
+
+        // With permitMint implemented evaluator can become an oracle for last-resort protection between
+        //  vulnerabilities in the particular Deal contract.
+        
+        // Basic logic for evaluator - revert any mintLP call, until someone presses the button on the web
+        //  and signs with EOA, then there is a 12 hours window, and if no other EOA objects and provide
+        //  to an AI agent reasonable claims about a hack in a Deal - evaluator approves the single mint
+
+        return true;
+    }
+
     function evaluateDeal(uint256, address dealAddr, address) external view returns (EvaluationResult memory) {
         uint256 returned = 0; // IDealCore(dealAddr).getReturnedCapital(token);
         uint256 currentTime = block.timestamp;

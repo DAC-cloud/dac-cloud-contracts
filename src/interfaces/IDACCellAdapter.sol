@@ -4,8 +4,9 @@ pragma solidity ^0.8.20;
 import "./Structs.sol";
 
 interface IDACCellAdapter {
-    function mintLP(address deal, address to, uint256 amount) external;
+    // function registerAddress(address deal, address controlled) external;
+    // function onMainMove(address from, address to, uint256 amount) external;
     function depositTreasury(address token, uint256 amount) external;
-    function createTrancheProposal(uint256 dealId, uint256 trancheId) external;
-    function getLPToken() external view returns (address);
+    function getMainToken() external view returns (address);
+    function dealManager() external view returns (address);
 }

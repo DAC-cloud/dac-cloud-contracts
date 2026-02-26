@@ -24,7 +24,13 @@ abstract contract Proposal is IVoting {
     // Events
     event Voted(address indexed voter, bool support, uint256 weight);
 
-    constructor(ProposalParams memory _proposal, address _token, uint256 _duration, uint256 _quorum, uint256 _blockingQuorum) {
+    constructor(
+        ProposalParams memory _proposal, 
+        address _token, 
+        uint256 _duration, 
+        uint256 _quorum, 
+        uint256 _blockingQuorum
+    ) {
         endTime = block.timestamp + _duration;
         token = _token;
         quorum = _quorum;

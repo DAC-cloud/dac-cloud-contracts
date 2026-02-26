@@ -8,7 +8,7 @@ interface IDealFactory {
         uint256 id,
         DealParams calldata params,
         address dac,
-        address mpToken,
-        address lpToken
+        address agentToken,
+        address mainToken
     ) external returns (address);
 }

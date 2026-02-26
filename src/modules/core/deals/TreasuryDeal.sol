@@ -100,7 +100,7 @@ contract TreasuryDeal is Deal {
             IDACCellAdapter(dacCell).depositTreasury(token, amount);
             returnedCapital[token] += amount;
             
-            emit CapitalReturned(token, amount);
+            emit CapitalReturned(dacCell, id, token, amount);
         }
 
         else if (typ == CoreDealManagementType.ASSIGN_CLAIMER) {

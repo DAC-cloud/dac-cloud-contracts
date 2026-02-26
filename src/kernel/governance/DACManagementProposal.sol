@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "../../interfaces/Structs.sol";
 import "./Proposal.sol";
 
-contract LPManagementProposal is Proposal {
+contract DACManagementProposal is Proposal {
     uint256 public immutable id;
     address public immutable dacEntity;
     

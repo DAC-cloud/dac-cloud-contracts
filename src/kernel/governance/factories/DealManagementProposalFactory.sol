@@ -33,6 +33,8 @@ abstract contract DealManagementProposalFactory {
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
             );
 
+            //todo: recalculate quorum from percent to balance
+
             Proposal prop = new DealManagementProposal(
                 id, 
                 dac,
@@ -59,6 +61,8 @@ abstract contract DealManagementProposalFactory {
             );
 
             require(!ok, "Proposal not supported");
+
+            //todo: recalculate quorum from percent to balance
 
             Proposal prop = new DealManagementProposal(
                 id, 

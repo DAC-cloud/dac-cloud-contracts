@@ -5,12 +5,13 @@ struct DACConfig {
     string symbol;
     string name;
     string description;
-    uint256 lpMaxSupply;
+    uint256 mainTokenMaxSupply;
     uint256 defaultQuorum;
     address founder;
-    uint256 founderLP;
+    uint256 founderAllocation;
     address treasuryToken;
     uint256 founderCommitment;
+    bool dividendsEnabled;
 }
 
 // Quorum configuration - i.e. "what are the quorum requirements for a proposal type" 
@@ -34,8 +35,8 @@ struct LegalWrapper {
 struct CapitalCall {
     address treasuryToken;
     uint256 nonce;
-    address lpRecipient;
-    uint256 lpAmount;
+    address tokenRecipient;
+    uint256 tokenAmount;
     uint256 cashAmount;
 }
 
@@ -48,6 +49,7 @@ struct ProposalParams {
 
 struct DealParams {
     bytes4 dealKind;
+    string name;
     address moduleFactory;
     address governanceFactory;
     address dealTarget;             // childDAC or Vault-based deal address
@@ -55,7 +57,7 @@ struct DealParams {
     string linkHash;                // Hash of the Deal submission in external document management system
     address fundingToken;
     uint256 fundingAmount;
-    uint256 lpRewardsLimit;
+    uint256 rewardsLimit;
     uint256 approveDeadline;
     uint256 dealDeadline;
     bytes4 evaluatorSelector;       // type of evaluator

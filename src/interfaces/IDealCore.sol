@@ -4,15 +4,15 @@ pragma solidity ^0.8.20;
 import "./Structs.sol";
 
 interface IDealCore {
-    function claimLP() external;
-    function onMPStaked(address staker, uint256 amount) external;
+    function claimMainToken() external;
+    function onAgentTokenStaked(address staker, uint256 amount) external;
     function unstake() external;
     function returnCapitalToDAC() external;
     function getProposal(uint256 proposalId) external view returns (address);
-    function getStakedMPTotal() external view returns (uint256);
+    function getStakedAgentTotal() external view returns (uint256);
     function getReturnedCapital(address token) external view returns (uint256);
     function getInvestedCapital(address token) external view returns (uint256);
-    function getLPRewardsLimit() external view returns (uint256);
+    function getMainRewardsLimit() external view returns (uint256);
     function isValidDeal() external pure returns (bool);
     function isApproved() external view returns (bool);
     function isClosed() external view returns (bool);
