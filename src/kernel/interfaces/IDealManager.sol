@@ -12,4 +12,5 @@ interface IDealManager {
     function executeProp(address msgSender, DACManagementProposal prop) external;
     function mintMain(address deal, address to, uint256 amount) external;
     function createTrancheProposal(uint256 dealId, uint256 trancheId) external;
+    function totalUnreleasedMainTokens() external view returns (uint256);
 }

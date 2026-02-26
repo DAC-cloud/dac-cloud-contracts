@@ -8,6 +8,7 @@ import "../../interfaces/IEvaluator.sol";
 import "../../interfaces/IDACManagementFactory.sol";
 import "../../interfaces/IModuleFactory.sol";
 import "../interfaces/IDealManager.sol";
+import "../interfaces/IDealCell.sol";
 import "../interfaces/Structs.sol";
 import "../tokens/MainToken.sol";
 import "../tokens/AgentToken.sol";
@@ -21,6 +22,7 @@ interface IDACGovernanceAdapter {
 }
 
 library DACCellGovernance {
+    
     // Errors
 
     error NotFound();
@@ -49,6 +51,7 @@ library DACCellGovernance {
     error ModuleDisabled();
 
     // Events
+
     event CapitalCallCreated(uint256 indexed id, address indexed recipient, bytes32 callHash, uint256 amount);
     event CapitalCallFulfilled(address indexed recipient, bytes32 callHash, uint256 amount);
     
@@ -56,7 +59,7 @@ library DACCellGovernance {
 
     event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
     
-    event DealCreated(uint256 indexed id, uint256 indexed proposalId, address indexed creator, bytes4 kind, address deal);
+    event DealCreated(uint256 indexed id, uint256 indexed proposalId, address indexed creator, bytes4 kind, address cell, address deal);
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 indexed trancheId, uint256 rewardsLimit);
     
@@ -69,7 +72,7 @@ library DACCellGovernance {
         MainToken mainToken,
         mapping(bytes32 => CapitalCallState) storage capitalCalls,
         mapping(address => uint256) storage treasuryBalances
-    ) internal returns (bool) {
+    ) public returns (bool) {
         bytes32 callHash = keccak256(abi.encode(call));
         require(!capitalCalls[callHash].fulfilled, AlreadyFulfilled());
         
@@ -102,7 +105,7 @@ library DACCellGovernance {
         mapping(address => bool) storage moduleFactories,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealRegistry
-    ) internal returns (uint256 id, address dealAddr, address evaluatorAddr) {
+    ) internal returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr) {
         require(moduleFactories[params.moduleFactory], ModuleNotApproved());
 
         require(params.proposer == msg.sender, NotAuthorized());
@@ -111,7 +114,7 @@ library DACCellGovernance {
 
         id = nextId + 1; // proposal id = nextId, deal id = proposal id + 1
 
-        (dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
+        (dealCell, dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
             id,
             params,
             address(this),
@@ -139,6 +142,7 @@ library DACCellGovernance {
             IDACGovernanceAdapter(dacCell).createManagementProposal(dealProposal), 
             msg.sender, 
             params.dealKind, 
+            dealCell,
             dealAddr
         );
     }
@@ -152,8 +156,8 @@ library DACCellGovernance {
         address deal = deals[dealId];
         require(msg.sender == deal, InvalidDealId(dealId));
 
-        address fundingToken = IDealCore(deal).fundingToken(trancheId);
-        uint256 fundingAmount = IDealCore(deal).fundingAmount(trancheId);
+        address fundingToken = IDealCell(deal).fundingToken(trancheId);
+        uint256 fundingAmount = IDealCell(deal).fundingAmount(trancheId);
         require(fundingAmount > 0, InvalidTranche());
 
         ProposalParams memory trancheProposal = ProposalParams({
@@ -174,18 +178,18 @@ library DACCellGovernance {
         uint256 rewardsLimit,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
-    ) internal {
+    ) public {
         address deal = deals[dealId];
 
-        uint256 amount = IDealCore(deal).fundingAmount(trancheId);
-        address token = IDealCore(deal).fundingToken(trancheId);
+        uint256 amount = IDealCell(deal).fundingAmount(trancheId);
+        address token = IDealCell(deal).fundingToken(trancheId);
 
         require(IERC20(token).transfer(deal, amount), TransferFailed());
         if (trancheId == 0) {
             dealState[deal].rewardsLimit = rewardsLimit;
         }
 
-        IDealAdmin(deal).onApproved(trancheId);
+        IDealAdmin(deal).approveFunding(trancheId);
         
         emit FundingApproved(dealId, trancheId, rewardsLimit);
     }
@@ -194,7 +198,7 @@ library DACCellGovernance {
         DACManagementProposal prop,
         mapping(address => uint256) storage treasuryBalances,
         IDealManager dealManager
-    ) internal {
+    ) public {
         (uint256 dealId, uint256 trancheId, uint256 rewardsLimit) = abi.decode(
             prop.data(),
             (uint256, uint256, uint256)
@@ -203,8 +207,8 @@ library DACCellGovernance {
         address deal = dealManager.deals(dealId);
         require(deal != address(0), InvalidDealId(dealId));
 
-        uint256 amount = IDealCore(deal).fundingAmount(trancheId);
-        address token = IDealCore(deal).fundingToken(trancheId);
+        uint256 amount = IDealCell(deal).fundingAmount(trancheId);
+        address token = IDealCell(deal).fundingToken(trancheId);
 
         require(treasuryBalances[token] >= amount, InsufficientTreasury());
 
@@ -229,7 +233,7 @@ library DACCellGovernance {
         uint256 unreleasedMainTokens,
         IDealManager dealManager,
         mapping(uint256 => address) storage proposals
-    ) internal returns (uint256 id) {
+    ) public returns (uint256 id) {
         if (msg.sender == address(this)) {
             require(
                 (
@@ -288,7 +292,7 @@ library DACCellGovernance {
         uint256 amount,
         MainToken mainToken,
         mapping(address => DealState) storage dealState
-    ) internal {
+    ) public {
         require(msg.sender == deal, InvalidDeal(msg.sender));
         require(dealState[deal].rewardsLimit > amount, InsufficientRewards());
 
@@ -306,7 +310,7 @@ library DACCellGovernance {
         uint256 id,
         DACManagementProposal prop,
         mapping(bytes32 => CapitalCallState) storage capitalCalls
-    ) internal {
+    ) public {
         (address treasuryToken, uint256 cashAmount) = abi.decode(
             prop.data(), 
             (address, uint256)
@@ -345,7 +349,7 @@ library DACCellGovernance {
         mapping(uint256 => address) storage deals
     ) internal {
         address deal = deals[id];
-        uint256 totalTokens = IDealCore(deal).getStakedAgentTotal();
+        uint256 totalTokens = IDealCell(deal).getStakedAgentTotal();
         AgentToken(agentToken).burnFrom(deal, totalTokens);
         IDealAdmin(deal).markAsFailed(slashPercent);
     }
@@ -355,7 +359,7 @@ library DACCellGovernance {
         AgentToken agentToken,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
-    ) external {
+    ) public {
         address deal = deals[id];
         require(deal != address(0), InvalidDeal(deal));
 
@@ -385,7 +389,7 @@ library DACCellGovernance {
         mapping(uint256 => address) storage proposals,
         mapping(uint256 => bytes32) storage dividendMerkleRoots,
         mapping(bytes32 => bool) storage dividendClaimed
-    ) external {
+    ) public {
         bytes32 root = dividendMerkleRoots[proposalId];
         require(root != bytes32(0), NotFound());
 
@@ -398,9 +402,11 @@ library DACCellGovernance {
 
         dividendClaimed[claimedKey] = true;
 
-        address prop = proposals[proposalId];
-
-        (address token) = abi.decode(DACManagementProposal(prop).data(), (address));
+        (address token) = abi.decode(
+            DACManagementProposal(proposals[proposalId]).data(), 
+            (address)
+        );
+        
         require(IERC20(token).transfer(msg.sender, amount), TransferFailed());
 
         emit DividendClaimed(proposalId, msg.sender, amount);

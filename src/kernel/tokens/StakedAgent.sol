@@ -11,18 +11,14 @@ contract StakedAgent is ERC20, ERC20Permit, ERC20Votes {
     error NotTransferable();
     error NotAuthorized();
 
-    address public immutable deal;
-
-    uint256 public immutable maxSupply;
+    address public immutable dealCell;
 
     constructor(
         address _deal, 
-        uint256 _maxSupply, 
         string memory name_, 
         string memory symbol_
     ) ERC20(name_, symbol_) ERC20Permit(name_) {
-        deal = _deal;
-        maxSupply = _maxSupply;
+        dealCell = _deal;
     }
 
     function transfer(address, uint256) public pure override returns (bool) { require(false, NotTransferable()); return false; }
@@ -32,12 +28,12 @@ contract StakedAgent is ERC20, ERC20Permit, ERC20Votes {
     function nonces(address owner) public view virtual override(ERC20Permit, Nonces) returns (uint256) { return super.nonces(owner); }
 
     function mint(address to, uint256 amount) external {
-        require(msg.sender == deal, NotAuthorized());
+        require(msg.sender == dealCell, NotAuthorized());
         _mint(to, amount);
     }
 
     function burn(address from, uint256 amount) external {
-        require(msg.sender == deal, NotAuthorized());
+        require(msg.sender == dealCell, NotAuthorized());
         _burn(from, amount);
     }
 }

@@ -105,3 +105,12 @@ contract Permit2Treasury is ReentrancyGuard {
         emit CapitalReturned(token, balance);
     }
 }
+
+library Permit2TreasuryLibrary {
+    function deployPermit2Treasury(
+        address deal,
+        address _permit2
+    ) public returns (Permit2Treasury) {
+        return new Permit2Treasury(deal, _permit2);
+    }
+}

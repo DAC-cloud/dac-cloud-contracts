@@ -14,5 +14,5 @@ interface IModuleFactory {
         address mpToken,
         address lpToken,
         VotingConfig calldata votingConfig
-    ) external returns (address, address);
+    ) external returns (address dealCell, address dealAddr, address evaluatorAddr);
 }

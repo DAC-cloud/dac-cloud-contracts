@@ -6,7 +6,8 @@ import "../Structs.sol";
 interface IEvaluatorFactory {
     function deployEvaluator(
         address dac, 
-        uint256 id, 
+        uint256 id,
+        address dealCell,
         DealParams calldata deal
     ) external returns (address);
 }

@@ -5,7 +5,7 @@ import "./Structs.sol";
 
 interface IDealAdmin {
     // Tranche approval hook
-    function onApproved(uint256 trancheId) external;
+    function approveFunding(uint256 trancheId) external;
     
     // State management
     function markAsSuccess(uint256 rewardPercent) external;

@@ -13,3 +13,9 @@ struct CapitalCallState {
     CapitalCall call;
     bool fulfilled;
 }
+
+struct Tranche {
+    address token;
+    uint256 amount;
+    bool settled;
+}

@@ -3,17 +3,19 @@ pragma solidity ^0.8.20;
 
 import "../../../interfaces/Structs.sol";
 import "../../../interfaces/IEvaluator.sol";
-import "../../../interfaces/IDealCore.sol";
+import "../../../kernel/interfaces/IDealCell.sol";
 import "../interfaces/Structs.sol";
 
 contract BasicEvaluator is IEvaluator {
     address public immutable dac;
     uint256 public immutable deal;
+    address public immutable cell;
     Milestone[] public schedule;
 
-    constructor(address _dac, uint256 _deal, Milestone[] memory _schedule) {
+    constructor(address _dac, uint256 _deal, address _cell, Milestone[] memory _schedule) {
         dac = _dac;
         deal = _deal;
+        cell = _cell;
         for (uint256 i = 0; i < _schedule.length; i++) {
             schedule.push(_schedule[i]);
         }
@@ -56,7 +58,7 @@ contract BasicEvaluator is IEvaluator {
         
         if (returned >= expected) {
             return EvaluationResult(1, 100, 0); // convert 100%
-        } else if (currentTime > IDealCore(dealAddr).dealDeadline()) {
+        } else if (currentTime > IDealCell(dealAddr).dealDeadline()) {
             return EvaluationResult(0, 100, 0); // slash 100%
         } else {
             return EvaluationResult(2, 0, currentTime + 30 days); // extend 30 days

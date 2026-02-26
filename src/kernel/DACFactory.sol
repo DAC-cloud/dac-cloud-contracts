@@ -2,20 +2,32 @@
 pragma solidity ^0.8.20;
 
 import "../interfaces/IDACFactory.sol";
+import "./factories/DACCellFactory.sol";
 import "./DACCell.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
+import "./libraries/DACDeployment.sol";
+import "./tokens/factories/TokenFactories.sol";
 
 contract DACFactory is IDACFactory {
+    error Create2Failed();
+
+    address public dacCellFactory;
+    address public dealManagerFactory;
+    
     address public governanceFactory;
     address public coreModuleFactory;
     
     event DACDeployed(address indexed dac, address mainToken, address agentToken);
 
     constructor(
+        address _dacCellFactory,
+        address _dealManagerFactory,
         address _governanceFactory,
         address _coreModuleFactory
     ) {
+        dacCellFactory = _dacCellFactory;
+        dealManagerFactory = _dealManagerFactory;
         governanceFactory = _governanceFactory;
         coreModuleFactory = _coreModuleFactory;
     }
@@ -26,47 +38,45 @@ contract DACFactory is IDACFactory {
     ) external returns (address dacAddr, address mainAddr, address agentAddr) {
         require(config.mainTokenMaxSupply > config.founderAllocation);
 
-        // 1. Compute deterministic DAC address using CREATE2
-        bytes memory constructorParams = abi.encode(
+        dacAddr = DACDeployment.predictDACAddress(
+            salt,
+            dacCellFactory,
             config.name,
             config.description,
-            config.defaultQuorum,
             governanceFactory
         );
 
-        dacAddr = predictDACAddress(salt, constructorParams);
-
-        // 2. Deploy LPToken with the predicted DAC address
-        mainAddr = address(new MainToken(
+        mainAddr = MainTokenLib.deployMainToken(
             dacAddr, 
             config.mainTokenMaxSupply, 
             string.concat(config.name, " Token"), 
             config.symbol
-        ));
+        );
 
-        // 3. Deploy MPToken with the predicted DAC address
-        agentAddr = address(new AgentToken(
+        agentAddr = AgentTokenLib.deployAgentToken(
             dacAddr, 
             string.concat(config.name, " Agent Token"), 
             string.concat(config.symbol, "A")
-        ));
-
-        // 4. Deploy DACEntity at the exact predicted address using CREATE2
-        DACCell dac = new DACCell{salt: salt}(
-            config.name,
-            config.description,
-            config.defaultQuorum,
-            governanceFactory
         );
 
-        require(address(dac) == dacAddr, "CREATE2 address mismatch");
+        DACCell dac = DACCell(
+            DACCellFactory(dacCellFactory).deployDAC(
+                salt, 
+                config.name,
+                config.description,
+                governanceFactory
+            )
+        );
 
-        // 5. Call initialize on DACCell (two-phase)
+        require(address(dac) == dacAddr, Create2Failed());
+
         dac.initializeAfterDeployment(
             mainAddr,
             agentAddr,
             coreModuleFactory,
-            config.dividendsEnabled
+            dealManagerFactory,
+            config.dividendsEnabled,
+            config.defaultQuorum
         );
 
         emit DACDeployed(dacAddr, mainAddr, agentAddr);
@@ -77,17 +87,5 @@ contract DACFactory is IDACFactory {
             config.founderAllocation,
             config.founderCommitment
         );
-    }
-
-    // Helper to pre-compute address (useful for frontend / agents)
-    function predictDACAddress(bytes32 salt, bytes memory constructorArgs) public view returns (address) {
-        bytes32 bytecodeHash = keccak256(abi.encodePacked(type(DACCell).creationCode, constructorArgs));
-        bytes32 hash = keccak256(abi.encodePacked(
-            bytes1(0xff),
-            address(this),
-            salt,
-            bytecodeHash
-        ));
-        return address(uint160(uint256(hash)));
     }
 }

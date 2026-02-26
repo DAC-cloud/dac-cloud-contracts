@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import "../interfaces/IModuleFactory.sol";
 import "../interfaces/modules/IDealFactory.sol";
 import "../interfaces/modules/IEvaluatorFactory.sol";
+import "./factories/DealCellFactory.sol";
+import "./DealCell.sol";
 import "./Deal.sol";
 
 abstract contract ModuleFactory is IModuleFactory {
@@ -20,24 +22,32 @@ abstract contract ModuleFactory is IModuleFactory {
         uint256 id,
         DealParams calldata params,
         address dac,
-        address mpToken,
-        address lpToken,
+        address mainToken,
+        address agentToken,
         VotingConfig calldata votingConfig
-    ) external returns (address dealAddr, address evaluatorAddr) {
-        IDealFactory factory = getDealFactory(params.dealKind);
+    ) external returns (address dealCell, address dealAddr, address evaluatorAddr) {
+        dealCell = DealCellFactory.deployCell(
+            id,
+            dac,
+            params.governanceFactory,
+            agentToken,
+            mainToken,
+            params.proposer
+        );
 
+        IDealFactory factory = getDealFactory(params.dealKind);
         dealAddr = factory.deployDeal(
             id,
             params,
             dac,
-            mpToken,
-            lpToken
+            agentToken,
+            mainToken
         );
 
-        Deal(dealAddr).initialize(params, votingConfig);
-        
+        DealCell(dealCell).initialize(params, votingConfig);
+
         IEvaluatorFactory evaluatorFactory = getEvaluatorFactory(params.dealKind, params.evaluatorSelector);
 
-        evaluatorAddr = evaluatorFactory.deployEvaluator(dac, id, params);
+        evaluatorAddr = evaluatorFactory.deployEvaluator(dac, id, dealCell, params);
     }
 }

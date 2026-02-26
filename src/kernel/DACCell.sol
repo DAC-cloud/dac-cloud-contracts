@@ -6,15 +6,16 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../interfaces/Structs.sol";
 import "../interfaces/IDACCell.sol";
 import "../interfaces/IDACCellAdapter.sol";
-import "../interfaces/IDealCore.sol";
 import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IModuleFactory.sol";
 import "../interfaces/IEvaluator.sol";
 import "../interfaces/IDACManagementFactory.sol";
 import "./interfaces/Structs.sol";
 import "./interfaces/IDealManager.sol";
+import "./interfaces/IDealCell.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
+import "./factories/DealManagerFactory.sol";
 import "./governance/DACManagementProposal.sol";
 import "./governance/DACManagementProposals.sol";
 import "./libraries/DACCellGovernance.sol";
@@ -32,8 +33,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     error ProposalAlreadyExecuted();
     error InvalidDeal(address deal);
     error InvalidDealId(uint256 deal);
-    error InvalidTranche();
-    error InsufficientTreasury();
     error TransferFailed();
 
     error InvalidCapitalCall();
@@ -68,9 +67,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     bool private rootCapitalCallInitialized;
     mapping(address => uint256) private treasuryBalances;
 
-    uint256 private unreleasedMainTokens;
-    mapping(address => uint256) private lockedMainTokens;
-
     uint256 private nextId = 1;
     mapping(uint256 => address) private proposals;               // id => DACManagementProposal address
     mapping(uint256 => bool) private executed;                   // id => proposal executed (set early)
@@ -86,9 +82,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     event LegalWrapperMessage(address indexed wrapper, bytes4 messageKind, bytes message);
     event DividendsConfigUpdate(uint256 indexed id, bool enabled);
 
-    event ModuleAdded(address indexed factory);
-    event ModuleRemoved(address indexed factory);
-    
     // DAC operation events
     event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
 
@@ -110,23 +103,16 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     constructor(
         string memory _name,
         string memory _description,
-        uint256 _quorum,
         address _proposalFactory
     ) {
         name = _name;
         description = _description;
 
         proposalFactory = _proposalFactory;
-        votingConfig = VotingConfig({   // DEFAULTS — changed via governance later
-            quorumPercent: _quorum,
-            highQuorumPercent: (100 + _quorum) / 2,
-            blockingPercent: (100 - _quorum) / 2,
-            duration: 7 days,
-            qualification: 0
-        });
+
+        deployer = msg.sender;
 
         initialized = false;
-        deployer = msg.sender;
         rootCapitalCallInitialized = false;
 
         emit DACCreated(msg.sender, name);
@@ -135,20 +121,35 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     bool public initialized;
 
     function initializeAfterDeployment(
-        address _lpToken,
-        address _mpToken,
+        address _mainToken,
+        address _agentToken,
         address coreModule,
-        bool _dividendsEnabled
+        address managerFactory,
+        bool _dividendsEnabled,
+        uint256 _quorum
     ) external {
         require(msg.sender == deployer, NotAuthorized());
         require(!initialized, AlreadyInitialized());
 
-        mainToken = MainToken(_lpToken);
-        agentToken = AgentToken(_mpToken);
+        mainToken = MainToken(_mainToken);
+        agentToken = AgentToken(_agentToken);
 
         dividendsEnabled = _dividendsEnabled;
 
-        //todo: initialize deal manager, factory supplied
+        votingConfig = VotingConfig({   // DEFAULTS — changed via governance later
+            quorumPercent: _quorum,
+            highQuorumPercent: (100 + _quorum) / 2,
+            blockingPercent: (100 - _quorum) / 2,
+            duration: 7 days,
+            qualification: 0
+        });
+
+        dealManager = DealManagerFactory(managerFactory).deployDealManager(
+            _mainToken,
+            _agentToken,
+            coreModule,
+            address(this)
+        );
 
         initialized = true;
     }
@@ -216,7 +217,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             proposalFactory,
             mainToken,
             dividendsEnabled,
-            unreleasedMainTokens,
+            IDealManager(dealManager).totalUnreleasedMainTokens(),
             IDealManager(dealManager),
             proposals
         );
@@ -305,18 +306,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
 
         emit DACProposalExecuted(id, typ);
     }
-
-    // function registerAddress(address deal, address controlled) external onlyDeal {
-    //     //todo: registering controlled address for locked equity movements
-    // }
-
-    // function onMainMove(address from, address to, uint256 amount) external {
-    //     require(msg.sender == address(mainToken), NotAuthorized());
-
-    //     //todo: performing the move of a locked equity if from or to addresses are locked
-    //     // when equity moves outside it becomes uncontrolled
-    //     // locked equity is released first
-    // }
 
     function getVotingConfig() external view returns (VotingConfig memory config) {
         config = votingConfig;

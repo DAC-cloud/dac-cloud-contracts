@@ -10,6 +10,12 @@ import "./Permit2Treasury.sol";
 contract TreasuryDeal is Deal {
     Permit2Treasury public immutable treasury;
 
+    error EarlyReturnsNotAllowed();
+
+    error CapitalWithdrawNotSupported();
+
+    error InvalidToken();
+
     // Events
     event PermitApproved(address indexed treasuryToken, uint160 amount);
     event AgentAssigned(address indexed treasuryToken, address indexed agent, uint160 amount);
@@ -31,7 +37,7 @@ contract TreasuryDeal is Deal {
         _lpToken, 
         _proposer
     ) {
-        treasury = new Permit2Treasury(address(this), _permit2);
+        treasury = Permit2TreasuryLibrary.deployPermit2Treasury(address(this), _permit2);
         managedEntity = address(treasury);
     }
 
@@ -44,14 +50,14 @@ contract TreasuryDeal is Deal {
 
     function _afterApprove(uint256 trancheId) internal override {
         if (trancheId > 0) {
-            require(this.fundingAmount(trancheId) > 0, "Invalid tranche");
+            require(IDealCell(dealCell).fundingAmount(trancheId) > 0, InvalidTranche());
             
             require(
-                IERC20(this.fundingToken(trancheId)).transfer(
+                IERC20(IDealCell(dealCell).fundingToken(trancheId)).transfer(
                     managedEntity, 
-                    this.fundingAmount(trancheId)
+                    IDealCell(dealCell).fundingAmount(trancheId)
                 ),
-                "Transfer failed"
+                TransferFailed()
             );
         }
     }
@@ -66,7 +72,7 @@ contract TreasuryDeal is Deal {
         );
 
         if (params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {
-            require(earlyReturns, "Early returns not allowed");
+            require(earlyReturns, EarlyReturnsNotAllowed());
         }
     }
 
@@ -90,15 +96,17 @@ contract TreasuryDeal is Deal {
         }
 
         else if (typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {
-            require(earlyReturns, "Early returns not allowed");
+            require(earlyReturns, EarlyReturnsNotAllowed());
 
             address token = proposal.target();
             (uint256 amount) = abi.decode(proposal.data(), (uint256));
             
             treasury.returnCapitalToDeal(token, amount);
 
+            //todo: do properly with dealCell
+
             IDACCellAdapter(dacCell).depositTreasury(token, amount);
-            returnedCapital[token] += amount;
+            //returnedCapital[token] += amount;
             
             emit CapitalReturned(dacCell, id, token, amount);
         }
@@ -120,11 +128,11 @@ contract TreasuryDeal is Deal {
         }
 
         else {
-            revert("Unsupported management proposal type for Treasury Deal");
+            require(false, CapitalWithdrawNotSupported());
         }
     }
 
-    function _beforeReturnCapitalToDAC() internal override {
+    function _beforeWithdrawCapital() internal override {
         // Return full capital for treasury deals is only possible after close
         // even when early returns toggled on. 
 
@@ -132,11 +140,11 @@ contract TreasuryDeal is Deal {
         // but pigs need to always use proposals to manage it.
 
         if (earlyReturns) {
-            require(block.timestamp > this.dealDeadline(), "Treasury doesn't support full capital withdraw");
+            require(block.timestamp > IDealCell(dealCell).dealDeadline(), CapitalWithdrawNotSupported());
         }
 
         // Iterate through all funding tokens and return every balance
-        address[] memory fundingTokens = this.fundingTokens();
+        address[] memory fundingTokens = IDealCell(dealCell).fundingTokens();
         for (uint256 i = 0; i < fundingTokens.length; i++) {
             address _fundingToken = fundingTokens[i];
 
@@ -149,7 +157,7 @@ contract TreasuryDeal is Deal {
     }
 
     function recoverProfits(address token) external onlyStakedMPHolder nonReentrant returns (uint256 amount) {
-        require(!(investedCapital[token] > 0), "Invalid token");
+        require(!(IDealCell(dealCell).getInvestedCapital(token) > 0), InvalidToken());
 
         // If token is not a funding token, we allow transfering any balance
         // to treasury (where this balance can be managed by chickens)
@@ -157,7 +165,7 @@ contract TreasuryDeal is Deal {
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(
             IERC20(token).transfer(managedEntity, balance),
-            "Transfer failed"
+            TransferFailed()
         );
 
         return balance;

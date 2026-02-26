@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../../interfaces/IDealCore.sol";
+import "../interfaces/IDealCell.sol";
 
 contract AgentToken is ERC20 {
     error NotAuthorized();
@@ -29,11 +29,11 @@ contract AgentToken is ERC20 {
     }
 
     function stakeToDeal(address deal, uint256 amount) external {
-        require(IDealCore(deal).isValidDeal(), InvalidDeal());
-        require(!IDealCore(deal).isApproved(), InvalidDeal());
+        require(IDealCell(deal).isValidDeal(), InvalidDeal());
+        require(!IDealCell(deal).isApproved(), InvalidDeal());
         
         _transfer(msg.sender, deal, amount);
-        IDealCore(deal).onAgentTokenStaked(msg.sender, amount);
+        IDealCell(deal).onAgentTokenStaked(msg.sender, amount);
         emit Staked(msg.sender, deal, amount);
     }
 
@@ -48,8 +48,8 @@ contract AgentToken is ERC20 {
     }
 
     function approve(address deal, uint256 amount) public override returns (bool) {
-        require(IDealCore(deal).isValidDeal(), InvalidDeal());
-        require(IDealCore(deal).isApproved(), InvalidDeal());
+        require(IDealCell(deal).isValidDeal(), InvalidDeal());
+        require(IDealCell(deal).isApproved(), InvalidDeal());
 
         _approve(msg.sender, deal, amount);
         emit StakeRequested(msg.sender, deal, amount);

@@ -85,15 +85,15 @@ contract DACDeal is Deal {
     function _afterApprove(uint256 trancheId) internal override {
         // Approving spend towards DAC, so child can fulfill capital call
         // We always approve the last tranche amount, as we immediately sending the funds out
-        IERC20(fundingToken(trancheId)).approve(managedEntity, fundingAmount(trancheId));
+        IERC20(IDealCell(dealCell).fundingToken(trancheId)).approve(managedEntity, IDealCell(dealCell).fundingAmount(trancheId));
 
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
-                treasuryToken: fundingToken(trancheId),
+                treasuryToken: IDealCell(dealCell).fundingToken(trancheId),
                 nonce: _rootCapitalCallId,
                 tokenRecipient: address(this),
                 tokenAmount: _allocation,
-                cashAmount: fundingAmount(trancheId)
+                cashAmount: IDealCell(dealCell).fundingAmount(trancheId)
             });
 
             IDACCell(managedEntity).fulfillCapitalCall(call);
@@ -124,8 +124,10 @@ contract DACDeal is Deal {
 
         IERC20(token).approve(dacCell, _allocation);
 
+        //todo: move capital through dealCell
+
         IDACCellAdapter(dacCell).depositTreasury(token, _allocation);
-        returnedCapital[token] += _allocation;
+        //returnedCapital[token] += _allocation;
     }
 
     function _checkStackedMPProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
@@ -154,7 +156,7 @@ contract DACDeal is Deal {
             (uint256 fundingAmount, bytes32 capitalCallHash) = abi.decode(params.data, (uint256, bytes32));
 
             // If token is our funding token
-            if (investedCapital[token] > 0) {
+            if (IDealCell(dealCell).getInvestedCapital(token) > 0) {
                 // With early returns, all capital in any of funding tokens is siphoned back
                 // to chickens by any manager will, and automatically counts into returns
                 // so we make reinvest not possible
@@ -231,7 +233,7 @@ contract DACDeal is Deal {
         }
     }
 
-    function _beforeReturnCapitalToDAC() internal override {
+    function _beforeWithdrawCapital() internal override {
         // DAC deal always transfer capital in all funding tokens back to parent DAC
         // following the core return logic and `earlyReturns` configuration
 

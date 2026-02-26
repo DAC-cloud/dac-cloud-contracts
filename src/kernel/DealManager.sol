@@ -6,12 +6,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../interfaces/Structs.sol";
 import "../interfaces/IDACCell.sol";
 import "../interfaces/IDACCellAdapter.sol";
-import "../interfaces/IDealCore.sol";
 import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IModuleFactory.sol";
 import "../interfaces/IEvaluator.sol";
 import "../interfaces/IDACManagementFactory.sol";
 import "./interfaces/Structs.sol";
+import "./interfaces/IDealCell.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
 import "./governance/DACManagementProposal.sol";
@@ -62,6 +62,10 @@ contract DealManager is IDealManager, ReentrancyGuard {
     
     mapping(address => DealState) public dealState;             // address => Deal state
 
+    // Main token flow tracking
+    uint256 private unreleasedMainTokens;
+    mapping(address => uint256) private lockedMainTokens;
+
     // Events
     event ModuleAdded(address indexed factory);
     event ModuleRemoved(address indexed factory);
@@ -74,16 +78,16 @@ contract DealManager is IDealManager, ReentrancyGuard {
     bool public initialized;
 
     function initializeAfterDeployment(
-        address _lpToken,
-        address _mpToken,
+        address _mainToken,
+        address _agentToken,
         address coreModule,
         address _dacCell
     ) external {
         require(msg.sender == deployer, NotAuthorized());
         require(!initialized, AlreadyInitialized());
 
-        mainToken = MainToken(_lpToken);
-        agentToken = AgentToken(_mpToken);
+        mainToken = MainToken(_mainToken);
+        agentToken = AgentToken(_agentToken);
 
         dacCell = _dacCell;
 
@@ -96,9 +100,9 @@ contract DealManager is IDealManager, ReentrancyGuard {
     function createDealProposal(DealParams calldata params)
         external
         onlyAgent
-        returns (uint256 id, address dealAddr, address evaluatorAddr)
+        returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr)
     {
-        (id, dealAddr, evaluatorAddr) = DACCellGovernance.createDealProposal(
+        (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernance.createDealProposal(
             address(this),
             nextId,
             params,
@@ -146,7 +150,7 @@ contract DealManager is IDealManager, ReentrancyGuard {
     function forceReturnCapital(uint256 id) external onlyHolderOrSelf {
         address deal = deals[id];
         require(deal != address(0), InvalidDealId(id));
-        IDealCore(deal).returnCapitalToDAC();
+        IDealCell(deal).withdrawCapital();
     }
 
     function isRecoverable(uint256 id) external view returns (bool) {
@@ -154,14 +158,16 @@ contract DealManager is IDealManager, ReentrancyGuard {
         require(deal != address(0), InvalidDeal(deal));
         
         require(
-            IDealCore(deal).isClosed(),
+            IDealCell(deal).isClosed(),
             InvalidDealState(deal)
         );
 
         require(
-            IDealCore(deal).getStakedAgentTotal() == 0,
+            IDealCell(deal).getStakedAgentTotal() == 0,
             InvalidDealState(deal)
         );
+
+        return true;
     }
 
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
@@ -224,6 +230,22 @@ contract DealManager is IDealManager, ReentrancyGuard {
             deals,
             dealState
         );
+    }
+
+    // function registerAddress(address deal, address controlled) external onlyDeal {
+    //     //todo: registering controlled address for locked equity movements
+    // }
+
+    // function onMainMove(address from, address to, uint256 amount) external {
+    //     require(msg.sender == address(mainToken), NotAuthorized());
+
+    //     //todo: performing the move of a locked equity if from or to addresses are locked
+    //     // when equity moves outside it becomes uncontrolled
+    //     // locked equity is released first
+    // }
+
+    function totalUnreleasedMainTokens() external view returns (uint256) {
+        return unreleasedMainTokens;
     }
 
     function getMainToken() external view returns (address) {
