@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../../../interfaces/IEvaluator.sol";
-import "../../../interfaces/IDealCell.sol";
-import "../interfaces/Structs.sol";
+import {EvaluationResult} from "../../../interfaces/Structs.sol";
+import {IEvaluator} from "../../../interfaces/IEvaluator.sol";
+import {IDealCell} from "../../../interfaces/IDealCell.sol";
+import {Milestone} from "../interfaces/Structs.sol";
 
 contract BasicEvaluator is IEvaluator {
     address public immutable dac;

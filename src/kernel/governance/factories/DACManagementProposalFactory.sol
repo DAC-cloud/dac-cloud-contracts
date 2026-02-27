@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../DACManagementProposals.sol";
-import "../DACManagementProposal.sol";
+import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {DACManagementProposalType} from "../DACManagementProposals.sol";
+import {DACManagementProposal} from "../DACManagementProposal.sol";
 
 contract DACManagementProposalFactory {
     function deployManagementProposal(
@@ -36,7 +36,7 @@ contract DACManagementProposalFactory {
 
         //todo: recalculate quorum from percent to balance
 
-        Proposal prop = new DACManagementProposal(
+        DACManagementProposal prop = new DACManagementProposal(
             id, 
             dac, 
             token, 

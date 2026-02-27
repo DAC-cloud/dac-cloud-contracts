@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../../../kernel/Deal.sol";
-import "../../../kernel/governance/DealManagementProposal.sol";
-import "../governance/CoreDealManagementProposals.sol";
-import "./Permit2Treasury.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ProposalParams, DealParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {Deal} from "../../../kernel/Deal.sol";
+import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
+import {IDealCell} from "../../../interfaces/IDealCell.sol";
+import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
+import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
+import {Permit2Treasury, Permit2TreasuryLibrary} from "./Permit2Treasury.sol";
 
 contract TreasuryDeal is Deal {
     Permit2Treasury public immutable treasury;
@@ -72,7 +77,7 @@ contract TreasuryDeal is Deal {
         );
 
         if (params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {
-            require(earlyReturns, EarlyReturnsNotAllowed());
+            require(IDealCell(dealCell).allowEarlyReturns(), EarlyReturnsNotAllowed());
         }
     }
 
@@ -96,19 +101,16 @@ contract TreasuryDeal is Deal {
         }
 
         else if (typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {
-            require(earlyReturns, EarlyReturnsNotAllowed());
+            require(IDealCell(dealCell).allowEarlyReturns(), EarlyReturnsNotAllowed());
 
             address token = proposal.target();
             (uint256 amount) = abi.decode(proposal.data(), (uint256));
             
             treasury.returnCapitalToDeal(token, amount);
 
-            //todo: do properly with dealCell
-
-            IDACCellAdapter(dacCell).depositTreasury(token, amount);
-            //returnedCapital[token] += amount;
+            require(IERC20(token).approve(dealCell, amount), TransferFailed());
             
-            emit CapitalReturned(dacCell, id, token, amount);
+            IDealCellAdapter(dealCell).transferCapital(token, amount);
         }
 
         else if (typ == CoreDealManagementType.ASSIGN_CLAIMER) {
@@ -139,7 +141,7 @@ contract TreasuryDeal is Deal {
         // In case of treasury earlyReturns only makes capital withdraw possible,
         // but pigs need to always use proposals to manage it.
 
-        if (earlyReturns) {
+        if (IDealCell(dealCell).allowEarlyReturns()) {
             require(block.timestamp > IDealCell(dealCell).dealDeadline(), CapitalWithdrawNotSupported());
         }
 

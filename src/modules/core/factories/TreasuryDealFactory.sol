@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../../../interfaces/modules/IDealFactory.sol";
-import "../deals/TreasuryDeal.sol";
+import {DealParams} from "../../../interfaces/Structs.sol";
+import {IDealFactory} from "../../../interfaces/modules/IDealFactory.sol";
+import {TreasuryDeal} from "../deals/TreasuryDeal.sol";
 
 contract TreasuryDealFactory is IDealFactory {
     address public immutable PERMIT2;
@@ -19,16 +19,16 @@ contract TreasuryDealFactory is IDealFactory {
         address mpToken,
         address lpToken
     ) external returns (address dealAddr) {
-        Deal deal = new TreasuryDeal(
-            id,
-            dac,
-            params.governanceFactory,
-            mpToken,
-            lpToken,
-            params.proposer,
-            PERMIT2
+        dealAddr = address(
+            new TreasuryDeal(
+                id,
+                dac,
+                params.governanceFactory,
+                mpToken,
+                lpToken,
+                params.proposer,
+                PERMIT2
+            )
         );
-
-        dealAddr = address(deal);
     }
 }

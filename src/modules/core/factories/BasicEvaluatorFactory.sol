@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../../../interfaces/modules/IEvaluatorFactory.sol";
-import "../evaluators/BasicEvaluator.sol";
+import {DealParams} from "../../../interfaces/Structs.sol";
+import {IEvaluatorFactory} from "../../../interfaces/modules/IEvaluatorFactory.sol";
+import {Milestone} from "../interfaces/Structs.sol";
+import {BasicEvaluator} from "../evaluators/BasicEvaluator.sol";
 
 contract BasicEvaluatorFactory is IEvaluatorFactory {
     uint256 public nextId = 1;

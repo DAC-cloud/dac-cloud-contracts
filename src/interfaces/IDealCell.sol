@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
-
 interface IDealCell {
     function stakeToken() external view returns (address);
 
@@ -18,6 +16,7 @@ interface IDealCell {
     function getInvestedCapital(address token) external view returns (uint256);
     function getMainRewardsLimit() external view returns (uint256);
     
+    function allowEarlyReturns() external view returns (bool);
     function isValidDeal() external pure returns (bool);
     function isApproved() external view returns (bool);
     function isClosed() external view returns (bool);

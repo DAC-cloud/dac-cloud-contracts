@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/IDACFactory.sol";
-import "../DealManager.sol";
+import {IDACFactory} from "../../interfaces/IDACFactory.sol";
+import {DealManager} from "../DealManager.sol";
 
 contract DealManagerFactory {
     

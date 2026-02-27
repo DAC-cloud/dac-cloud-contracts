@@ -1,25 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "../interfaces/Structs.sol";
-import "../interfaces/IDACCell.sol";
-import "../interfaces/IDACCellAdapter.sol";
-import "../interfaces/IDealAdmin.sol";
-import "../interfaces/IModuleFactory.sol";
-import "../interfaces/IEvaluator.sol";
-import "../interfaces/IDACManagementFactory.sol";
-import "../interfaces/IDealManager.sol";
-import "../interfaces/IDealCell.sol";
-import "./interfaces/Structs.sol";
-import "./interfaces/IDealManagerAdapter.sol";
-import "./tokens/MainToken.sol";
-import "./tokens/AgentToken.sol";
-import "./factories/DealManagerFactory.sol";
-import "./governance/DACManagementProposal.sol";
-import "./governance/DACManagementProposals.sol";
-import "./libraries/DACCellGovernance.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ProposalParams, VotingConfig, DealParams, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
+import {IVoting} from "../interfaces/IVoting.sol";
+import {IDACCell} from "../interfaces/IDACCell.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
+import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
+import {IEvaluator} from "../interfaces/IEvaluator.sol";
+import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
+import {IDealManager} from "../interfaces/IDealManager.sol";
+import {IDealCell} from "../interfaces/IDealCell.sol";
+import {DealState, CapitalCallState} from "./interfaces/Structs.sol";
+import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
+import {MainToken} from "./tokens/MainToken.sol";
+import {AgentToken} from "./tokens/AgentToken.sol";
+import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
+import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
+import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
+import {DACCellGovernance} from "./libraries/DACCellGovernance.sol";
 
 contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     

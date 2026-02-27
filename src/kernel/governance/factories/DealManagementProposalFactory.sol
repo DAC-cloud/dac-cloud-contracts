@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../AbstractDealManagementProposals.sol";
-import "../DealManagementProposal.sol";
+import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {AbstractDealManagementType} from "../AbstractDealManagementProposals.sol";
+import {DealManagementProposal} from "../DealManagementProposal.sol";
 
 abstract contract DealManagementProposalFactory {
     function deployManagementProposal(
@@ -35,7 +35,7 @@ abstract contract DealManagementProposalFactory {
 
             //todo: recalculate quorum from percent to balance
 
-            Proposal prop = new DealManagementProposal(
+            DealManagementProposal prop = new DealManagementProposal(
                 id, 
                 dac,
                 deal,
@@ -64,7 +64,7 @@ abstract contract DealManagementProposalFactory {
 
             //todo: recalculate quorum from percent to balance
 
-            Proposal prop = new DealManagementProposal(
+            DealManagementProposal prop = new DealManagementProposal(
                 id, 
                 dac,
                 deal,

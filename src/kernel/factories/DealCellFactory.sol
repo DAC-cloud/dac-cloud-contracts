@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/IDACFactory.sol";
-import "../DealCell.sol";
+import {IDACFactory} from "../../interfaces/IDACFactory.sol";
+import {DealCell} from "../DealCell.sol";
 
 library DealCellFactory {
     function deployCell(

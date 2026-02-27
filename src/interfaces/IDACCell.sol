@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
+import {CapitalCall, ProposalParams, VotingConfig, LegalWrapper} from "./Structs.sol";
 
 interface IDACCell {
     function getCapitalCall(bytes32 callHash) external returns (CapitalCall memory call);

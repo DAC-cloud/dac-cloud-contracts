@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../interfaces/Structs.sol";
-import "../../../interfaces/modules/IDealFactory.sol";
-import "../deals/DACDeal.sol";
+import {DealParams} from "../../../interfaces/Structs.sol";
+import {IDealFactory} from "../../../interfaces/modules/IDealFactory.sol";
+import {DACDeal} from "../deals/DACDeal.sol";
 
 contract DACDealFactory is IDealFactory {
     
@@ -14,15 +14,15 @@ contract DACDealFactory is IDealFactory {
         address mpToken,
         address lpToken
     ) external returns (address dealAddr) {
-        Deal deal = new DACDeal(
-            id,
-            dac,
-            params.governanceFactory,
-            mpToken,
-            lpToken,
-            params.proposer
+        dealAddr = address(
+            new DACDeal(
+                id,
+                dac,
+                params.governanceFactory,
+                mpToken,
+                lpToken,
+                params.proposer
+            )
         );
-
-        dealAddr = address(deal);
     }
 }

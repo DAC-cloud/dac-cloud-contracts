@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../../../interfaces/Structs.sol";
-import "../CoreDealManagementProposals.sol";
-import "../../../../kernel/governance/DealManagementProposal.sol";
-import "../../../../kernel/governance/factories/DealManagementProposalFactory.sol";
+import {ProposalParams, VotingConfig} from "../../../../interfaces/Structs.sol";
+import {CoreDealManagementType} from "../CoreDealManagementProposals.sol";
+import {DealManagementProposal} from "../../../../kernel/governance/DealManagementProposal.sol";
+import {DealManagementProposalFactory} from "../../../../kernel/governance/factories/DealManagementProposalFactory.sol";
 
 contract CoreManagementProposalFactory is DealManagementProposalFactory {
     function moduleManagementProposalQuorum(

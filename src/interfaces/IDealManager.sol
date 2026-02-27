@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
-
 interface IDealManager {
     function deals(uint256 id) external view returns (address);
     function isRecoverable(uint256 id) external view returns (bool);

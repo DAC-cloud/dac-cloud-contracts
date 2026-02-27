@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
+import {DACConfig} from "./Structs.sol";
 
 interface IDACFactory {
     

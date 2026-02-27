@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/Structs.sol";
-import "./Proposal.sol";
+import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
+import {Proposal} from "./Proposal.sol";
 
 contract DACManagementProposal is Proposal {
     uint256 public immutable id;

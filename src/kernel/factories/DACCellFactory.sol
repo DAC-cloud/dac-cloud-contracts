@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/IDACFactory.sol";
-import "../DACCell.sol";
+import {IDACFactory} from "../../interfaces/IDACFactory.sol";
+import {DACCell} from "../DACCell.sol";
 
 contract DACCellFactory {
 

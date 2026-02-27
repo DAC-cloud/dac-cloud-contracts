@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../interfaces/IModuleFactory.sol";
+import {CapitalCall} from "../../interfaces/Structs.sol";
+import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
 
 struct DealState {
     uint256 id;

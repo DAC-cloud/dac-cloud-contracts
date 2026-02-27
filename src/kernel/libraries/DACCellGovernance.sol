@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "../../interfaces/Structs.sol";
-import "../../interfaces/IDealAdmin.sol";
-import "../../interfaces/IEvaluator.sol";
-import "../../interfaces/IDACManagementFactory.sol";
-import "../../interfaces/IModuleFactory.sol";
-import "../../interfaces/IDealManager.sol";
-import "../../interfaces/IDealCell.sol";
-import "../interfaces/Structs.sol";
-import "../interfaces/IDealManagerAdapter.sol";
-import "../tokens/MainToken.sol";
-import "../tokens/AgentToken.sol";
-import "../governance/DACManagementProposal.sol";
-import "../governance/DACManagementProposals.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ProposalParams, VotingConfig, DealParams, CapitalCall, EvaluationResult} from "../../interfaces/Structs.sol";
+import {IDealAdmin} from "../../interfaces/IDealAdmin.sol";
+import {IEvaluator} from "../../interfaces/IEvaluator.sol";
+import {IDACManagementFactory} from "../../interfaces/IDACManagementFactory.sol";
+import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
+import {IDealManager} from "../../interfaces/IDealManager.sol";
+import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {DealState, CapitalCallState} from "../interfaces/Structs.sol";
+import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
+import {MainToken} from "../tokens/MainToken.sol";
+import {AgentToken} from "../tokens/AgentToken.sol";
+import {DACManagementProposal} from "../governance/DACManagementProposal.sol";
+import {DACManagementProposalType} from "../governance/DACManagementProposals.sol";
 
 interface IDACGovernanceAdapter {
     function createManagementProposal(ProposalParams calldata params)

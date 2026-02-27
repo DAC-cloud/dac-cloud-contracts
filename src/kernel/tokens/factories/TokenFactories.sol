@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../AgentToken.sol";
-import "../MainToken.sol";
-import "../StakedAgent.sol";
+import {AgentToken} from "../AgentToken.sol";
+import {MainToken} from "../MainToken.sol";
+import {StakedAgent} from "../StakedAgent.sol";
 
 library MainTokenLib {
     function deployMainToken(

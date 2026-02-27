@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../interfaces/IModuleFactory.sol";
-import "../interfaces/modules/IDealFactory.sol";
-import "../interfaces/modules/IEvaluatorFactory.sol";
-import "./factories/DealCellFactory.sol";
-import "./DealCell.sol";
-import "./Deal.sol";
+import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
+import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
+import {IDealFactory} from "../interfaces/modules/IDealFactory.sol";
+import {IEvaluatorFactory} from "../interfaces/modules/IEvaluatorFactory.sol";
+import {DealCellFactory} from "./factories/DealCellFactory.sol";
+import {DealCell} from "./DealCell.sol";
+import {Deal} from "./Deal.sol";
 
 abstract contract ModuleFactory is IModuleFactory {
     function getDealFactory(

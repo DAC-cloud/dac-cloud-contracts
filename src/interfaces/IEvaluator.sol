@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
+import {EvaluationResult} from "./Structs.sol";
 
 interface IEvaluator {
     function permitMint(address deal, address to, uint256 amount) external returns (bool permit);

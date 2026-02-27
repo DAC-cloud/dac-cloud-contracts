@@ -4,22 +4,23 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/Structs.sol";
-import "../interfaces/IDealCell.sol";
-import "../interfaces/IDealManager.sol";
-import "../interfaces/IDACCellAdapter.sol";
-import "../interfaces/IDeal.sol";
-import "../interfaces/IDealAdmin.sol";
-import "../interfaces/IDealManagementProposalFactory.sol";
-import "./interfaces/IDealCellAdapter.sol";
-import "./tokens/MainToken.sol";
-import "./tokens/AgentToken.sol";
-import "./tokens/StakedAgent.sol";
-import "./libraries/DealCellGovernance.sol";
-import "./governance/DealManagementProposal.sol";
-import "./governance/AbstractDealManagementProposals.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DealParams, ProposalParams, VotingConfig} from "../interfaces/Structs.sol";
+import {IVoting} from "../interfaces/IVoting.sol";
+import {IDealCell} from "../interfaces/IDealCell.sol";
+import {IDealManager} from "../interfaces/IDealManager.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDeal} from "../interfaces/IDeal.sol";
+import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
+import {IDealManagementProposalFactory} from "../interfaces/IDealManagementProposalFactory.sol";
+import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
+import {MainToken} from "./tokens/MainToken.sol";
+import {AgentToken} from "./tokens/AgentToken.sol";
+import {StakedAgent} from "./tokens/StakedAgent.sol";
+import {DealCellGovernance} from "./libraries/DealCellGovernance.sol";
+import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
+import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 
 abstract contract Deal is IDeal, ReentrancyGuard {
 
@@ -33,7 +34,9 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     error NotStakedAgent();
 
     error NotWhitelistDeal();
-    error DealIsNotApproved();
+    
+    error ProposalNotSupported();
+
     error DealIsClosed();
     error DealIsNotClosed();
     error DealInLiquidation();
@@ -44,13 +47,10 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     error NoClaimableRewards();
     error InsufficientRewards();
 
-    error NotEnoughBalance();
-
     error TrancheNotExists();
     error TrancheAlreadySettled();
     error TransferFailed();
     
-    error ProposalNotSupported();
     error InvalidProposal();
     error AlreadyExecuted();
 
@@ -81,12 +81,6 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     // Link with document management system
     string public linkHash;
 
-    // Deal state
-    bool internal approved;
-    bool internal closed;
-    bool internal recovery;
-    bool internal earlyReturns;
-
     // Governance
     uint256 private nextId = 1;
     mapping(uint256 => address) private proposals;
@@ -94,29 +88,9 @@ abstract contract Deal is IDeal, ReentrancyGuard {
 
     VotingConfig private _votingConfig;
     
-    // Global events, indexed by DAC and deal id
-    event DealInitialized(address indexed dac, uint256 indexed id, DealParams params);
-    event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-    event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-    event DealActivated(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
-    event TrancheRequested(address indexed dac, uint256 indexed id, uint256 tranche, address token, uint256 amount);
-    event RewardsAllocated(address indexed dac, uint256 indexed id, uint256 reward);
-    event StakesSlashed(address indexed dac, uint256 indexed id, uint256 slashAmount);
-    event RewardsClaimed(address indexed dac, address indexed agent, uint256 amount);
-    event CapitalReturned(address indexed dac, uint256 indexed id, address token, uint256 amount);
-    event DeadlineExtended(address indexed dac, uint256 indexed id, uint256 newDeadline);
-    event DealClosed(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
-    event DealRecovered(address indexed dac, uint256 indexed id, address liquidator);
-    
     // Deal specific events, indexed by Deal address, proposal id, or agent
-    event MessageReceived(bytes4 messageKind, bytes message);
-    event LegalWrapperMessageReceived(address indexed wrapper, bytes4 messageKind, bytes message);
-    event Invited(address indexed invitee, bool canInvite);
-    
-    event DealManagementProposalCreated(uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
-    event DealManagementProposalExecuted(uint256 indexed id, bytes4 indexed typ);
-    event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
-    event EarlyReturnsToggled(uint256 indexed id, bool enabled);
+    event DealManagementProposalExecuted(address indexed cell,uint256 indexed id, bytes4 indexed typ);
+    event VotingConfigUpdate(address indexed cell, uint256 indexed id, VotingConfig config);
 
     constructor(
         uint256 _id,
@@ -252,36 +226,12 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function _beforeCreateProposal(ProposalParams calldata params) internal virtual {}
     function _afterCreateProposal(uint256 proposalId, ProposalParams calldata params) internal virtual {}
 
-    function createStakedMPProposal(ProposalParams calldata params) external returns (uint256 proposalId) {
-        if (msg.sender != address(this)) {
-            _onlyStakedMPHolder();
-
-            require(
-                IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig().qualification,
-                NotEnoughBalance()
-            );
-        }
-
+    function createStakedAgentProposal(ProposalParams calldata params) external returns (uint256 proposalId) {
         _beforeCreateProposal(params);
 
-        if (!approved) {
-            require(
-                (
-                    params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
-                    params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
-                    params.typ == AbstractDealManagementType.TOGGLE_WHITELIST
-                ),
-                DealIsNotApproved()
-            );
-        }
+        bool isBase = DealCellGovernance.checkStakedAgentProposal(params, dealCell, _votingConfig);
 
-        if (!(
-            params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
-            params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
-            params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
-            params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
-            params.typ == AbstractDealManagementType.ADD_STAKE
-        )) {
+        if (!isBase) {
             // If type is not a basic Deal governance type, requiering derived contracts to validate
             require(
                 _checkStackedMPProposalSupported(params),
@@ -291,17 +241,14 @@ abstract contract Deal is IDeal, ReentrancyGuard {
 
         proposalId = nextId++;
 
-        address prop = IDealManagementProposalFactory(governanceFactory).deployProposal(
+        DealCellGovernance.createStakedAgentProposal(
             proposalId,
             params,
-            address(this),
-            address(this),
-            _votingConfig
+            dealCell,
+            _votingConfig,
+            governanceFactory,
+            proposals
         );
-
-        proposals[proposalId] = prop;
-
-        emit DealManagementProposalCreated(proposalId, params.typ, params.target, params.i, params.data);
 
         _afterCreateProposal(proposalId, params);
     }
@@ -329,7 +276,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
                 (VotingConfig)
             );
 
-            emit VotingConfigUpdate(proposalId, _votingConfig);
+            emit VotingConfigUpdate(dealCell, proposalId, _votingConfig);
         }
 
         else if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
@@ -337,16 +284,16 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         }
 
         else if (typ == AbstractDealManagementType.ADD_STAKE) {
-            address staker = DealManagementProposal(prop).target();
-            uint256 stakeAmount = uint256(DealManagementProposal(prop).i());
-            
-            IDealCellAdapter(dealCell).addStake(staker, stakeAmount);
+            IDealCellAdapter(dealCell).addStake(
+                DealManagementProposal(prop).target(), 
+                uint256(DealManagementProposal(prop).i())
+            );
         }
 
         else if (typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS) {
-            earlyReturns = abi.decode(DealManagementProposal(prop).data(), (bool));
-
-            emit EarlyReturnsToggled(proposalId, earlyReturns);
+            IDealCellAdapter(dealCell).toggleEarlyReturns(
+                abi.decode(DealManagementProposal(prop).data(), (bool))
+            );
         }
 
         else if (typ == AbstractDealManagementType.TOGGLE_WHITELIST) {
@@ -360,7 +307,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
             _executeModuleManagementProposal(DealManagementProposal(prop));
         }
         
-        emit DealManagementProposalExecuted(proposalId, typ);
+        emit DealManagementProposalExecuted(dealCell, proposalId, typ);
 
         _afterExecuteProposal(proposalId);
     }
@@ -381,10 +328,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     }
 
     function getCell() external view returns (address) { return dealCell; }
-    function isValidDeal() external pure returns (bool) { return true; }
-    function isApproved() external view returns (bool) { return approved; }
-    function isClosed() external view returns (bool) { return closed; }
-
+    
     function getProposal(uint256 proposalId) public view returns (address) {
         require(proposals[proposalId] != address(0), InvalidProposal());
         return proposals[proposalId];

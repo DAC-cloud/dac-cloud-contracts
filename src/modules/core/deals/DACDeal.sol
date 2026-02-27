@@ -1,23 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../../../interfaces/Structs.sol";
-import "../../../interfaces/IDACCell.sol";
-import "../../../interfaces/IDACFactory.sol";
-import "../../../kernel/governance/DealManagementProposal.sol";
-import "../../../kernel/governance/AbstractDealManagementProposals.sol";
-import "../../../kernel/tokens/AgentToken.sol";
-import "../../../kernel/tokens/MainToken.sol";
-import "../../../kernel/Deal.sol";
-import "../interfaces/Structs.sol";
-import "../governance/CoreDealManagementProposals.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
+import {IVoting} from "../../../interfaces/IVoting.sol";
+import {IDACCell} from "../../../interfaces/IDACCell.sol";
+import {IDealCell} from "../../../interfaces/IDealCell.sol";
+import {IDACFactory} from "../../../interfaces/IDACFactory.sol";
+import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
+import {AbstractDealManagementType} from "../../../kernel/governance/AbstractDealManagementProposals.sol";
+import {AgentToken} from "../../../kernel/tokens/AgentToken.sol";
+import {MainToken} from "../../../kernel/tokens/MainToken.sol";
+import {Deal} from "../../../kernel/Deal.sol";
+import {IDACCellAdapter} from "../../../interfaces/IDACCellAdapter.sol";
+import {DACDealConfig} from "../interfaces/Structs.sol";
+import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
 
 contract DACDeal is Deal {
 
     error NoFunding();
+    error NotEnoughBalance();
     error ConfigMismatchParams();
     error NotAllowed();
     error UnsupportedProposal();
@@ -160,7 +164,7 @@ contract DACDeal is Deal {
                 // With early returns, all capital in any of funding tokens is siphoned back
                 // to chickens by any manager will, and automatically counts into returns
                 // so we make reinvest not possible
-                require(!earlyReturns, NotAllowed());
+                require(!IDealCell(dealCell).allowEarlyReturns(), NotAllowed());
             }
             else {
                 address lpTokenAddress = IDACCellAdapter(managedEntity).getMainToken();
@@ -198,7 +202,7 @@ contract DACDeal is Deal {
                 data: abi.encode(true)
             });
 
-            uint256 proposalId = this.createStakedMPProposal(dealProposalParams);
+            uint256 proposalId = this.createStakedAgentProposal(dealProposalParams);
 
             emit ChildLPVoteCreated(childProposalId, proposalId);
         }

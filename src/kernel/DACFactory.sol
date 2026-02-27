@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../interfaces/IDACFactory.sol";
-import "./factories/DACCellFactory.sol";
-import "./DACCell.sol";
-import "./tokens/MainToken.sol";
-import "./tokens/AgentToken.sol";
-import "./libraries/DACDeployment.sol";
-import "./tokens/factories/TokenFactories.sol";
+import {DACConfig} from "../interfaces/Structs.sol";
+import {IDACFactory} from "../interfaces/IDACFactory.sol";
+import {DACCellFactory} from "./factories/DACCellFactory.sol";
+import {DACCell} from "./DACCell.sol";
+import {MainToken} from "./tokens/MainToken.sol";
+import {AgentToken} from "./tokens/AgentToken.sol";
+import {DACDeployment} from "./libraries/DACDeployment.sol";
+import {MainTokenLib, AgentTokenLib} from "./tokens/factories/TokenFactories.sol";
 
 contract DACFactory is IDACFactory {
     error Create2Failed();

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../../kernel/ModuleFactory.sol";
-import "./CoreModuleDeals.sol";
+import {IDealFactory} from "../../interfaces/modules/IDealFactory.sol";
+import {IEvaluatorFactory} from "../../interfaces/modules/IEvaluatorFactory.sol";
+import {ModuleFactory} from "../../kernel/ModuleFactory.sol";
+import {CoreDealType, CoreEvaluatorType} from "./CoreModuleDeals.sol";
 
 contract CoreModuleFactory is ModuleFactory {
     function isActive() external pure returns (bool) { return true; }

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Structs.sol";
-import "../governance/DACManagementProposal.sol";
+import {DACManagementProposal} from "../governance/DACManagementProposal.sol";
 
 interface IDealManagerAdapter {
     function legalWrapperMessage(uint256 id, bytes4 kind, bytes calldata message) external;

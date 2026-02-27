@@ -4,23 +4,25 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/Structs.sol";
-import "../interfaces/IDACCellAdapter.sol";
-import "../interfaces/IDeal.sol";
-import "../interfaces/IDealAdmin.sol";
-import "../interfaces/IDealManagementProposalFactory.sol";
-import "../interfaces/IDealCell.sol";
-import "../interfaces/IDealManager.sol";
-import "./interfaces/IDealManagerAdapter.sol";
-import "./tokens/MainToken.sol";
-import "./tokens/AgentToken.sol";
-import "./tokens/StakedAgent.sol";
-import "./tokens/factories/TokenFactories.sol";
-import "./governance/DealManagementProposal.sol";
-import "./governance/AbstractDealManagementProposals.sol";
-import "./libraries/DealCellGovernance.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DealParams, ProposalParams, VotingConfig} from "../interfaces/Structs.sol";
+import {IVoting} from "../interfaces/IVoting.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDeal} from "../interfaces/IDeal.sol";
+import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
+import {IDealManagementProposalFactory} from "../interfaces/IDealManagementProposalFactory.sol";
+import {IDealCell} from "../interfaces/IDealCell.sol";
+import {IDealManager} from "../interfaces/IDealManager.sol";
+import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
+import {Tranche} from "./interfaces/Structs.sol";
+import {MainToken} from "./tokens/MainToken.sol";
+import {AgentToken} from "./tokens/AgentToken.sol";
+import {StakedAgent} from "./tokens/StakedAgent.sol";
+import {StakedAgentLib} from "./tokens/factories/TokenFactories.sol";
+import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
+import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
+import {DealCellGovernance} from "./libraries/DealCellGovernance.sol";
 
 contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
 
@@ -258,7 +260,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         
         if (_fundingTranches[trancheId].amount > 0) {
             require(IERC20(token).transfer(address(deal), _fundingTranches[trancheId].amount), TransferFailed());
-            
+
             investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
         }
         _fundingTranches[trancheId].settled = true;
@@ -328,6 +330,17 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         });
 
         IDealManager(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(id, prop.id());
+    }
+
+    function transferCapital(address _token, uint256 amount) external onlyDeal {
+        require(IERC20(_token).transferFrom(address(deal), address(this), amount), TransferFailed());
+
+        require(IERC20(_token).approve(dacCell, amount), TransferFailed());
+
+        IDACCellAdapter(dacCell).depositTreasury(_token, amount);
+        returnedCapital[_token] += amount;
+
+        emit CapitalReturned(dacCell, id, _token, amount);
     }
 
     function withdrawCapital() external nonReentrant {
@@ -436,6 +449,12 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         }
     }
 
+    function toggleEarlyReturns(uint256 propId, bool _ealryReturns) external onlyDeal {
+        earlyReturns = _ealryReturns;
+
+        emit EarlyReturnsToggled(propId, earlyReturns);
+    }
+
     function addStake(address staker, uint256 amount) external onlyDeal {
         // if the deal is not approved adding stakes not allowed
         require(approved, DealIsNotApproved());
@@ -474,6 +493,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external view returns (bool) { return approved; }
     function isClosed() external view returns (bool) { return closed; }
+    function allowEarlyReturns() external view returns (bool) { return earlyReturns; }
 
     function fundingTokens() public view returns (address[] memory) {
         return _fundingTokens;

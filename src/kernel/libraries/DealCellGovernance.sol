@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../../interfaces/Structs.sol";
-import "../../interfaces/IDeal.sol";
-import "../../interfaces/IDealCell.sol";
-import "../interfaces/Structs.sol";
-import "../tokens/StakedAgent.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ProposalParams, VotingConfig, DealParams} from "../../interfaces/Structs.sol";
+import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
+import {IDeal} from "../../interfaces/IDeal.sol";
+import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {IDealManagementProposalFactory} from "../../interfaces/IDealManagementProposalFactory.sol";
+import {Tranche, DealState} from "../interfaces/Structs.sol";
+import {StakedAgent} from "../tokens/StakedAgent.sol";
+import {AbstractDealManagementType} from "../governance/AbstractDealManagementProposals.sol";
 
 interface IDealGovernanceAdapter {
     function closeDeal()
@@ -17,6 +20,9 @@ library DealCellGovernance {
 
     error DeadlineNotPassed();
     error NotStakedAgent();
+    error NotEnoughBalance();
+
+    error DealIsNotApproved();
 
     error InsufficientRewards();
 
@@ -27,6 +33,63 @@ library DealCellGovernance {
     event RewardsAllocated(address indexed dac, uint256 indexed id, uint256 reward);
     event StakesSlashed(address indexed dac, uint256 indexed id, uint256 slashAmount);
     
+    event DealManagementProposalCreated(address indexed cell, uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
+
+    function checkStakedAgentProposal(
+        ProposalParams calldata params,
+        address dealCell,
+        VotingConfig memory votingConfig
+    ) public view returns (bool isBase) {
+        if (msg.sender != address(this)) {
+            require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NotStakedAgent());
+
+            require(
+                IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig.qualification,
+                NotEnoughBalance()
+            );
+        }
+
+        if (!IDealCell(dealCell).isApproved()) {
+            require(
+                (
+                    params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
+                    params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
+                    params.typ == AbstractDealManagementType.TOGGLE_WHITELIST
+                ),
+                DealIsNotApproved()
+            );
+        }
+
+        isBase =(
+            params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
+            params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
+            params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
+            params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
+            params.typ == AbstractDealManagementType.ADD_STAKE
+        );
+    }
+
+    function createStakedAgentProposal(
+        uint256 id,
+        ProposalParams calldata params,
+        address dealCell,
+        VotingConfig memory votingConfig,
+        address governanceFactory,
+        mapping(uint256 => address) storage proposals
+    ) public {
+        address prop = IDealManagementProposalFactory(governanceFactory).deployProposal(
+            id,
+            params,
+            address(this),
+            address(this),
+            votingConfig
+        );
+
+        proposals[id] = prop;
+
+        emit DealManagementProposalCreated(dealCell, id, params.typ, params.target, params.i, params.data);
+    }
+
     function prepareWithdrawal(
         address dealCell
     ) public {
@@ -75,8 +138,6 @@ library DealCellGovernance {
                     TransferFailed()
                 );
             }
-
-            //todo: transfer from deal
 
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;

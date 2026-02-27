@@ -1,25 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "../interfaces/Structs.sol";
-import "../interfaces/IDACCell.sol";
-import "../interfaces/IDACCellAdapter.sol";
-import "../interfaces/IDealAdmin.sol";
-import "../interfaces/IModuleFactory.sol";
-import "../interfaces/IEvaluator.sol";
-import "../interfaces/IDACManagementFactory.sol";
-import "../interfaces/IDealCell.sol";
-import "./interfaces/Structs.sol";
-import "./interfaces/IDealManagerAdapter.sol";
-import "./tokens/MainToken.sol";
-import "./tokens/AgentToken.sol";
-import "./governance/DACManagementProposal.sol";
-import "./governance/DACManagementProposals.sol";
-import "./libraries/DACCellGovernance.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {DealParams, ProposalParams} from "../interfaces/Structs.sol";
+import {IDACCell} from "../interfaces/IDACCell.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
+import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
+import {IEvaluator} from "../interfaces/IEvaluator.sol";
+import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
+import {IDealCell} from "../interfaces/IDealCell.sol";
+import {Tranche, DealState} from "./interfaces/Structs.sol";
+import {IDealManager} from "../interfaces/IDealManager.sol";
+import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
+import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
+import {MainToken} from "./tokens/MainToken.sol";
+import {AgentToken} from "./tokens/AgentToken.sol";
+import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
+import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
+import {DACCellGovernance} from "./libraries/DACCellGovernance.sol";
 
-contract DealManager is IDealManager, ReentrancyGuard {
+contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     
     // Errors
     error NotAllowed();
@@ -121,7 +123,7 @@ contract DealManager is IDealManager, ReentrancyGuard {
     function createTrancheProposal(
         uint256 dealId,
         uint256 trancheId
-    ) external onlyDealCell nonReentrant {
+    ) external onlyDealCell nonReentrant override(IDealManager, IDealManagerAdapter) {
         DACCellGovernance.createTrancheProposal(
             address(this),
             dealId,
@@ -154,7 +156,7 @@ contract DealManager is IDealManager, ReentrancyGuard {
         IDealCellAdapter(deal).withdrawCapital();
     }
 
-    function isRecoverable(uint256 id) external view returns (bool) {
+    function isRecoverable(uint256 id) external view override(IDealManager, IDealManagerAdapter) returns (bool) {
         address deal = deals[id];
         require(deal != address(0), InvalidDeal(deal));
         
