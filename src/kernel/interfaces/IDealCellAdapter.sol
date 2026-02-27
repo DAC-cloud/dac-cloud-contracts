@@ -16,5 +16,7 @@ interface IDealCellAdapter {
     
     function toggleEarlyReturns(bool earlyReturns) external;
     function toggleWhitelist(bool whitelistOnly) external;
+    function enableVeto() external;
+
     function addStake(address staker, uint256 amount) external;
 }

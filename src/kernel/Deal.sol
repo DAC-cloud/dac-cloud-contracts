@@ -1,23 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {DealParams, ProposalParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
-import {IDealManager} from "../interfaces/IDealManager.sol";
-import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
-import {IDeal} from "../interfaces/IDeal.sol";
-import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
-import {IDealManagementProposalFactory} from "../interfaces/IDealManagementProposalFactory.sol";
 import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
-import {MainToken} from "./tokens/MainToken.sol";
-import {AgentToken} from "./tokens/AgentToken.sol";
-import {StakedAgent} from "./tokens/StakedAgent.sol";
+import {IDeal} from "../interfaces/IDeal.sol";
 import {DealCellGovernance} from "./libraries/DealCellGovernance.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
@@ -234,7 +224,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         if (!isBase) {
             // If type is not a basic Deal governance type, requiering derived contracts to validate
             require(
-                _checkStackedMPProposalSupported(params),
+                _checkStackedAgentProposalSupported(params),
                 ProposalNotSupported()
             );
         }
@@ -244,6 +234,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         DealCellGovernance.createStakedAgentProposal(
             proposalId,
             params,
+            dacCell,
             dealCell,
             _votingConfig,
             governanceFactory,
@@ -253,7 +244,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         _afterCreateProposal(proposalId, params);
     }
 
-    function _checkStackedMPProposalSupported(ProposalParams calldata) internal virtual returns (bool supported) {
+    function _checkStackedAgentProposalSupported(ProposalParams calldata) internal virtual returns (bool supported) {
         // Concrete Deal implementation overrides this to indicate if the governance proposal is supported
         supported = false;
     }
@@ -261,7 +252,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function _beforeExecuteProposal(uint256 proposalId) internal virtual {}
     function _afterExecuteProposal(uint256 proposalId) internal virtual {}
 
-    function executeStakedMPProposal(uint256 proposalId) external onlyAfterStakedMPVote(proposalId) {
+    function executeStakedAgentProposal(uint256 proposalId) external onlyAfterStakedAgentVote(proposalId) {
         require(!executed[id], AlreadyExecuted());
         executed[id] = true;
 
@@ -341,13 +332,13 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         _;
     }
 
-    modifier onlyStakedMPHolder() {
-        _onlyStakedMPHolder();
+    modifier onlyStakedAgent() {
+        _onlyStakedAgent();
         _;
     }
 
-    modifier onlyAfterStakedMPVote(uint256 proposalId) {
-        _onlyAfterStakedMPVote(proposalId);
+    modifier onlyAfterStakedAgentVote(uint256 proposalId) {
+        _onlyAfterStakedAgentVote(proposalId);
         _;
     }
 
@@ -355,11 +346,11 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         require(msg.sender == dealCell, NotAuthorized());
     }
 
-    function _onlyStakedMPHolder() internal view {
+    function _onlyStakedAgent() internal view {
         require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NoStake());
     }
     
-    function _onlyAfterStakedMPVote(uint256 proposalId) internal view {
+    function _onlyAfterStakedAgentVote(uint256 proposalId) internal view {
         require(
             IVoting(proposals[proposalId]).isResolved() &&
             IVoting(proposals[proposalId]).outcome(),

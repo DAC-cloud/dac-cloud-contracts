@@ -2,14 +2,15 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ProposalParams, VotingConfig, DealParams} from "../../interfaces/Structs.sol";
+import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
 import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../../interfaces/IDeal.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IDealManagementProposalFactory} from "../../interfaces/IDealManagementProposalFactory.sol";
-import {Tranche, DealState} from "../interfaces/Structs.sol";
+import {AgentToken} from "../tokens/AgentToken.sol";
 import {StakedAgent} from "../tokens/StakedAgent.sol";
 import {AbstractDealManagementType} from "../governance/AbstractDealManagementProposals.sol";
+import {Tranche} from "../interfaces/Structs.sol";
 
 interface IDealGovernanceAdapter {
     function closeDeal()
@@ -18,11 +19,20 @@ interface IDealGovernanceAdapter {
 
 library DealCellGovernance {
 
+    event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
+    event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
+
+    error NoStake();
+
     error DeadlineNotPassed();
     error NotStakedAgent();
     error NotEnoughBalance();
 
     error DealIsNotApproved();
+    error DealAlreadyApproved();
+
+    error TrancheNotExists();
+    error TrancheAlreadySettled();
 
     error InsufficientRewards();
 
@@ -34,6 +44,50 @@ library DealCellGovernance {
     event StakesSlashed(address indexed dac, uint256 indexed id, uint256 slashAmount);
     
     event DealManagementProposalCreated(address indexed cell, uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
+
+    function stake(
+        address dacCell,
+        address staker,
+        uint256 amount,
+        uint256 id,
+        IDeal deal,
+        StakedAgent token,
+        address[] storage holders
+    ) public {
+        deal.beforeEveryStake(staker, amount);
+
+        if (token.balanceOf(staker) == 0) {
+            holders.push(staker);
+        }
+        
+        token.mint(staker, amount);
+        
+        emit AgentTokensStaked(dacCell, id, staker, amount);
+
+        deal.afterEveryStake(staker, amount);
+    }
+
+    function unstake(
+        address dacCell,
+        uint256 id,
+        IDeal deal,
+        address agentTokenAddr,
+        StakedAgent token
+    ) public {
+        address agent = msg.sender;
+        require(token.balanceOf(agent) > 0, NoStake());
+
+        uint256 agentStake = token.balanceOf(agent);
+
+        token.burn(agent, agentStake);
+
+        AgentToken(agentTokenAddr).burnFrom(address(this), agentStake); // burn agent tokens on our balance
+        AgentToken(agentTokenAddr).mint(agent, agentStake);             // return agent tokens back to agent
+
+        emit AgentTokensReleased(dacCell, id, agent, agentStake);
+
+        deal.onUnstake(agent, agentStake);
+    }
 
     function checkStakedAgentProposal(
         ProposalParams calldata params,
@@ -64,6 +118,7 @@ library DealCellGovernance {
             params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
             params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
             params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
+            params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
             params.typ == AbstractDealManagementType.ADD_STAKE
         );
@@ -72,6 +127,7 @@ library DealCellGovernance {
     function createStakedAgentProposal(
         uint256 id,
         ProposalParams calldata params,
+        address dacCell,
         address dealCell,
         VotingConfig memory votingConfig,
         address governanceFactory,
@@ -80,14 +136,41 @@ library DealCellGovernance {
         address prop = IDealManagementProposalFactory(governanceFactory).deployProposal(
             id,
             params,
-            address(this),
-            address(this),
+            dacCell,
+            dealCell,
+            IDealCell(dealCell).stakeToken(),
+            IDealCell(dealCell).allowDACVeto(),
             votingConfig
         );
 
         proposals[id] = prop;
 
         emit DealManagementProposalCreated(dealCell, id, params.typ, params.target, params.i, params.data);
+    }
+
+    function approveFunding(
+        uint256 trancheId,
+        bool approved,
+        uint256 _approveDeadline,
+        IDeal deal,
+        mapping(uint256 => Tranche) storage _fundingTranches,
+        mapping(address => uint256) storage investedCapital
+    ) public {
+        if (trancheId == 0) {
+            require(!approved, DealAlreadyApproved());
+            require(block.timestamp > _approveDeadline, DeadlineNotPassed());
+        }
+        else {
+            require(_fundingTranches[trancheId].amount > 0, TrancheNotExists());
+            require(!_fundingTranches[trancheId].settled, TrancheAlreadySettled());
+        }
+        
+        if (_fundingTranches[trancheId].amount > 0) {
+            require(IERC20(_fundingTranches[trancheId].token).transfer(address(deal), _fundingTranches[trancheId].amount), TransferFailed());
+
+            investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
+        }
+        _fundingTranches[trancheId].settled = true;
     }
 
     function prepareWithdrawal(
@@ -103,6 +186,21 @@ library DealCellGovernance {
 
             IERC20(_fundingToken).approve(dealCell, balance);
         }
+    }
+
+    function transferCapital(
+        uint256 id,
+        address _token,
+        uint256 amount,
+        address dacCell,
+        mapping(address => uint256) storage returnedCapital
+    ) public {
+        IERC20(_token).approve(dacCell, amount);
+
+        IDACCellAdapter(dacCell).depositTreasury(_token, amount);
+        returnedCapital[_token] += amount;
+        
+        emit CapitalReturned(dacCell, id, _token, amount);
     }
 
     function withdrawCapital(
@@ -142,12 +240,7 @@ library DealCellGovernance {
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;
 
-            IERC20(_fundingToken).approve(dacCell, balance);
-
-            IDACCellAdapter(dacCell).depositTreasury(_fundingToken, balance);
-            returnedCapital[_fundingToken] += balance;
-            
-            emit CapitalReturned(dacCell, id, _fundingToken, balance);
+            transferCapital(id, _fundingToken, balance, dacCell, returnedCapital);
         }
 
         deal.afterWithdrawCapital();

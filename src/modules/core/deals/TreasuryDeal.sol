@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, DealParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {Deal} from "../../../kernel/Deal.sol";
@@ -67,7 +65,7 @@ contract TreasuryDeal is Deal {
         }
     }
 
-    function _checkStackedMPProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
+    function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
@@ -154,11 +152,15 @@ contract TreasuryDeal is Deal {
             uint256 balance = IERC20(_fundingToken).balanceOf(address(treasury));
             if (balance > 0) {
                 treasury.returnCapitalToDeal(_fundingToken, balance);
+
+                require(IERC20(_fundingToken).approve(dealCell, balance), TransferFailed());
+
+                IDealCellAdapter(dealCell).transferCapital(_fundingToken, balance);
             }
         }
     }
 
-    function recoverProfits(address token) external onlyStakedMPHolder nonReentrant returns (uint256 amount) {
+    function recoverProfits(address token) external onlyStakedAgent nonReentrant returns (uint256 amount) {
         require(!(IDealCell(dealCell).getInvestedCapital(token) > 0), InvalidToken());
 
         // If token is not a funding token, we allow transfering any balance

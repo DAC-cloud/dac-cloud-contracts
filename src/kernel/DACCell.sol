@@ -3,17 +3,12 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {ProposalParams, VotingConfig, DealParams, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
+import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
-import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
-import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
-import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
-import {IEvaluator} from "../interfaces/IEvaluator.sol";
-import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
-import {IDealCell} from "../interfaces/IDealCell.sol";
-import {DealState, CapitalCallState} from "./interfaces/Structs.sol";
+import {IDACCell} from "../interfaces/IDACCell.sol";
+import {CapitalCallState} from "./interfaces/Structs.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "./tokens/MainToken.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
@@ -126,7 +121,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         address _mainToken,
         address _agentToken,
         address coreModule,
-        address managerFactory,
         bool _dividendsEnabled,
         uint256 _quorum
     ) external {
@@ -146,7 +140,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             qualification: 0
         });
 
-        dealManager = DealManagerFactory(managerFactory).deployDealManager(
+        dealManager = DealManagerFactory.deployDealManager(
             _mainToken,
             _agentToken,
             coreModule,
@@ -317,6 +311,14 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             );
         }
 
+        else if (
+            typ == DACManagementProposalType.CAST_VETO_DEAL
+        ) {
+            DACCellGovernance.castVeto(
+                prop, IDealManager(dealManager)
+            );
+        }
+
         else {
             IDealManagerAdapter(dealManager).executeProp(msg.sender, prop);
         }
@@ -335,12 +337,14 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     function claimDividend(
         uint256 proposalId,
         uint256 index,
+        address receiver,
         uint256 amount,
         bytes32[] calldata proof
     ) external {
         DACCellGovernance.claimDividend(
             proposalId,
             index,
+            receiver,
             amount,
             proof,
             proposals,

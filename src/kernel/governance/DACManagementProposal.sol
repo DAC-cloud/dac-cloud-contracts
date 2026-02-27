@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
+import {ProposalParams} from "../../interfaces/Structs.sol";
 import {Proposal} from "./Proposal.sol";
 
 contract DACManagementProposal is Proposal {
@@ -16,7 +16,7 @@ contract DACManagementProposal is Proposal {
         uint256 _votingDuration, 
         uint256 _votingQuorum, 
         uint256 _blockingQuorum
-    ) Proposal(params, _token, _votingDuration, _votingQuorum, _blockingQuorum) {
+    ) Proposal(params, _token, _votingDuration, _votingQuorum, _blockingQuorum, address(0)) {
         id = _id;
         dacEntity = _dac;
     }

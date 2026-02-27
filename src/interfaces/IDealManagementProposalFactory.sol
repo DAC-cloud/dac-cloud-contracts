@@ -6,9 +6,11 @@ import {ProposalParams, VotingConfig} from "./Structs.sol";
 interface IDealManagementProposalFactory {
     function deployProposal(
         uint256 id,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address dac,
+        address deal,
         address token,
-        VotingConfig calldata votingConfig
+        bool vetoEnabled,
+        VotingConfig memory votingConfig
     ) external returns (address);
 }

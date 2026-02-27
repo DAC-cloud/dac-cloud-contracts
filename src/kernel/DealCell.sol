@@ -2,26 +2,20 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DealParams, ProposalParams, VotingConfig} from "../interfaces/Structs.sol";
+import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
-import {IDealManagementProposalFactory} from "../interfaces/IDealManagementProposalFactory.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {Tranche} from "./interfaces/Structs.sol";
-import {MainToken} from "./tokens/MainToken.sol";
-import {AgentToken} from "./tokens/AgentToken.sol";
 import {StakedAgent} from "./tokens/StakedAgent.sol";
 import {StakedAgentLib} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
-import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 import {DealCellGovernance} from "./libraries/DealCellGovernance.sol";
 
 contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
@@ -46,8 +40,6 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     
     error NotEnoughBalance();
 
-    error TrancheNotExists();
-    error TrancheAlreadySettled();
     error TransferFailed();
     
     error ProposalNotSupported();
@@ -69,7 +61,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
 
     address private immutable proposer;
 
-    IDeal private deal;
+    IDeal public deal;
     address internal managedEntity;
 
     StakedAgent internal token; 
@@ -99,9 +91,10 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     bool internal approved;
     bool internal closed;
     bool internal recovery;
-    bool internal isWhitelistOnly; 
-    
+
+    bool internal vetoEnabled;
     bool internal earlyReturns;
+    bool internal isWhitelistOnly; 
     
     // General metrics for abstract Deal
     uint256 internal rewardsConverted;
@@ -128,8 +121,6 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     
     // Global events, indexed by DAC and deal id
     event DealInitialized(address indexed dac, uint256 indexed id, DealParams params);
-    event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-    event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
     event DealActivated(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
     event TrancheRequested(address indexed dac, uint256 indexed id, uint256 tranche, address token, uint256 amount);
     event RewardsClaimed(address indexed dac, address indexed agent, uint256 amount);
@@ -145,8 +136,10 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     
     event DealManagementProposalCreated(uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
     event DealManagementProposalExecuted(uint256 indexed id, bytes4 indexed typ);
+    
     event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
     event EarlyReturnsToggled(uint256 indexed id, bool enabled);
+    event VetoRightEnabled(uint256 indexed id);
 
     constructor(
         uint256 _id,
@@ -201,6 +194,8 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
             settled: false
         });
 
+        vetoEnabled = params.vetoEnabled;
+
         isWhitelistOnly = true;
         isWhitelisted[proposer] = true;
         canInviteOthers[proposer] = true;
@@ -212,17 +207,15 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
  
     function stake(address staker, uint256 amount) internal {
-        deal.beforeEveryStake(staker, amount);
-
-        if (token.balanceOf(staker) == 0) {
-            holders.push(staker);
-        }
-        
-        token.mint(staker, amount);
-        
-        emit AgentTokensStaked(dacCell, id, staker, amount);
-
-        deal.afterEveryStake(staker, amount);
+        DealCellGovernance.stake(
+            dacCell,
+            staker,
+            amount,
+            id,
+            deal,
+            token,
+            holders
+        );
     }
 
     function onAgentTokenStaked(address staker, uint256 amount) external {
@@ -241,29 +234,22 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
 
     function approveFunding(uint256 trancheId) external onlyDACCell {
-        if (trancheId == 0) {
-            require(!approved, DealAlreadyApproved());
-            require(block.timestamp > _approveDeadline, DeadlineNotPassed());
-        }
-        else {
-            require(_fundingTranches[trancheId].amount > 0, TrancheNotExists());
-            require(!_fundingTranches[trancheId].settled, TrancheAlreadySettled());
-        }
-        
         deal.beforeApproveFunding(trancheId);
+
+        DealCellGovernance.approveFunding(
+            trancheId,
+            approved,
+            _approveDeadline,
+            deal,
+            _fundingTranches,
+            investedCapital
+        );
 
         if (!approved) {
             approved = true;
         
             emit DealActivated(dacCell, id, token.totalSupply());
         }
-        
-        if (_fundingTranches[trancheId].amount > 0) {
-            require(IERC20(token).transfer(address(deal), _fundingTranches[trancheId].amount), TransferFailed());
-
-            investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
-        }
-        _fundingTranches[trancheId].settled = true;
 
         deal.afterApproveFunding(trancheId);
     }
@@ -296,36 +282,29 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
             require(!recovery, DealInLiquidation());
         }
         
-        address agent = msg.sender;
-        require(token.balanceOf(agent) > 0, NoStake());
-
-        uint256 agentStake = token.balanceOf(agent);
-
-        token.burn(agent, agentStake);
-
-        AgentToken(agentTokenAddr).burnFrom(address(this), agentStake); // burn agent tokens on our balance
-        AgentToken(agentTokenAddr).mint(agent, agentStake);             // return agent tokens back to agent
-
-        emit AgentTokensReleased(dacCell, id, agent, agentStake);
-
-        deal.onUnstake(agent, agentStake);
+        DealCellGovernance.unstake(
+            dacCell,
+            id,
+            deal,
+            agentTokenAddr,
+            token
+        );
     }
 
     function requestTranche(
         DealManagementProposal prop
     ) external onlyDeal {
         address _fundingToken = DealManagementProposal(prop).target();
-        uint256 amountFunding = uint256(DealManagementProposal(prop).i());
-
+        
         // Creating tranche state
         if (_requestedFunding[_fundingToken] == 0) {
             _fundingTokens.push(_fundingToken);
         }
-        _requestedFunding[_fundingToken] += amountFunding;
+        _requestedFunding[_fundingToken] += uint256(DealManagementProposal(prop).i());
         
         _fundingTranches[prop.id()] = Tranche({
             token: _fundingToken,
-            amount: amountFunding,
+            amount: uint256(DealManagementProposal(prop).i()),
             settled: false
         });
 
@@ -335,12 +314,13 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function transferCapital(address _token, uint256 amount) external onlyDeal {
         require(IERC20(_token).transferFrom(address(deal), address(this), amount), TransferFailed());
 
-        require(IERC20(_token).approve(dacCell, amount), TransferFailed());
-
-        IDACCellAdapter(dacCell).depositTreasury(_token, amount);
-        returnedCapital[_token] += amount;
-
-        emit CapitalReturned(dacCell, id, _token, amount);
+        DealCellGovernance.transferCapital(
+            id,
+            _token,
+            amount,
+            dacCell,
+            returnedCapital
+        );
     }
 
     function withdrawCapital() external nonReentrant {
@@ -455,6 +435,14 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         emit EarlyReturnsToggled(propId, earlyReturns);
     }
 
+    function enableVeto() external onlyDeal {
+        if (!vetoEnabled) {
+            vetoEnabled = true;
+
+            emit VetoRightEnabled(id);
+        }
+    }
+
     function addStake(address staker, uint256 amount) external onlyDeal {
         // if the deal is not approved adding stakes not allowed
         require(approved, DealIsNotApproved());
@@ -493,7 +481,9 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external view returns (bool) { return approved; }
     function isClosed() external view returns (bool) { return closed; }
+
     function allowEarlyReturns() external view returns (bool) { return earlyReturns; }
+    function allowDACVeto() external view returns (bool) { return vetoEnabled; }
 
     function fundingTokens() public view returns (address[] memory) {
         return _fundingTokens;

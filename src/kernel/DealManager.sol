@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {DealParams, ProposalParams} from "../interfaces/Structs.sol";
+import {DealParams} from "../interfaces/Structs.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
-import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
-import {IEvaluator} from "../interfaces/IEvaluator.sol";
-import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
-import {Tranche, DealState} from "./interfaces/Structs.sol";
+import {DealState} from "./interfaces/Structs.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
@@ -235,17 +231,17 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         );
     }
 
-    // function registerAddress(address deal, address controlled) external onlyDeal {
-    //     //todo: registering controlled address for locked equity movements
-    // }
+    function registerControlledAddress(address deal, address controlled) external onlyDealCell {
+        //todo: registering controlled address for locked equity movements
+    }
 
-    // function onMainMove(address from, address to, uint256 amount) external {
-    //     require(msg.sender == address(mainToken), NotAuthorized());
+    function onMainMove(address from, address to, uint256 amount) external {
+        require(msg.sender == address(mainToken), NotAuthorized());
 
-    //     //todo: performing the move of a locked equity if from or to addresses are locked
-    //     // when equity moves outside it becomes uncontrolled
-    //     // locked equity is released first
-    // }
+        //todo: performing the move of a locked equity if from or to addresses are locked
+        // when equity moves outside it becomes uncontrolled
+        // locked equity is released first
+    }
 
     function totalUnreleasedMainTokens() external view returns (uint256) {
         return unreleasedMainTokens;

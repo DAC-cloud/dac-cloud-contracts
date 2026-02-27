@@ -8,6 +8,8 @@ interface IAbstractDealManagementProposals {
 
     function addStake() external pure returns (bytes4);
 
+    function enableVetoRight() external pure returns (bytes4);
+
     function toggleWhitelist() external pure returns (bytes4);
 
     function toggleEarlyReturns() external pure returns (bytes4);
@@ -16,11 +18,13 @@ interface IAbstractDealManagementProposals {
 library AbstractDealManagementType {
     bytes4 public constant UPDATE_VOTING_CONFIG = IAbstractDealManagementProposals.updateVotingConfig.selector; // High quorum
     
-    bytes4 public constant REQUEST_TRANCHE      = IAbstractDealManagementProposals.requestTranche.selector;     // High quorum
+    bytes4 public constant REQUEST_TRANCHE      = IAbstractDealManagementProposals.requestTranche.selector;     // Default quorum, blocking allowed
     
     bytes4 public constant ADD_STAKE            = IAbstractDealManagementProposals.addStake.selector;           // High quorum
 
     bytes4 public constant TOGGLE_WHITELIST     = IAbstractDealManagementProposals.toggleWhitelist.selector;    // High quorum
     
+    bytes4 public constant ENABLE_VETO_RIGHT    = IAbstractDealManagementProposals.enableVetoRight.selector;    // High quorum
+
     bytes4 public constant TOGGLE_EARLY_RETURNS = IAbstractDealManagementProposals.toggleEarlyReturns.selector; // High quorum
 }

@@ -55,12 +55,13 @@ struct DealParams {
     address dealTarget;             // childDAC or Vault-based deal address
     address proposer;
     string linkHash;                // Hash of the Deal submission in external document management system
+    bool vetoEnabled;               // If enabled, chickens can push a veto on High-quorum proposals through their Default+blocking proposal
     address fundingToken;
     uint256 fundingAmount;
     uint256 rewardsLimit;
     uint256 approveDeadline;
-    uint256 dealDeadline;
-    bytes4 evaluatorSelector;       // type of evaluator
+    uint256 dealDeadline;           // The deadline before the first evaluation
+    bytes4 evaluatorSelector;       // evaluator selector. Deal factory shall confirm that the evaluator supports the deal
     bytes dealConfig;               // future-proof field for deal-specific init data (like DACConfig)
     bytes evaluatorConfig;          // config for evaluator (e.g. abi.encode(Milestone[]))
 }

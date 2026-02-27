@@ -10,6 +10,7 @@ import {IDACManagementFactory} from "../../interfaces/IDACManagementFactory.sol"
 import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {IVoting} from "../../interfaces/IVoting.sol";
 import {DealState, CapitalCallState} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "../tokens/MainToken.sol";
@@ -39,6 +40,10 @@ library DACCellGovernance {
     error InsufficientTreasury();
     error InsufficientRewards();
 
+    error MintBlockedByEvaluator();
+
+    error InvalidVotingConfig();
+
     error InvalidCapitalCall();
     error AlreadyFulfilled();
 
@@ -65,7 +70,7 @@ library DACCellGovernance {
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 indexed trancheId, uint256 rewardsLimit);
     
-    event DealEvaluated(uint256 indexed id, bool success);
+    event DealEvaluated(uint256 indexed id, EvaluationResult[] evaluations);
 
     // Methods implementation
 
@@ -232,6 +237,22 @@ library DACCellGovernance {
         );
     }
 
+    function castVeto(
+        DACManagementProposal prop,
+        IDealManager dealManager
+    ) public {
+        (uint256 dealId, uint256 proposalId) = abi.decode(
+            DACManagementProposal(prop).data(), 
+            (uint256, uint256)
+        );
+        
+        address proposal = IDealCell(dealManager.deals(dealId)).deal().getProposal(proposalId);
+
+        require(proposal != address(0), NotFound());
+
+        IVoting(proposal).castVeto();
+    }
+
     function createManagementProposal(
         uint256 nextId,
         ProposalParams calldata params,
@@ -275,6 +296,15 @@ library DACCellGovernance {
             if (params.typ == DACManagementProposalType.DIVIDEND_PAYOUT) {
                 require(dividendsEnabled, DividendsNotEnabled());
             }
+
+            if (params.typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
+                VotingConfig memory _votingConfig = abi.decode(params.data, (VotingConfig));
+                
+                require(_votingConfig.quorumPercent > 0, InvalidVotingConfig());
+                require(_votingConfig.highQuorumPercent > 0, InvalidVotingConfig());
+                require(_votingConfig.blockingPercent >= 0, InvalidVotingConfig());
+                require(_votingConfig.duration > 0, InvalidVotingConfig());
+            }
         }
 
         id = nextId;
@@ -305,7 +335,10 @@ library DACCellGovernance {
         require(msg.sender == dealCell, InvalidDeal(msg.sender));
         require(dealState[dealCell].rewardsLimit > amount, InsufficientRewards());
 
-        //todo permit mint on evaluator
+        require(
+            IEvaluator(dealState[dealCell].evaluator).permitMint(dealCell, to, amount),
+            MintBlockedByEvaluator()
+        );
 
         // Here we enforce a cap on mint per deal, so rewards are capped by what was agreed 
         // by LP holders, even when both the deal and evaluator are compromised
@@ -373,31 +406,32 @@ library DACCellGovernance {
         require(dealCell != address(0), InvalidDeal(dealCell));
 
         address evaluatorAddr = dealState[dealCell].evaluator;
-        EvaluationResult memory result = IEvaluator(evaluatorAddr).evaluateDeal(
+        EvaluationResult[] memory evaluations = IEvaluator(evaluatorAddr).evaluateDeal(
             id, 
             dealCell,
             dealState[dealCell].deal, 
             address(this)
         );
 
-        if (result.action == 0) {           // slash
-            _performSlash(id, result.percent, agentToken, deals);
-        } else if (result.action == 1) {    // convert
-            _performTransformation(id, result.percent, deals);
-        } else if (result.action == 2) {    // extend
-            IDealAdmin(dealCell).extendDeadline(result.newDeadline);
-        } else if (result.action == 3) {    // close
-            IDealAdmin(dealCell).closeDeal();
+        for (uint256 i = 0; i < evaluations.length; i++) {
+            if (evaluations[i].action == 0) {           // slash
+                _performSlash(id, evaluations[i].percent, agentToken, deals);
+            } else if (evaluations[i].action == 1) {    // convert
+                _performTransformation(id, evaluations[i].percent, deals);
+            } else if (evaluations[i].action == 2) {    // extend
+                IDealAdmin(dealCell).extendDeadline(evaluations[i].newDeadline);
+            } else if (evaluations[i].action == 3) {    // close
+                IDealAdmin(dealCell).closeDeal();
+            }
         }
-
-        if (result.action == 1 || result.action == 0) {
-            emit DealEvaluated(id, result.action == 1);
-        }
+        
+        emit DealEvaluated(id, evaluations);
     }
 
     function claimDividend(
         uint256 proposalId,
         uint256 index,
+        address receiver,
         uint256 amount,
         bytes32[] calldata proof,
         mapping(uint256 => address) storage proposals,
@@ -407,10 +441,10 @@ library DACCellGovernance {
         bytes32 root = dividendMerkleRoots[proposalId];
         require(root != bytes32(0), NotFound());
 
-        bytes32 leaf = keccak256(abi.encodePacked(index, msg.sender, amount));
+        bytes32 leaf = keccak256(abi.encodePacked(index, receiver, amount));
 
         bytes32 claimedKey = keccak256(abi.encodePacked(root, leaf));
-        require(!dividendClaimed[claimedKey], DividendAlreadyClaimed(proposalId, msg.sender));
+        require(!dividendClaimed[claimedKey], DividendAlreadyClaimed(proposalId, receiver));
 
         require(MerkleProof.verify(proof, root, leaf), InvalidMerkleProof());
 
@@ -421,8 +455,8 @@ library DACCellGovernance {
             (address)
         );
         
-        require(IERC20(token).transfer(msg.sender, amount), TransferFailed());
+        require(IERC20(token).transfer(receiver, amount), TransferFailed());
 
-        emit DividendClaimed(proposalId, msg.sender, amount);
+        emit DividendClaimed(proposalId, receiver, amount);
     }
 }

@@ -6,10 +6,10 @@ import {ProposalParams, VotingConfig} from "./Structs.sol";
 interface IDACManagementFactory {
     function deployProposal(
         uint256 id,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address dac,
         address token,
         uint256 unreleasedBalance,
-        VotingConfig calldata votingConfig
+        VotingConfig memory votingConfig
     ) external returns (address);
 }

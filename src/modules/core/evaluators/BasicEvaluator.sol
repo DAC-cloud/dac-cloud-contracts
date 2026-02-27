@@ -35,7 +35,7 @@ contract BasicEvaluator is IEvaluator {
         return true;
     }
 
-    function evaluateDeal(uint256, address dealCell, address, address) external view returns (EvaluationResult memory) {
+    function evaluateDeal(uint256, address dealCell, address, address) external view returns (EvaluationResult[] memory evaluations) {
         uint256 returned = 0; // IDealCell(dealAddr).getReturnedCapital(token);
         uint256 currentTime = block.timestamp;
 
@@ -56,12 +56,13 @@ contract BasicEvaluator is IEvaluator {
         // todo: returning not 100%, but as set by reward percentage in the milestone
         //  think about calculations that makes sense economically for real projects
         
+        evaluations = new EvaluationResult[](1);
         if (returned >= expected) {
-            return EvaluationResult(1, 100, 0); // convert 100%
+            evaluations[0] = EvaluationResult(1, 100, 0); // convert 100%
         } else if (currentTime > IDealCell(dealCell).dealDeadline()) {
-            return EvaluationResult(0, 100, 0); // slash 100%
+            evaluations[0] = EvaluationResult(0, 100, 0); // slash 100%
         } else {
-            return EvaluationResult(2, 0, currentTime + 30 days); // extend 30 days
+            evaluations[0] = EvaluationResult(2, 0, currentTime + 30 days); // extend 30 days
         }
     }
 }

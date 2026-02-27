@@ -27,6 +27,7 @@ interface IDACManagementProposals {
     function recoverDeal() external pure returns (bytes4);
 
     function passDealMessage() external pure returns (bytes4);
+    function castVetoForDealProposal() external pure returns (bytes4);
 }
 
 library DACManagementProposalType {
@@ -68,6 +69,7 @@ library DACManagementProposalType {
     bytes4 public constant RECOVER_DEAL     = IDACManagementProposals.recoverDeal.selector;                     // Default quorum
     
     bytes4 public constant DEAL_MESSAGE     = IDACManagementProposals.passDealMessage.selector;                 // Default quorum
+    bytes4 public constant CAST_VETO_DEAL   = IDACManagementProposals.castVetoForDealProposal.selector;         // Default quorum
 
     bytes4 public constant ADD_MODULE       = IDACManagementProposals.addModuleFactory.selector;                // High quorum
 

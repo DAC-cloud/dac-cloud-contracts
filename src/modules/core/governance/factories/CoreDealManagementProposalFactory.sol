@@ -3,23 +3,27 @@ pragma solidity ^0.8.20;
 
 import {ProposalParams, VotingConfig} from "../../../../interfaces/Structs.sol";
 import {CoreDealManagementType} from "../CoreDealManagementProposals.sol";
-import {DealManagementProposal} from "../../../../kernel/governance/DealManagementProposal.sol";
 import {DealManagementProposalFactory} from "../../../../kernel/governance/factories/DealManagementProposalFactory.sol";
 
 contract CoreManagementProposalFactory is DealManagementProposalFactory {
     function moduleManagementProposalQuorum(
         uint256,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address,
         address,
         address,
-        VotingConfig calldata
+        VotingConfig memory
     ) internal override pure returns (
-        bool ok, 
-        bool highQuorum, 
-        bool allowBlocking
+        QuorumConfig memory quorum
     ) {
-        ok = (
+        // Here we are not differentiating by deal types, as we should, but instead
+        //  mismatched proposals would be reverted on execution if ever accepted.
+
+        // While this can be in future fixed, since modules are upgradeable, we advice
+        //  module developers to differentiate properly there, with maybe a registry of
+        //  all deals launched with the module, to know deal type
+
+        quorum.allowed = (
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
             params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL || 
@@ -30,12 +34,14 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
             params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC
         );
 
-        highQuorum = (
+        quorum.high = (
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND
         );
 
-        allowBlocking = (
+        quorum.veto = quorum.high;
+
+        quorum.blocking = (
             params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL || 
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND

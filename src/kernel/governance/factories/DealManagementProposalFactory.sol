@@ -1,57 +1,73 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {IDealManagementProposalFactory} from "../../../interfaces/IDealManagementProposalFactory.sol";
 import {AbstractDealManagementType} from "../AbstractDealManagementProposals.sol";
 import {DealManagementProposal} from "../DealManagementProposal.sol";
 
-abstract contract DealManagementProposalFactory {
-    function deployManagementProposal(
+abstract contract DealManagementProposalFactory is IDealManagementProposalFactory {
+    error ProposalNotSupported();
+
+    struct QuorumConfig {
+        bool allowed;
+        bool high;
+        bool veto;
+        bool blocking;
+    }
+
+    function deployProposal(
         uint256 id,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address dac,
         address deal,
         address token,
-        VotingConfig calldata votingConfig
+        bool vetoEnabled,
+        VotingConfig memory votingConfig
     ) external returns (address) {
-        ProposalParams memory proposalParams = params;
-        
-        bool isAbstract = (
+        uint256 quorum;
+        uint256 blockingQuorum;
+        address vetoRightOwner = address(0);
+
+        if (
             params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
             params.typ == AbstractDealManagementType.ADD_STAKE || 
             params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
             params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
-        );
-
-        if (isAbstract) {
-            bool highQuorum = (
+        ) {
+            if (
                 params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
-                params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
+                params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
                 params.typ == AbstractDealManagementType.ADD_STAKE || 
                 params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
-            );
+            ) {
+                quorum = IERC20(token).totalSupply() * votingConfig.highQuorumPercent / 100;
 
-            //todo: recalculate quorum from percent to balance
+                if (vetoEnabled) {
+                    vetoRightOwner = dac;
+                }
+            }
+            else {
+                quorum = IERC20(token).totalSupply() * votingConfig.quorumPercent / 100;
+            }
 
-            DealManagementProposal prop = new DealManagementProposal(
-                id, 
-                dac,
-                deal,
-                token, 
-                proposalParams, 
-                votingConfig.duration,
-                highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
-                0
-            );
+            if (
+                params.typ == AbstractDealManagementType.REQUEST_TRANCHE
+            ) {
+                blockingQuorum = IERC20(token).totalSupply() * votingConfig.blockingPercent / 100;
 
-            return address(prop);
+                if (vetoEnabled) {
+                    vetoRightOwner = dac;
+                }
+            }
         }
 
         // Module proposal
         else {
-            (bool ok, bool highQuorum, bool blockingQuorum) = moduleManagementProposalQuorum(
+            QuorumConfig memory quorumConfig = moduleManagementProposalQuorum(
                 id,
                 params,
                 dac,
@@ -60,36 +76,55 @@ abstract contract DealManagementProposalFactory {
                 votingConfig
             );
 
-            require(!ok, "Proposal not supported");
+            // Module controls proposal configuration for all deals of the Module
+            
+            // Module-specific factory is allowed to examine deal (and/or dac) state 
+            //  to enforce it's own quorum rules
+            
+            require(!quorumConfig.allowed, ProposalNotSupported());
 
-            //todo: recalculate quorum from percent to balance
+            if (quorumConfig.high) {
+                quorum = IERC20(token).totalSupply() * votingConfig.highQuorumPercent / 100;
+            }
+            else {
+                quorum = IERC20(token).totalSupply() * votingConfig.quorumPercent / 100;
+            }
 
-            DealManagementProposal prop = new DealManagementProposal(
-                id, 
-                dac,
-                deal,
-                token, 
-                proposalParams, 
-                votingConfig.duration,
-                highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
-                blockingQuorum ? votingConfig.blockingPercent : 0
-            );
-
-            return address(prop);
+            if (quorumConfig.blocking) {
+                blockingQuorum = IERC20(token).totalSupply() * votingConfig.blockingPercent / 100;
+            }
+            
+            if (vetoEnabled) {
+                if (quorumConfig.high || quorumConfig.blocking || quorumConfig.veto) {
+                    vetoRightOwner = dac;
+                }
+            }
         }
+
+        DealManagementProposal prop = new DealManagementProposal(
+            id, 
+            dac,
+            deal,
+            token, 
+            params, 
+            votingConfig.duration,
+            quorum,
+            blockingQuorum,
+            vetoRightOwner
+        );
+
+        return address(prop);
     }
 
     function moduleManagementProposalQuorum(
         uint256 id,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address dac,
         address deal,
         address token,
-        VotingConfig calldata votingConfig
+        VotingConfig memory votingConfig
     ) internal virtual returns (
-        bool ok, 
-        bool highQuorum, 
-        bool allowBlocking
+        QuorumConfig memory
     ) {
         // default is - not `ok`, so any module need to override this method
         // to fill quorum configuration for custom proposal types

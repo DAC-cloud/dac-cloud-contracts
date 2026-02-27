@@ -6,12 +6,15 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../src/kernel/DACCell.sol";
 import "../src/kernel/tokens/MainToken.sol";
 import "../src/kernel/tokens/AgentToken.sol";
-import "../src/modules/core/CoreModuleFactory.sol";
 import "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import "../src/kernel/factories/DealManagerFactory.sol";
 import "../src/kernel/DACFactory.sol";
 import "../src/interfaces/IDACFactory.sol";
 import "../src/interfaces/Structs.sol";
+import "../src/modules/core/CoreModuleFactory.sol";
+import "../src/modules/core/factories/DACDealFactory.sol";
+import "../src/modules/core/factories/TreasuryDealFactory.sol";
+import "../src/modules/core/factories/BasicEvaluatorFactory.sol";
 
 contract DACTest is Test {
     DACCell dac;
@@ -20,27 +23,26 @@ contract DACTest is Test {
 
     CoreModuleFactory coreModule;
     
-    DACCellFactory dacCellFactory;
-    DealManagerFactory dealManagerFactory;
-
     DACManagementProposalFactory governanceFactory;
     DACFactory dacFactory;
     
     address owner = address(1);
     address user = address(2);
 
+    address permit2 = address(10);
+
     function setUp() public {
         vm.startPrank(owner);
 
-        //todo: deal manager factory
-
-        coreModule = new CoreModuleFactory();
+        coreModule = new CoreModuleFactory(
+            address(new DACDealFactory()),
+            address(new TreasuryDealFactory(permit2)),
+            address(new BasicEvaluatorFactory())
+        );
         
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
-            address(dacCellFactory),
-            address(dealManagerFactory),
             address(governanceFactory), 
             address(coreModule)
         );

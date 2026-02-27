@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import {DACManagementProposal} from "../governance/DACManagementProposal.sol";
 
 interface IDealManagerAdapter {
+    function onMainMove(address from, address to, uint256 amount) external;
+    function registerControlledAddress(address deal, address controlled) external;
     function legalWrapperMessage(uint256 id, bytes4 kind, bytes calldata message) external;
     function isRecoverable(uint256 id) external view returns (bool);
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external;

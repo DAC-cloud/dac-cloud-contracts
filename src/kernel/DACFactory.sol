@@ -5,30 +5,21 @@ import {DACConfig} from "../interfaces/Structs.sol";
 import {IDACFactory} from "../interfaces/IDACFactory.sol";
 import {DACCellFactory} from "./factories/DACCellFactory.sol";
 import {DACCell} from "./DACCell.sol";
-import {MainToken} from "./tokens/MainToken.sol";
-import {AgentToken} from "./tokens/AgentToken.sol";
 import {DACDeployment} from "./libraries/DACDeployment.sol";
 import {MainTokenLib, AgentTokenLib} from "./tokens/factories/TokenFactories.sol";
 
 contract DACFactory is IDACFactory {
     error Create2Failed();
 
-    address public dacCellFactory;
-    address public dealManagerFactory;
-    
     address public governanceFactory;
     address public coreModuleFactory;
     
     event DACDeployed(address indexed dac, address mainToken, address agentToken);
 
     constructor(
-        address _dacCellFactory,
-        address _dealManagerFactory,
         address _governanceFactory,
         address _coreModuleFactory
     ) {
-        dacCellFactory = _dacCellFactory;
-        dealManagerFactory = _dealManagerFactory;
         governanceFactory = _governanceFactory;
         coreModuleFactory = _coreModuleFactory;
     }
@@ -41,7 +32,7 @@ contract DACFactory is IDACFactory {
 
         dacAddr = DACDeployment.predictDACAddress(
             salt,
-            dacCellFactory,
+            address(this),
             config.name,
             config.description,
             governanceFactory
@@ -61,7 +52,7 @@ contract DACFactory is IDACFactory {
         );
 
         DACCell dac = DACCell(
-            DACCellFactory(dacCellFactory).deployDAC(
+            DACCellFactory.deployDAC(
                 salt, 
                 config.name,
                 config.description,
@@ -75,7 +66,6 @@ contract DACFactory is IDACFactory {
             mainAddr,
             agentAddr,
             coreModuleFactory,
-            dealManagerFactory,
             config.dividendsEnabled,
             config.defaultQuorum
         );

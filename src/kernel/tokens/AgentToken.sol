@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";

@@ -1,40 +1,49 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {IDACManagementFactory} from "../../../interfaces/IDACManagementFactory.sol";
 import {DACManagementProposalType} from "../DACManagementProposals.sol";
 import {DACManagementProposal} from "../DACManagementProposal.sol";
 
-contract DACManagementProposalFactory {
-    function deployManagementProposal(
+contract DACManagementProposalFactory is IDACManagementFactory {
+    function deployProposal(
         uint256 id,
-        ProposalParams calldata params,
+        ProposalParams memory proposalParams,
         address dac,
         address token,
-        VotingConfig calldata votingConfig
+        uint256 unreleasedBalance,
+        VotingConfig memory votingConfig
     ) external returns (address) {
-        ProposalParams memory proposalParams = params;
-        
-        bool highQuorum = (
-            params.typ == DACManagementProposalType.MINT_MAIN_TOKENS ||
-            params.typ == DACManagementProposalType.UPDATE_VOTING_CONFIG ||
-            params.typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER || 
-            params.typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
-            params.typ == DACManagementProposalType.ADD_MODULE ||
-            params.typ == DACManagementProposalType.REMOVE_MODULE ||
-            params.typ == DACManagementProposalType.TOGGLE_DIVIDENDS
-        );
+        uint256 quorum;
+        uint256 blockingQuorum;
 
-        bool blockingQuorum = (
-            params.typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION ||
-            params.typ == DACManagementProposalType.REVOKE_AGENT_TOKENS ||
-            params.typ == DACManagementProposalType.CAPITAL_CALL ||
-            params.typ == DACManagementProposalType.APPROVE_DEAL ||
-            params.typ == DACManagementProposalType.APPROVE_TRANCHE ||
-            params.typ == DACManagementProposalType.BURN_MAIN_TOKENS
-        );
+        if (
+            proposalParams.typ == DACManagementProposalType.MINT_MAIN_TOKENS ||
+            proposalParams.typ == DACManagementProposalType.UPDATE_VOTING_CONFIG ||
+            proposalParams.typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER || 
+            proposalParams.typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
+            proposalParams.typ == DACManagementProposalType.ADD_MODULE ||
+            proposalParams.typ == DACManagementProposalType.REMOVE_MODULE ||
+            proposalParams.typ == DACManagementProposalType.TOGGLE_DIVIDENDS
+        ) {
+            quorum = (IERC20(token).totalSupply() - unreleasedBalance) * votingConfig.highQuorumPercent / 100;
+        }
+        else {
+            quorum = (IERC20(token).totalSupply() - unreleasedBalance) * votingConfig.quorumPercent / 100;
+        }
 
-        //todo: recalculate quorum from percent to balance
+        if (
+            proposalParams.typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION ||
+            proposalParams.typ == DACManagementProposalType.REVOKE_AGENT_TOKENS ||
+            proposalParams.typ == DACManagementProposalType.CAPITAL_CALL ||
+            proposalParams.typ == DACManagementProposalType.APPROVE_DEAL ||
+            proposalParams.typ == DACManagementProposalType.APPROVE_TRANCHE ||
+            proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS
+        ) {
+            blockingQuorum = (IERC20(token).totalSupply() - unreleasedBalance) * votingConfig.blockingPercent / 100;
+        }
 
         DACManagementProposal prop = new DACManagementProposal(
             id, 
@@ -42,8 +51,8 @@ contract DACManagementProposalFactory {
             token, 
             proposalParams, 
             votingConfig.duration,
-            highQuorum ? votingConfig.highQuorumPercent : votingConfig.quorumPercent,
-            blockingQuorum ? votingConfig.blockingPercent : 0
+            quorum,
+            blockingQuorum
         );
 
         return address(prop);

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
@@ -10,11 +8,10 @@ import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {IDACFactory} from "../../../interfaces/IDACFactory.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
-import {AbstractDealManagementType} from "../../../kernel/governance/AbstractDealManagementProposals.sol";
-import {AgentToken} from "../../../kernel/tokens/AgentToken.sol";
-import {MainToken} from "../../../kernel/tokens/MainToken.sol";
-import {Deal} from "../../../kernel/Deal.sol";
 import {IDACCellAdapter} from "../../../interfaces/IDACCellAdapter.sol";
+import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
+import {AbstractDealManagementType} from "../../../kernel/governance/AbstractDealManagementProposals.sol";
+import {Deal} from "../../../kernel/Deal.sol";
 import {DACDealConfig} from "../interfaces/Structs.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
 
@@ -126,15 +123,12 @@ contract DACDeal is Deal {
 
         address token = IDACCellAdapter(managedEntity).getMainToken();
 
-        IERC20(token).approve(dacCell, _allocation);
+        require(IERC20(token).approve(dealCell, _allocation), TransferFailed());
 
-        //todo: move capital through dealCell
-
-        IDACCellAdapter(dacCell).depositTreasury(token, _allocation);
-        //returnedCapital[token] += _allocation;
+        IDealCellAdapter(dealCell).transferCapital(token, _allocation);
     }
 
-    function _checkStackedMPProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
+    function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
             params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
@@ -231,6 +225,8 @@ contract DACDeal is Deal {
 
             _allocation += call.tokenAmount;
         }
+
+        //todo return profits in token different than funding token
 
         else {
             require(false, UnsupportedProposal());

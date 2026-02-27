@@ -7,7 +7,6 @@ import {IDealFactory} from "../interfaces/modules/IDealFactory.sol";
 import {IEvaluatorFactory} from "../interfaces/modules/IEvaluatorFactory.sol";
 import {DealCellFactory} from "./factories/DealCellFactory.sol";
 import {DealCell} from "./DealCell.sol";
-import {Deal} from "./Deal.sol";
 
 abstract contract ModuleFactory is IModuleFactory {
     function getDealFactory(
