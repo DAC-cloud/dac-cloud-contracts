@@ -25,6 +25,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     error NotInitialized();
     error AlreadyInitialized();
 
+    error NoVotingPower();
+
     error VoteNotPassed();
 
     error ProposalAlreadyExecuted();
@@ -64,6 +66,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     // Main token flow tracking
     uint256 private unreleasedMainTokens;
     mapping(address => uint256) private lockedMainTokens;
+    mapping(address => bool) private controlledAddresses;
 
     // Events
     event ModuleAdded(address indexed factory);
@@ -92,6 +95,9 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
 
         coreModuleFactory = coreModule;
         moduleFactories[coreModule] = true;
+
+        controlledAddresses[_dacCell] = true;
+        controlledAddresses[address(this)] = true;
 
         initialized = true;
     }
@@ -231,20 +237,45 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         );
     }
 
-    function registerControlledAddress(address deal, address controlled) external onlyDealCell {
-        //todo: registering controlled address for locked equity movements
+    function registerControlledAddress(address controlled) external onlyDealCell {
+        controlledAddresses[controlled] = true;
     }
 
     function onMainMove(address from, address to, uint256 amount) external {
         require(msg.sender == address(mainToken), NotAuthorized());
 
-        //todo: performing the move of a locked equity if from or to addresses are locked
-        // when equity moves outside it becomes uncontrolled
-        // locked equity is released first
+        if (from == address(0)) {
+            if (controlledAddresses[to]) {
+                lockedMainTokens[to] += amount;
+                unreleasedMainTokens += amount;
+            }
+        }
+
+        else {
+            // If address contains both unreleased main tokens and free float,
+            //  the unreleased float will be released first
+
+            if (controlledAddresses[from]) {
+                lockedMainTokens[from] -= amount;
+                if (controlledAddresses[to]) {
+                    lockedMainTokens[to] += amount;
+                }
+                else {
+                    unreleasedMainTokens -= amount;
+                }
+            }
+        }
     }
 
-    function totalUnreleasedMainTokens() external view returns (uint256) {
-        return unreleasedMainTokens;
+    function onMainDelegate(address from, address to) external view {
+        require(msg.sender == address(mainToken), NotAuthorized());
+
+        require(!controlledAddresses[from], NoVotingPower());
+        require(!controlledAddresses[to], NoVotingPower());
+    }
+
+    function totalReleasedVotable() external view returns (uint256) {
+        return (mainToken.totalSupply() - unreleasedMainTokens) - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell]);
     }
 
     function getMainToken() external view returns (address) {

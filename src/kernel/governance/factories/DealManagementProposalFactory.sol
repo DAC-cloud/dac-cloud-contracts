@@ -30,6 +30,8 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
         uint256 blockingQuorum;
         address vetoRightOwner = address(0);
 
+        uint256 totalSupply = IERC20(token).totalSupply();
+
         if (
             params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
@@ -44,20 +46,20 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
             ) {
-                quorum = IERC20(token).totalSupply() * votingConfig.highQuorumPercent / 100;
+                quorum = totalSupply * votingConfig.highQuorumPercent / 100;
 
                 if (vetoEnabled) {
                     vetoRightOwner = dac;
                 }
             }
             else {
-                quorum = IERC20(token).totalSupply() * votingConfig.quorumPercent / 100;
+                quorum = totalSupply * votingConfig.quorumPercent / 100;
             }
 
             if (
                 params.typ == AbstractDealManagementType.REQUEST_TRANCHE
             ) {
-                blockingQuorum = IERC20(token).totalSupply() * votingConfig.blockingPercent / 100;
+                blockingQuorum = totalSupply * votingConfig.blockingPercent / 100;
 
                 if (vetoEnabled) {
                     vetoRightOwner = dac;
@@ -84,14 +86,14 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             require(!quorumConfig.allowed, ProposalNotSupported());
 
             if (quorumConfig.high) {
-                quorum = IERC20(token).totalSupply() * votingConfig.highQuorumPercent / 100;
+                quorum = totalSupply * votingConfig.highQuorumPercent / 100;
             }
             else {
-                quorum = IERC20(token).totalSupply() * votingConfig.quorumPercent / 100;
+                quorum = totalSupply * votingConfig.quorumPercent / 100;
             }
 
             if (quorumConfig.blocking) {
-                blockingQuorum = IERC20(token).totalSupply() * votingConfig.blockingPercent / 100;
+                blockingQuorum = totalSupply * votingConfig.blockingPercent / 100;
             }
             
             if (vetoEnabled) {
@@ -108,6 +110,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             token, 
             params, 
             votingConfig.duration,
+            totalSupply, 
             quorum,
             blockingQuorum,
             vetoRightOwner

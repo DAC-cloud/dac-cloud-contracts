@@ -9,7 +9,7 @@ interface IDACManagementFactory {
         ProposalParams memory params,
         address dac,
         address token,
-        uint256 unreleasedBalance,
+        uint256 totalVotingSupply,
         VotingConfig memory votingConfig
     ) external returns (address);
 }

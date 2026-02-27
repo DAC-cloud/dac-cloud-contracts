@@ -260,7 +260,7 @@ library DACCellGovernance {
         address proposalFactory,
         MainToken mainToken,
         bool dividendsEnabled,
-        uint256 unreleasedMainTokens,
+        uint256 totalVotingSupply,
         IDealManager dealManager,
         mapping(uint256 => address) storage proposals
     ) public returns (uint256 id) {
@@ -314,7 +314,7 @@ library DACCellGovernance {
             params,
             address(this),
             address(mainToken),
-            unreleasedMainTokens,
+            totalVotingSupply,
             votingConfig
         );
 

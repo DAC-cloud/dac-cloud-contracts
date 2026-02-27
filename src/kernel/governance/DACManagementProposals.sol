@@ -28,6 +28,8 @@ interface IDACManagementProposals {
 
     function passDealMessage() external pure returns (bytes4);
     function castVetoForDealProposal() external pure returns (bytes4);
+
+    function delegateVotingPower() external pure returns (bytes4);
 }
 
 library DACManagementProposalType {
@@ -41,6 +43,9 @@ library DACManagementProposalType {
     bytes4 public constant REVOKE_AGENT_TOKENS      = IDACManagementProposals.revokeAgentToken.selector;        // Default quorum, blocking allowed
 
     bytes4 public constant CAPITAL_CALL             = IDACManagementProposals.capitalCall.selector;             // Default quorum, blocking allowed
+
+    // Method to delegate voting power of any OZ IVotes compatible token on the DAC balance sheet
+    bytes4 public constant DELEGATE_VOTE_RIGHTS     = IDACManagementProposals.delegateVotingPower.selector;     // Default quorum, blocking allowed
 
     // ** Turning on dividends for the DAC-cell have a very strong legal consequences! **
     //
@@ -71,6 +76,7 @@ library DACManagementProposalType {
     bytes4 public constant DEAL_MESSAGE     = IDACManagementProposals.passDealMessage.selector;                 // Default quorum
     bytes4 public constant CAST_VETO_DEAL   = IDACManagementProposals.castVetoForDealProposal.selector;         // Default quorum
 
+    // Modules control
     bytes4 public constant ADD_MODULE       = IDACManagementProposals.addModuleFactory.selector;                // High quorum
 
     // If the legal wrapper is set, executing this proposal will require explicit legal wrapper authorization.

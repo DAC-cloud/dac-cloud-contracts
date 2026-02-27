@@ -6,7 +6,10 @@ import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
 import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../../interfaces/IDeal.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {IDealManager} from "../../interfaces/IDealManager.sol";
+import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDealManagementProposalFactory} from "../../interfaces/IDealManagementProposalFactory.sol";
+import {DealManagementProposal} from "../governance/DealManagementProposal.sol";
 import {AgentToken} from "../tokens/AgentToken.sol";
 import {StakedAgent} from "../tokens/StakedAgent.sol";
 import {AbstractDealManagementType} from "../governance/AbstractDealManagementProposals.sol";
@@ -35,6 +38,7 @@ library DealCellGovernance {
     error TrancheAlreadySettled();
 
     error InsufficientRewards();
+    error NoClaimableRewards();
 
     error TransferFailed();
 
@@ -43,6 +47,8 @@ library DealCellGovernance {
     event RewardsAllocated(address indexed dac, uint256 indexed id, uint256 reward);
     event StakesSlashed(address indexed dac, uint256 indexed id, uint256 slashAmount);
     
+    event RewardsClaimed(address indexed dac, address indexed agent, uint256 amount);
+
     event DealManagementProposalCreated(address indexed cell, uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
 
     function stake(
@@ -171,6 +177,49 @@ library DealCellGovernance {
             investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
         }
         _fundingTranches[trancheId].settled = true;
+    }
+
+    function requestTranche(
+        uint256 dealId,
+        address dacCell,
+        DealManagementProposal prop,
+        mapping(uint256 => Tranche) storage _fundingTranches,
+        address[] storage _fundingTokens,
+        mapping(address => uint256) storage _requestedFunding
+    ) public {
+        address _fundingToken = DealManagementProposal(prop).target();
+        
+        // Creating tranche state
+        if (_requestedFunding[_fundingToken] == 0) {
+            _fundingTokens.push(_fundingToken);
+        }
+        _requestedFunding[_fundingToken] += uint256(DealManagementProposal(prop).i());
+        
+        _fundingTranches[prop.id()] = Tranche({
+            token: _fundingToken,
+            amount: uint256(DealManagementProposal(prop).i()),
+            settled: false
+        });
+
+        IDealManager(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(dealId, prop.id());
+    }
+
+    function claimMainToken(
+        address dacCell,
+        IDeal deal,
+        mapping(address => uint256) storage claimableRewards
+    ) public {
+        uint256 amount = claimableRewards[msg.sender];
+        require(amount > 0, NoClaimableRewards());
+        
+        deal.beforeClaimMainToken(msg.sender, amount);
+
+        claimableRewards[msg.sender] = 0;
+        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).mintMain(address(this), msg.sender, amount);
+        
+        emit RewardsClaimed(dacCell, msg.sender, amount);
+
+        deal.afterClaimMainToken(msg.sender, amount);
     }
 
     function prepareWithdrawal(

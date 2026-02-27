@@ -4,15 +4,29 @@ pragma solidity ^0.8.20;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
+import {IClock} from "../../lib/IClock.sol";
 import {ProposalParams} from "../../interfaces/Structs.sol";
 
-abstract contract Proposal is IVoting {
+abstract contract Proposal is IVoting, IClock {
+
+    error NotResolved();
+    error VetoNotEnabled();
+    error NotAuthorized();
+    error VotingEnded();
+    error AlreadyVoted();
+    error NoVotingPower();
+
     address public immutable token;
 
     // Voting configuration
     uint256 public immutable endTime;
     uint256 public immutable quorum;
     uint256 public immutable blockingQuorum;
+
+    // Voting power snapshot is taken at the proposal creation moment
+    uint256 public immutable snapshotTime;
+
+    uint256 public immutable totalVotingPower;
 
     bool public immutable vetoRight;
     address public immutable vetoRightOwner;
@@ -34,12 +48,12 @@ abstract contract Proposal is IVoting {
         ProposalParams memory _proposal, 
         address _token, 
         uint256 _duration, 
+        uint256 _totalVotingPower,
         uint256 _quorum, 
         uint256 _blockingQuorum,
         address _vetoRightOwner
     ) {
-        //todo: vetoPossible
-        // vetoRightOwner
+        snapshotTime = clock();
         
         endTime = block.timestamp + _duration;
         token = _token;
@@ -47,56 +61,81 @@ abstract contract Proposal is IVoting {
         blockingQuorum = _blockingQuorum;
         proposal = _proposal;
 
+        totalVotingPower = _totalVotingPower;
+
         if (_vetoRightOwner != address(0)) {
             vetoRight = true;
             vetoRightOwner = _vetoRightOwner;
         }
     }
 
-    //todo clock
+    // ERC-6372 Clock with timestamp mode
+    function clock() public view virtual override returns (uint48) {
+        return uint48(block.timestamp);
+    }
+
+    function CLOCK_MODE() public pure virtual override returns (string memory) {
+        return "mode=timestamp";
+    }
 
     function vote(bool support) external {
-        require(block.timestamp <= endTime, "Voting ended");
-        require(!voted[msg.sender], "Already voted");
+        require(clock() <= endTime, VotingEnded());
+        require(!voted[msg.sender], AlreadyVoted());
 
-        //todo erc20votes
+        uint256 weight = ERC20Votes(token).getPastVotes(msg.sender, snapshotTime);
 
-        uint256 weight = IERC20(token).balanceOf(msg.sender);
-        
-        if (support) yesVotes += weight; else noVotes += weight;
+        require(weight > 0, NoVotingPower());
+
+        if (support) {
+            yesVotes += weight; 
+        }
+        else {
+            noVotes += weight;
+        }
         voted[msg.sender] = true;
         
         emit Voted(msg.sender, support, weight);
     }
 
     function castVeto() external {
-        //todo cast veto right
+        require(vetoRight, VetoNotEnabled());
+        require(msg.sender == vetoRightOwner, NotAuthorized());
+        
+        vetoCasted = true;
     }
 
     function isResolved() external view returns (bool resolved) { 
-        uint256 total = yesVotes + noVotes;
-
         // if veto possible - then proposal only becomes resolved after the end date, and not early
 
-        // if blocking quorum set - not resolved unless yes ovretaken already
+        // if blocking quorum set - not resolved unless yes overtook blocking quorum already
 
         resolved = (
-            ((total > 0) && (yesVotes * 100 >= total * quorum)) ||
-            ((blockingQuorum > 0) && (noVotes * 100 >= total * blockingQuorum)) ||
-            (block.timestamp > endTime)
+            (
+                (yesVotes >= quorum) && 
+                ((blockingQuorum == 0) || (yesVotes >= (totalVotingPower - blockingQuorum))) &&
+                (!vetoRight)
+            ) ||
+            ((blockingQuorum > 0) && (noVotes >= blockingQuorum)) ||
+            (clock() > endTime)
         );
     }
 
     function outcome() external view returns (bool) {
-        //todo veto
+        if (vetoCasted) return false;
 
-        uint256 total = yesVotes + noVotes;
+        if (vetoRight) {
+            require(clock() > endTime, NotResolved());
+        }
 
-        bool yesQuorumReached = (total > 0) && (yesVotes * 100 >= total * quorum);
+        bool yesQuorumReached = yesVotes >= quorum;
 
         if (blockingQuorum > 0) {
-            if (noVotes * 100 >= total * blockingQuorum) {
+            if (noVotes >= blockingQuorum) {
                 return false;
+            }
+
+            if (!(yesVotes >= totalVotingPower - blockingQuorum)) {
+                require(clock() > endTime, NotResolved());
             }
         }
 

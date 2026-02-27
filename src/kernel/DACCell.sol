@@ -213,7 +213,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             proposalFactory,
             mainToken,
             dividendsEnabled,
-            IDealManager(dealManager).totalUnreleasedMainTokens(),
+            IDealManager(dealManager).totalReleasedVotable(),
             IDealManager(dealManager),
             proposals
         );

@@ -14,6 +14,7 @@ interface ICoreDealManagementProposals {
     function approveAgentSpend() external pure returns (bytes4);
     function assignClaimer() external pure returns (bytes4);
     function returnCapitalToDAC() external pure returns (bytes4);
+    function delegateVotingPower() external pure returns (bytes4);
 }
 
 library CoreDealManagementType {
@@ -27,4 +28,5 @@ library CoreDealManagementType {
     bytes4 public constant APPROVE_AGENT_SPEND   = ICoreDealManagementProposals.approveAgentSpend.selector;             // Default quorum, blocking allowed
     bytes4 public constant ASSIGN_CLAIMER        = ICoreDealManagementProposals.assignClaimer.selector;                 // Default quorum
     bytes4 public constant RETURN_CAPITAL_TO_DAC = ICoreDealManagementProposals.returnCapitalToDAC.selector;            // Default quorum
+    bytes4 public constant DELEGATE_VOTE_RIGHTS  = ICoreDealManagementProposals.delegateVotingPower.selector;           // Default quorum, blocking allowed
 }

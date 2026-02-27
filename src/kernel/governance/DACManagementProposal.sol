@@ -13,10 +13,19 @@ contract DACManagementProposal is Proposal {
         address _dac,
         address _token,
         ProposalParams memory params,
-        uint256 _votingDuration, 
+        uint256 _votingDuration,
+        uint256 _totalVotingPower,
         uint256 _votingQuorum, 
         uint256 _blockingQuorum
-    ) Proposal(params, _token, _votingDuration, _votingQuorum, _blockingQuorum, address(0)) {
+    ) Proposal(
+        params, 
+        _token, 
+        _votingDuration, 
+        _totalVotingPower, 
+        _votingQuorum, 
+        _blockingQuorum, 
+        address(0)
+    ) {
         id = _id;
         dacEntity = _dac;
     }

@@ -44,7 +44,8 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
         quorum.blocking = (
             params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL || 
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
-            params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND
+            params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND ||
+            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS
         );
     }
 }

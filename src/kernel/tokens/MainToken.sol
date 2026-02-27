@@ -29,9 +29,18 @@ contract MainToken is ERC20, ERC20Permit, ERC20Votes {
         IDealManagerAdapter(dacCell).onMainMove(from, to, amount);
     }
 
+    function _beforeDelegate(address from, address to) private {
+        IDealManagerAdapter(dacCell).onMainDelegate(from, to);
+    }
+
     function _update(address from, address to, uint256 amount) internal override(ERC20, ERC20Votes) {
         super._update(from, to, amount);
         _afterTokenTransfer(from, to, amount);
+    }
+
+    function _delegate(address from, address to) internal override {
+        _beforeDelegate(from, to);
+        super._delegate(from, to);
     }
 
     function nonces(address owner) public view virtual override(ERC20Permit, Nonces) returns (uint256) {

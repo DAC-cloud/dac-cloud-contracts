@@ -36,7 +36,6 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     error InvalidTranche();
 
     error NoStake();
-    error NoClaimableRewards();
     
     error NotEnoughBalance();
 
@@ -123,7 +122,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     event DealInitialized(address indexed dac, uint256 indexed id, DealParams params);
     event DealActivated(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
     event TrancheRequested(address indexed dac, uint256 indexed id, uint256 tranche, address token, uint256 amount);
-    event RewardsClaimed(address indexed dac, address indexed agent, uint256 amount);
+    
     event CapitalReturned(address indexed dac, uint256 indexed id, address token, uint256 amount);
     event DeadlineExtended(address indexed dac, uint256 indexed id, uint256 newDeadline);
     event DealClosed(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
@@ -294,21 +293,14 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function requestTranche(
         DealManagementProposal prop
     ) external onlyDeal {
-        address _fundingToken = DealManagementProposal(prop).target();
-        
-        // Creating tranche state
-        if (_requestedFunding[_fundingToken] == 0) {
-            _fundingTokens.push(_fundingToken);
-        }
-        _requestedFunding[_fundingToken] += uint256(DealManagementProposal(prop).i());
-        
-        _fundingTranches[prop.id()] = Tranche({
-            token: _fundingToken,
-            amount: uint256(DealManagementProposal(prop).i()),
-            settled: false
-        });
-
-        IDealManager(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(id, prop.id());
+        DealCellGovernance.requestTranche(
+            id,
+            dacCell,
+            prop,
+            _fundingTranches,
+            _fundingTokens,
+            _requestedFunding
+        );
     }
 
     function transferCapital(address _token, uint256 amount) external onlyDeal {
@@ -402,17 +394,11 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
 
     function claimMainToken() external nonReentrant {
-        uint256 amount = claimableRewards[msg.sender];
-        require(amount > 0, NoClaimableRewards());
-        
-        deal.beforeClaimMainToken(msg.sender, amount);
-
-        claimableRewards[msg.sender] = 0;
-        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).mintMain(address(this), msg.sender, amount);
-        
-        emit RewardsClaimed(dacCell, msg.sender, amount);
-
-        deal.afterClaimMainToken(msg.sender, amount);
+        DealCellGovernance.claimMainToken(
+            dacCell,
+            deal,
+            claimableRewards
+        );
     }
 
     function toggleWhitelist(bool whitelistOnly) external onlyDeal {

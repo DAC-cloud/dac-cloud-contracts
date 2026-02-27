@@ -15,11 +15,20 @@ contract DealManagementProposal is Proposal {
         address _deal,
         address _token,
         ProposalParams memory params,
-        uint256 _votingDuration, 
+        uint256 _votingDuration,
+        uint256 _totalVotingPower,
         uint256 _votingQuorum, 
         uint256 _blockingQuorum,
         address vetoRightOwner
-    ) Proposal(params, _token, _votingDuration, _votingQuorum, _blockingQuorum, vetoRightOwner) {
+    ) Proposal(
+        params, 
+        _token, 
+        _votingDuration, 
+        _totalVotingPower,
+        _votingQuorum, 
+        _blockingQuorum, 
+        vetoRightOwner
+    ) {
         id = _id;
         dacEntity = _dac;
         deal = _deal;

@@ -13,7 +13,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
         ProposalParams memory proposalParams,
         address dac,
         address token,
-        uint256 unreleasedBalance,
+        uint256 totalVotingSupply,
         VotingConfig memory votingConfig
     ) external returns (address) {
         uint256 quorum;
@@ -28,10 +28,10 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.REMOVE_MODULE ||
             proposalParams.typ == DACManagementProposalType.TOGGLE_DIVIDENDS
         ) {
-            quorum = (IERC20(token).totalSupply() - unreleasedBalance) * votingConfig.highQuorumPercent / 100;
+            quorum = totalVotingSupply * votingConfig.highQuorumPercent / 100;
         }
         else {
-            quorum = (IERC20(token).totalSupply() - unreleasedBalance) * votingConfig.quorumPercent / 100;
+            quorum = totalVotingSupply * votingConfig.quorumPercent / 100;
         }
 
         if (
@@ -42,7 +42,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.APPROVE_TRANCHE ||
             proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS
         ) {
-            blockingQuorum = (IERC20(token).totalSupply() - unreleasedBalance) * votingConfig.blockingPercent / 100;
+            blockingQuorum = totalVotingSupply * votingConfig.blockingPercent / 100;
         }
 
         DACManagementProposal prop = new DACManagementProposal(
@@ -51,6 +51,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             token, 
             proposalParams, 
             votingConfig.duration,
+            totalVotingSupply,
             quorum,
             blockingQuorum
         );
