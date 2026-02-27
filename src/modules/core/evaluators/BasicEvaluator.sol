@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "../../../interfaces/Structs.sol";
 import "../../../interfaces/IEvaluator.sol";
-import "../../../kernel/interfaces/IDealCell.sol";
+import "../../../interfaces/IDealCell.sol";
 import "../interfaces/Structs.sol";
 
 contract BasicEvaluator is IEvaluator {
@@ -35,8 +35,8 @@ contract BasicEvaluator is IEvaluator {
         return true;
     }
 
-    function evaluateDeal(uint256, address dealAddr, address) external view returns (EvaluationResult memory) {
-        uint256 returned = 0; // IDealCore(dealAddr).getReturnedCapital(token);
+    function evaluateDeal(uint256, address dealCell, address, address) external view returns (EvaluationResult memory) {
+        uint256 returned = 0; // IDealCell(dealAddr).getReturnedCapital(token);
         uint256 currentTime = block.timestamp;
 
         // Find the relevant milestone
@@ -58,7 +58,7 @@ contract BasicEvaluator is IEvaluator {
         
         if (returned >= expected) {
             return EvaluationResult(1, 100, 0); // convert 100%
-        } else if (currentTime > IDealCell(dealAddr).dealDeadline()) {
+        } else if (currentTime > IDealCell(dealCell).dealDeadline()) {
             return EvaluationResult(0, 100, 0); // slash 100%
         } else {
             return EvaluationResult(2, 0, currentTime + 30 days); // extend 30 days

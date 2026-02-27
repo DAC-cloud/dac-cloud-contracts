@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import "../../interfaces/IModuleFactory.sol";
 
 struct DealState {
+    uint256 id;
+    address deal;
     IModuleFactory module;
     uint256 rewardsLimit;
     address evaluator;

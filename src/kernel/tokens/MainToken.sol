@@ -43,4 +43,8 @@ contract MainToken is ERC20, ERC20Permit, ERC20Votes {
         require(totalSupply() + amount <= maxSupply, MaxSupplyExceeded());
         _mint(to, amount);
     }
+
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
+    }
 }

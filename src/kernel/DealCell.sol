@@ -11,8 +11,9 @@ import "../interfaces/IDACCellAdapter.sol";
 import "../interfaces/IDeal.sol";
 import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IDealManagementProposalFactory.sol";
-import "./interfaces/IDealCell.sol";
-import "./interfaces/IDealManager.sol";
+import "../interfaces/IDealCell.sol";
+import "../interfaces/IDealManager.sol";
+import "./interfaces/IDealManagerAdapter.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
 import "./tokens/StakedAgent.sol";
@@ -255,9 +256,9 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
             emit DealActivated(dacCell, id, token.totalSupply());
         }
         
-        //todo: send money to Deal
-
         if (_fundingTranches[trancheId].amount > 0) {
+            require(IERC20(token).transfer(address(deal), _fundingTranches[trancheId].amount), TransferFailed());
+            
             investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
         }
         _fundingTranches[trancheId].settled = true;
@@ -265,7 +266,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         deal.afterApproveFunding(trancheId);
     }
 
-    function invite(address invitee, bool grantInviteRight) external {
+    function invite(address invitee, bool grantInviteRight) external nonReentrant {
         require(isWhitelistOnly, NotWhitelistDeal());
 
         if (msg.sender != address(this)) {
@@ -282,7 +283,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         }   
     }
 
-    function unstake() external {
+    function unstake() external nonReentrant {
         // allow to unstake if the deal is closed
         if (!closed) {
             // of if the deal is not approved within deadline
@@ -329,7 +330,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         IDealManager(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(id, prop.id());
     }
 
-    function withdrawCapital() external {
+    function withdrawCapital() external nonReentrant {
         DealCellGovernance.withdrawCapital(
             id,
             earlyReturns,
@@ -407,14 +408,14 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         deal.afterRecovery(liquidator, liquidatorStake);
     }
 
-    function claimMainToken() external {
+    function claimMainToken() external nonReentrant {
         uint256 amount = claimableRewards[msg.sender];
         require(amount > 0, NoClaimableRewards());
         
         deal.beforeClaimMainToken(msg.sender, amount);
 
         claimableRewards[msg.sender] = 0;
-        IDealManager(IDACCellAdapter(dacCell).dealManager()).mintMain(address(this), msg.sender, amount);
+        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).mintMain(address(this), msg.sender, amount);
         
         emit RewardsClaimed(dacCell, msg.sender, amount);
 

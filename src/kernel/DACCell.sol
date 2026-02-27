@@ -10,9 +10,10 @@ import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IModuleFactory.sol";
 import "../interfaces/IEvaluator.sol";
 import "../interfaces/IDACManagementFactory.sol";
+import "../interfaces/IDealManager.sol";
+import "../interfaces/IDealCell.sol";
 import "./interfaces/Structs.sol";
-import "./interfaces/IDealManager.sol";
-import "./interfaces/IDealCell.sol";
+import "./interfaces/IDealManagerAdapter.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
 import "./factories/DealManagerFactory.sol";
@@ -206,7 +207,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
 
     function createManagementProposal(ProposalParams calldata params)
         external
-        onlyHolderOrSelf
+        onlyHolderOrManager
         nonReentrant
         returns (uint256 id)
     {
@@ -261,12 +262,21 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             mainToken.mint(address(this), uint256(prop.i()));
 
             treasuryBalances[address(mainToken)] += uint256(prop.i());
-            emit TreasuryDeposit(address(mainToken), uint256(prop.i()), address(this));
+            emit TokenMinted(id, uint256(prop.i()));
         }
 
-        //todo burn lp tokens
+        else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
+            mainToken.burn(uint256(prop.i()));
 
-        //todo mint mp
+            emit TokenBurnt(id, uint256(prop.i()));
+        }
+
+        else if (typ == DACManagementProposalType.MINT_AGENT_TOKENS) {
+            agentToken.mint(address(prop.target()), uint256(prop.i()));
+
+            treasuryBalances[address(mainToken)] += uint256(prop.i());
+            emit AgentTokenMinted(id, prop.target(), uint256(prop.i()));
+        }
 
         else if (typ == DACManagementProposalType.REVOKE_AGENT_TOKENS) {
             agentToken.burnFrom(prop.target(), uint256(prop.i()));
@@ -278,7 +288,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             DACCellGovernance.executeCapitalCall(id, prop, capitalCalls);
         }
 
-        //todo toggle dividends
+        else if (typ == DACManagementProposalType.TOGGLE_DIVIDENDS) {
+            require(msg.sender == legalWrapper.wrapperAddr, LegalWrapperExecutionExpected());
+
+            dividendsEnabled = abi.decode(prop.data(), (bool));
+
+            emit DividendsConfigUpdate(id, dividendsEnabled);
+        }
 
         else if (typ == DACManagementProposalType.DIVIDEND_PAYOUT) {
             (address token, uint256 totalPayout, bytes32 merkleRoot) = abi.decode(
@@ -301,7 +317,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         }
 
         else {
-            IDealManager(dealManager).executeProp(msg.sender, prop);
+            IDealManagerAdapter(dealManager).executeProp(msg.sender, prop);
         }
 
         emit DACProposalExecuted(id, typ);
@@ -355,8 +371,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         _;
     }
 
-    modifier onlyHolderOrSelf() {
-        _onlyHolderOrSelf();
+    modifier onlyHolderOrManager() {
+        _onlyHolderOrManager();
         _;
     }
 
@@ -379,10 +395,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         require(agentToken.balanceOf(msg.sender) > 0, NotAuthorized());
     }
 
-    function _onlyHolderOrSelf() internal view {
+    function _onlyHolderOrManager() internal view {
         require(
             (
-                msg.sender == address(this) ||
+                msg.sender == dealManager ||
                 mainToken.balanceOf(msg.sender) > 0
             ), 
             NotAuthorized()

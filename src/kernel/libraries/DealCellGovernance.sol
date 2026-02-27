@@ -1,21 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../../interfaces/Structs.sol";
 import "../../interfaces/IDeal.sol";
-import "../../interfaces/IDealAdmin.sol";
-import "../../interfaces/IEvaluator.sol";
-import "../../interfaces/IDACManagementFactory.sol";
-import "../../interfaces/IModuleFactory.sol";
-import "../interfaces/IDealManager.sol";
-import "../interfaces/IDealCell.sol";
+import "../../interfaces/IDealCell.sol";
 import "../interfaces/Structs.sol";
-import "../tokens/MainToken.sol";
-import "../tokens/AgentToken.sol";
 import "../tokens/StakedAgent.sol";
-import "../governance/DACManagementProposal.sol";
-import "../governance/DACManagementProposals.sol";
 
 interface IDealGovernanceAdapter {
     function closeDeal()
@@ -29,11 +20,28 @@ library DealCellGovernance {
 
     error InsufficientRewards();
 
+    error TransferFailed();
+
     event CapitalReturned(address indexed dac, uint256 indexed id, address token, uint256 amount);
 
     event RewardsAllocated(address indexed dac, uint256 indexed id, uint256 reward);
     event StakesSlashed(address indexed dac, uint256 indexed id, uint256 slashAmount);
     
+    function prepareWithdrawal(
+        address dealCell
+    ) public {
+        address[] memory _fundingTokens = IDealCell(dealCell).fundingTokens();
+
+        for (uint256 i = 0; i < _fundingTokens.length; i++) {
+            address _fundingToken = _fundingTokens[i];
+
+            uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
+            if (balance == 0) continue;
+
+            IERC20(_fundingToken).approve(dealCell, balance);
+        }
+    }
+
     function withdrawCapital(
         uint256 id,
         bool earlyReturns,
@@ -60,8 +68,13 @@ library DealCellGovernance {
         for (uint256 i = 0; i < _fundingTokens.length; i++) {
             address _fundingToken = _fundingTokens[i];
 
-            uint256 dealBalance = IERC20(_fundingToken).balanceOf(address(deal));
-            IERC20(_fundingToken).transferFrom(address(deal), address(this), dealBalance);
+            uint256 dealAllowance = IERC20(_fundingToken).allowance(address(deal), address(this));
+            if (dealAllowance > 0) {
+                require(
+                    IERC20(_fundingToken).transferFrom(address(deal), address(this), dealAllowance),
+                    TransferFailed()
+                );
+            }
 
             //todo: transfer from deal
 

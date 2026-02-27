@@ -7,15 +7,17 @@ import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Vo
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interfaces/Structs.sol";
+import "../interfaces/IDealCell.sol";
+import "../interfaces/IDealManager.sol";
 import "../interfaces/IDACCellAdapter.sol";
 import "../interfaces/IDeal.sol";
 import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IDealManagementProposalFactory.sol";
-import "./interfaces/IDealCell.sol";
-import "./interfaces/IDealManager.sol";
+import "./interfaces/IDealCellAdapter.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
 import "./tokens/StakedAgent.sol";
+import "./libraries/DealCellGovernance.sol";
 import "./governance/DealManagementProposal.sol";
 import "./governance/AbstractDealManagementProposals.sol";
 
@@ -146,7 +148,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function beforeInitialize(
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
-    ) external {
+    ) external onlyDealCell {
         _beforeInitialize(params, defaultVotingConfig);
     }
 
@@ -157,92 +159,93 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function afterInitialize(
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
-    ) external {
+    ) external onlyDealCell {
         _afterInitialize(params, defaultVotingConfig);
     }
  
     function _onVoluntaryStake(address staker, uint256 amount) internal virtual {}
-    function onVoluntaryStake(address staker, uint256 amount) external {
+    function onVoluntaryStake(address staker, uint256 amount) external onlyDealCell {
         _onVoluntaryStake(staker, amount);
     }
 
     function _beforeEveryStake(address staker, uint256 amount) internal virtual {}
-    function beforeEveryStake(address staker, uint256 amount) external {
+    function beforeEveryStake(address staker, uint256 amount) external onlyDealCell {
         _beforeEveryStake(staker, amount);
     }
 
     function _afterEveryStake(address staker, uint256 amount) internal virtual {}
-    function afterEveryStake(address staker, uint256 amount) external {
+    function afterEveryStake(address staker, uint256 amount) external onlyDealCell {
         _afterEveryStake(staker, amount);
     }
 
     function _beforeApprove(uint256 trancheId) internal virtual {}
-    function beforeApproveFunding(uint256 trancheId) external {
+    function beforeApproveFunding(uint256 trancheId) external onlyDealCell {
         _beforeApprove(trancheId);
     }
     
     function _afterApprove(uint256 trancheId) internal virtual {}
-    function afterApproveFunding(uint256 trancheId) external {
+    function afterApproveFunding(uint256 trancheId) external onlyDealCell {
         _afterApprove(trancheId);
     }
 
     function _afterInvite(address invitee, bool grantInviteRight) internal virtual {}
-    function onInvite(address invitee, bool grantInviteRight) external {
+    function onInvite(address invitee, bool grantInviteRight) external onlyDealCell {
         _afterInvite(invitee, grantInviteRight);
     }
 
     function _afterUnstake(address staker, uint256 amount) internal virtual {}
-    function onUnstake(address staker, uint256 amount) external {
+    function onUnstake(address staker, uint256 amount) external onlyDealCell {
         _afterUnstake(staker, amount);
     }
 
     function _beforeWithdrawCapital() internal virtual {}
-    function beforeWithdrawCapital() external {
+    function beforeWithdrawCapital() external onlyDealCell {
         _beforeWithdrawCapital();
+        DealCellGovernance.prepareWithdrawal(dealCell);
     }
 
     function _afterWithdrawCapital() internal virtual {}
-    function afterWithdrawCapital() external {
+    function afterWithdrawCapital() external onlyDealCell {
         _afterWithdrawCapital();
     }
 
     function _beforeMarkAsSuccess(uint256 rewardPercent) internal virtual {}
-    function onMarkAsSuccess(uint256 rewardPercent) external {
+    function onMarkAsSuccess(uint256 rewardPercent) external onlyDealCell {
         _beforeMarkAsSuccess(rewardPercent);
     }
 
     function _afterMarkAsFailed(uint256 slashPercent) internal virtual {}
-    function onMarkAsFailed(uint256 slashPercent) external {
+    function onMarkAsFailed(uint256 slashPercent) external onlyDealCell {
         _afterMarkAsFailed(slashPercent);
     }
 
     function _beforeExtendDeadline(uint256 oldDeadline, uint256 newDeadline) internal virtual {}
-    function onExtendDeadline(uint256 oldDeadline, uint256 newDeadline) external {
+    function onExtendDeadline(uint256 oldDeadline, uint256 newDeadline) external onlyDealCell {
         _beforeExtendDeadline(oldDeadline, newDeadline);
     }
 
     function _beforeClose() internal virtual {}
-    function beforeClose() external {
+    function beforeClose() external onlyDealCell {
         _beforeClose();
     }
 
     function _beforeRecovery(address liquidator, uint256 liquidatorStake) internal virtual {}
-    function beforeRecovery(address liquidator, uint256 liquidatorStake) external {
+    function beforeRecovery(address liquidator, uint256 liquidatorStake) external onlyDealCell {
         _beforeRecovery(liquidator, liquidatorStake);
     }
 
     function _afterRecovery(address liquidator, uint256 liquidatorStake) internal virtual {}
-    function afterRecovery(address liquidator, uint256 liquidatorStake) external {
+    function afterRecovery(address liquidator, uint256 liquidatorStake) external onlyDealCell {
         _afterRecovery(liquidator, liquidatorStake);
     }
 
     function _beforeClaimMainToken(address grantee, uint256 amount) internal virtual {}
-    function beforeClaimMainToken(address grantee, uint256 amount) external {
+    function beforeClaimMainToken(address grantee, uint256 amount) external onlyDealCell {
         _beforeClaimMainToken(grantee, amount);
     }
 
     function _afterClaimMainToken(address grantee, uint256 amount) internal virtual {}
-    function afterClaimMainToken(address grantee, uint256 amount) external {
+    function afterClaimMainToken(address grantee, uint256 amount) external onlyDealCell {
         _afterClaimMainToken(grantee, amount);
     }
 
@@ -303,14 +306,8 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         _afterCreateProposal(proposalId, params);
     }
 
-    function _toggleEarlyReturns(bool allowEarlyReturn) private {
-        if (earlyReturns != allowEarlyReturn) {
-            earlyReturns = allowEarlyReturn;
-        }
-    }
-
     function _checkStackedMPProposalSupported(ProposalParams calldata) internal virtual returns (bool supported) {
-        // Children override this to indicate if the governance proposal is supported
+        // Concrete Deal implementation overrides this to indicate if the governance proposal is supported
         supported = false;
     }
 
@@ -336,24 +333,24 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         }
 
         else if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
-            IDealCell(dealCell).requestTranche(DealManagementProposal(prop));
+            IDealCellAdapter(dealCell).requestTranche(DealManagementProposal(prop));
         }
 
         else if (typ == AbstractDealManagementType.ADD_STAKE) {
             address staker = DealManagementProposal(prop).target();
             uint256 stakeAmount = uint256(DealManagementProposal(prop).i());
             
-            IDealCell(dealCell).addStake(staker, stakeAmount);
+            IDealCellAdapter(dealCell).addStake(staker, stakeAmount);
         }
 
         else if (typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS) {
-            bool toggle = abi.decode(DealManagementProposal(prop).data(), (bool));
-            _toggleEarlyReturns(toggle);
+            earlyReturns = abi.decode(DealManagementProposal(prop).data(), (bool));
+
             emit EarlyReturnsToggled(proposalId, earlyReturns);
         }
 
         else if (typ == AbstractDealManagementType.TOGGLE_WHITELIST) {
-            IDealCell(dealCell).toggleWhitelist(
+            IDealCellAdapter(dealCell).toggleWhitelist(
                 abi.decode(DealManagementProposal(prop).data(), (bool))
             );
         }
@@ -373,11 +370,9 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         require(false, ProposalNotSupported());
     }
 
-    function onMessageDeal(bytes4, bytes calldata) external onlyDealCell returns (bool) {
-        // Basic deal accepts all messages, assuming they pass for the governance perspective
-        // and makes sense on chain.
-        
-        return true;
+    function _onMessageDeal(bytes4, bytes calldata) internal virtual returns (bool) { return true; }
+    function onMessageDeal(bytes4 message, bytes calldata data) external onlyDealCell returns (bool) {
+        return _onMessageDeal(message, data);
     }
     
     function _onLegalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) internal virtual {}

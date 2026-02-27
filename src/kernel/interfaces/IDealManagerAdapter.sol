@@ -4,13 +4,11 @@ pragma solidity ^0.8.20;
 import "./Structs.sol";
 import "../governance/DACManagementProposal.sol";
 
-interface IDealManager {
-    function deals(uint256 id) external view returns (address);
+interface IDealManagerAdapter {
     function legalWrapperMessage(uint256 id, bytes4 kind, bytes calldata message) external;
     function isRecoverable(uint256 id) external view returns (bool);
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external;
     function executeProp(address msgSender, DACManagementProposal prop) external;
     function mintMain(address deal, address to, uint256 amount) external;
     function createTrancheProposal(uint256 dealId, uint256 trancheId) external;
-    function totalUnreleasedMainTokens() external view returns (uint256);
 }

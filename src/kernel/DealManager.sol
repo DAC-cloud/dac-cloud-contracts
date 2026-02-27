@@ -10,8 +10,9 @@ import "../interfaces/IDealAdmin.sol";
 import "../interfaces/IModuleFactory.sol";
 import "../interfaces/IEvaluator.sol";
 import "../interfaces/IDACManagementFactory.sol";
+import "../interfaces/IDealCell.sol";
 import "./interfaces/Structs.sol";
-import "./interfaces/IDealCell.sol";
+import "./interfaces/IDealManagerAdapter.sol";
 import "./tokens/MainToken.sol";
 import "./tokens/AgentToken.sol";
 import "./governance/DACManagementProposal.sol";
@@ -56,11 +57,11 @@ contract DealManager is IDealManager, ReentrancyGuard {
     
     address private coreModuleFactory;
     mapping(address => bool) private moduleFactories;
-    
+
     uint256 private nextId = 1;
-    mapping(uint256 => address) public deals;                   // id => Deal address
+    mapping(uint256 => address) public deals;                   // id => Deal cell address
     
-    mapping(address => DealState) public dealState;             // address => Deal state
+    mapping(address => DealState) public dealState;             // dealCell => Deal state
 
     // Main token flow tracking
     uint256 private unreleasedMainTokens;
@@ -120,7 +121,7 @@ contract DealManager is IDealManager, ReentrancyGuard {
     function createTrancheProposal(
         uint256 dealId,
         uint256 trancheId
-    ) external onlyDeal nonReentrant {
+    ) external onlyDealCell nonReentrant {
         DACCellGovernance.createTrancheProposal(
             address(this),
             dealId,
@@ -137,7 +138,7 @@ contract DealManager is IDealManager, ReentrancyGuard {
         IDealAdmin(deals[id]).legalWrapperMessage(msg.sender, kind, message);
     }
 
-    function mintMain(address deal, address to, uint256 amount) external onlyDeal nonReentrant {
+    function mintMain(address deal, address to, uint256 amount) external onlyDealCell nonReentrant {
         DACCellGovernance.mintMain(
             deal, 
             to, 
@@ -150,7 +151,7 @@ contract DealManager is IDealManager, ReentrancyGuard {
     function forceReturnCapital(uint256 id) external onlyHolderOrSelf {
         address deal = deals[id];
         require(deal != address(0), InvalidDealId(id));
-        IDealCell(deal).withdrawCapital();
+        IDealCellAdapter(deal).withdrawCapital();
     }
 
     function isRecoverable(uint256 id) external view returns (bool) {
@@ -271,13 +272,8 @@ contract DealManager is IDealManager, ReentrancyGuard {
         _;
     }
 
-    modifier onlyDeal() {
-        _onlyDeal(msg.sender);
-        _;
-    }
-
-    modifier onlyDealOrSelf() {
-        _onlyDealOrSelf();
+    modifier onlyDealCell() {
+        _onlyDealCell(msg.sender);
         _;
     }
 
@@ -315,16 +311,10 @@ contract DealManager is IDealManager, ReentrancyGuard {
         );
     }
 
-    function _onlyDealOrSelf() internal view {
-        if (msg.sender != address(this)) {
-            _onlyDeal(msg.sender);
-        }
-    }
-
-    function _onlyDeal(address deal) internal view {
+    function _onlyDealCell(address dealCell) internal view {
         require(
-            IModuleFactory(dealState[deal].module).isActive(), 
-            InvalidDeal(deal)
+            IModuleFactory(dealState[dealCell].module).isActive(), 
+            InvalidDeal(dealCell)
         );
     }
 

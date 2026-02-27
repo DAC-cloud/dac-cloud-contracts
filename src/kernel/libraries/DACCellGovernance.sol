@@ -7,9 +7,10 @@ import "../../interfaces/IDealAdmin.sol";
 import "../../interfaces/IEvaluator.sol";
 import "../../interfaces/IDACManagementFactory.sol";
 import "../../interfaces/IModuleFactory.sol";
-import "../interfaces/IDealManager.sol";
-import "../interfaces/IDealCell.sol";
+import "../../interfaces/IDealManager.sol";
+import "../../interfaces/IDealCell.sol";
 import "../interfaces/Structs.sol";
+import "../interfaces/IDealManagerAdapter.sol";
 import "../tokens/MainToken.sol";
 import "../tokens/AgentToken.sol";
 import "../governance/DACManagementProposal.sol";
@@ -123,8 +124,10 @@ library DACCellGovernance {
             votingConfig
         );
 
-        deals[id] = dealAddr;
-        dealRegistry[dealAddr] = DealState({
+        deals[id] = dealCell;
+        dealRegistry[dealCell] = DealState({
+            id: id,
+            deal: dealAddr,
             module: IModuleFactory(params.moduleFactory),
             evaluator: evaluatorAddr,
             rewardsLimit: 0
@@ -153,11 +156,11 @@ library DACCellGovernance {
         uint256 trancheId,
         mapping(uint256 => address) storage deals
     ) internal {
-        address deal = deals[dealId];
-        require(msg.sender == deal, InvalidDealId(dealId));
+        address dealCell = deals[dealId];
+        require(msg.sender == dealCell, InvalidDealId(dealId));
 
-        address fundingToken = IDealCell(deal).fundingToken(trancheId);
-        uint256 fundingAmount = IDealCell(deal).fundingAmount(trancheId);
+        address fundingToken = IDealCell(dealCell).fundingToken(trancheId);
+        uint256 fundingAmount = IDealCell(dealCell).fundingAmount(trancheId);
         require(fundingAmount > 0, InvalidTranche());
 
         ProposalParams memory trancheProposal = ProposalParams({
@@ -179,17 +182,20 @@ library DACCellGovernance {
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
     ) public {
-        address deal = deals[dealId];
+        address dealCell = deals[dealId];
 
-        uint256 amount = IDealCell(deal).fundingAmount(trancheId);
-        address token = IDealCell(deal).fundingToken(trancheId);
+        uint256 amount = IDealCell(dealCell).fundingAmount(trancheId);
+        address token = IDealCell(dealCell).fundingToken(trancheId);
 
-        require(IERC20(token).transfer(deal, amount), TransferFailed());
+        if (amount > 0) {
+            require(IERC20(token).transfer(dealCell, amount), TransferFailed());
+        }
+        
         if (trancheId == 0) {
-            dealState[deal].rewardsLimit = rewardsLimit;
+            dealState[dealCell].rewardsLimit = rewardsLimit;
         }
 
-        IDealAdmin(deal).approveFunding(trancheId);
+        IDealAdmin(dealCell).approveFunding(trancheId);
         
         emit FundingApproved(dealId, trancheId, rewardsLimit);
     }
@@ -204,23 +210,25 @@ library DACCellGovernance {
             (uint256, uint256, uint256)
         );
 
-        address deal = dealManager.deals(dealId);
-        require(deal != address(0), InvalidDealId(dealId));
+        address dealCell = dealManager.deals(dealId);
+        require(dealCell != address(0), InvalidDealId(dealId));
 
-        uint256 amount = IDealCell(deal).fundingAmount(trancheId);
-        address token = IDealCell(deal).fundingToken(trancheId);
+        uint256 amount = IDealCell(dealCell).fundingAmount(trancheId);
+        address token = IDealCell(dealCell).fundingToken(trancheId);
 
         require(treasuryBalances[token] >= amount, InsufficientTreasury());
 
         if (amount > 0) {
-            require(IERC20(token).approve(address(dealManager), type(uint256).max), TransferFailed());
+            require(IERC20(token).transfer(address(dealManager), amount), TransferFailed());
             treasuryBalances[token] -= amount;
         }
         else {
             require(trancheId == 0, InvalidTranche());
         }
 
-        dealManager.approveFunding(dealId, trancheId, rewardsLimit);
+        IDealManagerAdapter(address(dealManager)).approveFunding(
+            dealId, trancheId, rewardsLimit
+        );
     }
 
     function createManagementProposal(
@@ -287,21 +295,21 @@ library DACCellGovernance {
     }
 
     function mintMain(
-        address deal, 
+        address dealCell, 
         address to, 
         uint256 amount,
         MainToken mainToken,
         mapping(address => DealState) storage dealState
     ) public {
-        require(msg.sender == deal, InvalidDeal(msg.sender));
-        require(dealState[deal].rewardsLimit > amount, InsufficientRewards());
+        require(msg.sender == dealCell, InvalidDeal(msg.sender));
+        require(dealState[dealCell].rewardsLimit > amount, InsufficientRewards());
 
         //todo permit mint on evaluator
 
-        // Here we enforce a cup on mint per deal, so rewards are capped by what was agreed 
+        // Here we enforce a cap on mint per deal, so rewards are capped by what was agreed 
         // by LP holders, even when both the deal and evaluator are compromised
 
-        dealState[deal].rewardsLimit -= amount;
+        dealState[dealCell].rewardsLimit -= amount;
 
         mainToken.mint(to, amount);
     }
@@ -338,8 +346,8 @@ library DACCellGovernance {
         uint256 transformationPercent,
         mapping(uint256 => address) storage deals
     ) internal {
-        address deal = deals[id];
-        IDealAdmin(deal).markAsSuccess(transformationPercent);
+        address dealCell = deals[id];
+        IDealAdmin(dealCell).markAsSuccess(transformationPercent);
     }
 
     function _performSlash(
@@ -348,10 +356,10 @@ library DACCellGovernance {
         AgentToken agentToken,
         mapping(uint256 => address) storage deals
     ) internal {
-        address deal = deals[id];
-        uint256 totalTokens = IDealCell(deal).getStakedAgentTotal();
-        AgentToken(agentToken).burnFrom(deal, totalTokens);
-        IDealAdmin(deal).markAsFailed(slashPercent);
+        address dealCell = deals[id];
+        uint256 totalTokens = IDealCell(dealCell).getStakedAgentTotal();
+        AgentToken(agentToken).burnFrom(dealCell, totalTokens);
+        IDealAdmin(dealCell).markAsFailed(slashPercent);
     }
 
     function evaluateDeal(
@@ -360,20 +368,25 @@ library DACCellGovernance {
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
     ) public {
-        address deal = deals[id];
-        require(deal != address(0), InvalidDeal(deal));
+        address dealCell = deals[id];
+        require(dealCell != address(0), InvalidDeal(dealCell));
 
-        address evaluatorAddr = dealState[deal].evaluator;
-        EvaluationResult memory result = IEvaluator(evaluatorAddr).evaluateDeal(id, deal, address(this));
+        address evaluatorAddr = dealState[dealCell].evaluator;
+        EvaluationResult memory result = IEvaluator(evaluatorAddr).evaluateDeal(
+            id, 
+            dealCell,
+            dealState[dealCell].deal, 
+            address(this)
+        );
 
         if (result.action == 0) {           // slash
             _performSlash(id, result.percent, agentToken, deals);
         } else if (result.action == 1) {    // convert
             _performTransformation(id, result.percent, deals);
         } else if (result.action == 2) {    // extend
-            IDealAdmin(deal).extendDeadline(result.newDeadline);
+            IDealAdmin(dealCell).extendDeadline(result.newDeadline);
         } else if (result.action == 3) {    // close
-            IDealAdmin(deal).closeDeal();
+            IDealAdmin(dealCell).closeDeal();
         }
 
         if (result.action == 1 || result.action == 0) {
