@@ -80,11 +80,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     event LegalWrapperMessage(address indexed wrapper, bytes4 messageKind, bytes message);
     event DividendsConfigUpdate(uint256 indexed id, bool enabled);
 
-    // DAC operation events
-    event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
-
     // Indexed by proposal id
-    event DACProposalExecuted(uint256 indexed id, bytes4 typ);
+    event DACProposalExecuted(uint256 indexed id, bytes4 indexed typ);
 
     event TokenMinted(uint256 indexed id, uint256 amount);
     event TokenBurnt(uint256 indexed id, uint256 amount);
@@ -182,9 +179,15 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     }
 
     function depositTreasury(address token, uint256 amount) external nonReentrant {
-        require(IERC20(token).transferFrom(msg.sender, address(this), amount), TransferFailed());
-        treasuryBalances[token] += amount;
-        emit TreasuryDeposit(token, amount, msg.sender);
+        return DACCellGovernanceLib.depositTreasury(
+            token, amount, dealManager, treasuryBalances
+        );
+    }
+
+    function recoverTreasury(address token) external nonReentrant onlyHolderOrManager {
+        return DACCellGovernanceLib.recoverTreasury(
+            token, treasuryBalances
+        );
     }
 
     function fulfillCapitalCall(CapitalCall calldata call) external nonReentrant returns (bool) {

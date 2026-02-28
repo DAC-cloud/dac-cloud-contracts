@@ -16,7 +16,16 @@ import "../src/modules/core/factories/DACDealFactory.sol";
 import "../src/modules/core/factories/TreasuryDealFactory.sol";
 import "../src/modules/core/factories/BasicEvaluatorFactory.sol";
 
-contract DACTest is Test {
+contract MockUSDC is ERC20 {
+    constructor() ERC20("Crypto Dollars", "USDC") {}
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+contract DACCellCapitalCallTest is Test {
+    MockUSDC usdc;
+
     DACCell dac;
     MainToken mainToken;
     AgentToken agentToken;
@@ -26,13 +35,17 @@ contract DACTest is Test {
     DACManagementProposalFactory governanceFactory;
     DACFactory dacFactory;
     
-    address owner = address(1);
-    address user = address(2);
+    address moduleOwner = makeAddr("bob");
 
-    address permit2 = address(10);
+    address founder = makeAddr("alice");
+
+    address permit2 = makeAddr("permit2");
 
     function setUp() public {
-        vm.startPrank(owner);
+        usdc = new MockUSDC();
+        usdc.mint(founder, 100_000);
+
+        vm.startPrank(moduleOwner);
 
         coreModule = new CoreModuleFactory(
             address(new DACDealFactory()),
@@ -49,32 +62,52 @@ contract DACTest is Test {
 
         vm.stopPrank();
 
+        vm.startPrank(founder);
+
         DACConfig memory config = DACConfig({
             symbol: "",
             name: "",
             description: "",
             mainTokenMaxSupply: 1_000_000_000e18,
             defaultQuorum: 50,
-            founder: user,
+            founder: founder,
             founderAllocation: 200_000_000e18,
-            treasuryToken: address(0),
-            founderCommitment: 1e18,
+            treasuryToken: address(usdc),
+            founderCommitment: 20_000,
             dividendsEnabled: false
         });
 
         bytes32 salt = keccak256(abi.encode("MyFirstDAC-v1", block.timestamp));
 
-        (address dacAddress, address lpAddress, address mpAddress) = dacFactory.deployDAC(
+        (address dacAddress, address mainTokenAddress, address agentTokenAddress) = dacFactory.deployDAC(
             config, salt
         );
 
-        mainToken = MainToken(lpAddress);
-        agentToken = AgentToken(mpAddress);
+        mainToken = MainToken(mainTokenAddress);
+        agentToken = AgentToken(agentTokenAddress);
 
         dac = DACCell(dacAddress);
+
+        vm.stopPrank();
     }
 
-    function testDeployment() public {
-        //assertEq(dac.getQuorumPercent(), 50);
+    function testCapitalCall() public {
+        vm.startPrank(founder);
+
+        usdc.approve(address(dac), 20_000);
+
+        CapitalCall memory call = CapitalCall({
+            treasuryToken: address(usdc),
+            nonce: 0,
+            tokenRecipient: founder,
+            tokenAmount: 200_000_000e18,
+            cashAmount: 20_000
+        });
+
+        dac.fulfillCapitalCall(call);
+
+        vm.stopPrank();
+
+        assertEq(mainToken.balanceOf(founder), 200_000_000e18, "Incorrect main token balance after capital call");
     }
 }

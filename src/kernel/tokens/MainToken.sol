@@ -5,7 +5,9 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+import {IClock} from "../../lib/IClock.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
+import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
 
 contract MainToken is ERC20, ERC20Permit, ERC20Votes {
     error NotAuthorized();
@@ -26,11 +28,11 @@ contract MainToken is ERC20, ERC20Permit, ERC20Votes {
     }
 
     function _afterTokenTransfer(address from, address to, uint256 amount) private {
-        IDealManagerAdapter(dacCell).onMainMove(from, to, amount);
+        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).onMainMove(from, to, amount);
     }
 
     function _beforeDelegate(address from, address to) private {
-        IDealManagerAdapter(dacCell).onMainDelegate(from, to);
+        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).onMainDelegate(from, to);
     }
 
     function _update(address from, address to, uint256 amount) internal override(ERC20, ERC20Votes) {
@@ -55,5 +57,14 @@ contract MainToken is ERC20, ERC20Permit, ERC20Votes {
 
     function burn(uint256 amount) external {
         _burn(msg.sender, amount);
+    }
+
+    // ERC-6372 Clock with timestamp mode for OpenZeppelin Votes
+    function clock() public view virtual override returns (uint48) {
+        return uint48(block.timestamp);
+    }
+
+    function CLOCK_MODE() public pure virtual override returns (string memory) {
+        return "mode=timestamp";
     }
 }

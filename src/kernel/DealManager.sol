@@ -231,6 +231,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
 
     function evaluateDeal(uint256 id) external onlyAgentOrHolder {
         DACCellGovernanceLib.evaluateDeal(
+            dacCell,
             id,
             agentToken,
             deals,

@@ -35,4 +35,13 @@ contract StakedAgent is ERC20, ERC20Permit, ERC20Votes {
         require(msg.sender == dealCell, NotAuthorized());
         _burn(from, amount);
     }
+
+    // ERC-6372 Clock with timestamp mode for OpenZeppelin Votes
+    function clock() public view virtual override returns (uint48) {
+        return uint48(block.timestamp);
+    }
+
+    function CLOCK_MODE() public pure virtual override returns (string memory) {
+        return "mode=timestamp";
+    }
 }

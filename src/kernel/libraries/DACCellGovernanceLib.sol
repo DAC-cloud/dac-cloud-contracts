@@ -62,6 +62,8 @@ library DACCellGovernanceLib {
     event CapitalCallCreated(uint256 indexed id, address indexed recipient, bytes32 callHash, uint256 amount);
     event CapitalCallFulfilled(address indexed recipient, bytes32 callHash, uint256 amount);
     
+    event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
+
     event DACProposalCreated(uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
 
     event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
@@ -70,7 +72,7 @@ library DACCellGovernanceLib {
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 indexed trancheId, uint256 rewardsLimit);
     
-    event DealEvaluated(uint256 indexed id, EvaluationResult[] evaluations);
+    event DealEvaluated(address dac, uint256 indexed id, EvaluationResult[] evaluations);
 
     // Methods implementation
 
@@ -100,6 +102,32 @@ library DACCellGovernanceLib {
         emit CapitalCallFulfilled(call.tokenRecipient, callHash, call.tokenAmount);
         
         return true;
+    }
+
+    function depositTreasury(
+        address token, 
+        uint256 amount,
+        address dealManager,
+        mapping(address => uint256) storage treasuryBalances
+    ) public {
+        require(
+            IDealManagerAdapter(dealManager).state(msg.sender).deal != address(0),
+            NotAuthorized()
+        );
+
+        require(IERC20(token).transferFrom(msg.sender, address(this), amount), TransferFailed());
+        treasuryBalances[token] += amount;
+        emit TreasuryDeposit(token, amount, msg.sender);
+    }
+
+    function recoverTreasury(
+        address token,
+        mapping(address => uint256) storage treasuryBalances
+    ) public {
+        if (IERC20(token).balanceOf(address(this)) > treasuryBalances[token]) {
+            emit TreasuryDeposit(token, IERC20(token).balanceOf(address(this)) - treasuryBalances[token], msg.sender);
+            treasuryBalances[token] = IERC20(token).balanceOf(address(this));
+        }
     }
 
     function createDealProposal(
@@ -395,6 +423,7 @@ library DACCellGovernanceLib {
     }
 
     function evaluateDeal(
+        address dacCell,
         uint256 id,
         AgentToken agentToken,
         mapping(uint256 => address) storage deals,
@@ -423,7 +452,7 @@ library DACCellGovernanceLib {
             }
         }
         
-        emit DealEvaluated(id, evaluations);
+        emit DealEvaluated(dacCell, id, evaluations);
     }
 
     function claimDividend(
