@@ -17,5 +17,6 @@ interface IDealManagerAdapter {
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external;
     function executeProp(address msgSender, DACManagementProposal prop) external;
     function mintMain(address deal, address to, uint256 amount) external;
+
     function createTrancheProposal(uint256 dealId, uint256 trancheId) external;
 }

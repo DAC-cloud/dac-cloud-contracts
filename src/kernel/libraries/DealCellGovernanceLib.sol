@@ -201,7 +201,7 @@ library DealCellGovernanceLib {
             settled: false
         });
 
-        IDealManager(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(dealId, prop.id());
+        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(dealId, prop.id());
     }
 
     function claimMainToken(

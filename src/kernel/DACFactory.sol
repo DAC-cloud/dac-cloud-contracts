@@ -10,11 +10,15 @@ import {MainTokenLib, AgentTokenLib} from "./tokens/factories/TokenFactories.sol
 
 contract DACFactory is IDACFactory {
     error Create2Failed();
+    error SleepingCellNotFound();
+    error DNAMismatch();
 
     address public governanceFactory;
     address public coreModuleFactory;
     
-    event DACDeployed(address indexed dac, address mainToken, address agentToken);
+    mapping(bytes32 => bytes32) private sleepingCells;
+
+    event DACDeployed(address indexed dac, address mainToken, address agentToken, bool init);
 
     constructor(
         address _governanceFactory,
@@ -26,7 +30,8 @@ contract DACFactory is IDACFactory {
 
     function deployDAC(
         DACConfig calldata config,
-        bytes32 salt
+        bytes32 salt,
+        address deferBirthRole
     ) external returns (address dacAddr, address mainAddr, address agentAddr) {
         require(config.mainTokenMaxSupply > config.founderAllocation);
 
@@ -62,17 +67,53 @@ contract DACFactory is IDACFactory {
 
         require(address(dac) == dacAddr, Create2Failed());
 
-        dac.initializeAfterDeployment(
-            mainAddr,
-            agentAddr,
+        if (deferBirthRole == address(0)) {
+            dac.initializeAfterDeployment(
+                mainAddr,
+                agentAddr,
+                coreModuleFactory,
+                config.dividendsEnabled,
+                config.defaultQuorum
+            );
+
+            dac.initializeRootCapitalCall(
+                config.treasuryToken,
+                config.founder,
+                config.founderAllocation,
+                config.founderCommitment
+            );
+        }
+        else {
+            bytes32 deferInitCell = keccak256(abi.encode(deferBirthRole, address(dac)));
+            bytes32 deferInitCalldata = keccak256(abi.encode(config, mainAddr, agentAddr));
+
+            sleepingCells[deferInitCell] = deferInitCalldata;
+        }
+
+        emit DACDeployed(dacAddr, mainAddr, agentAddr, (deferBirthRole == address(0)));
+    }
+
+    function startDAC(
+        address dacCell,
+        DACConfig calldata config,
+        address mainTokenAddr,
+        address agentTokenAddr
+    ) external {
+        bytes32 deferInitCell = keccak256(abi.encode(msg.sender, dacCell));
+        require(sleepingCells[deferInitCell] != bytes32(0), SleepingCellNotFound());
+
+        bytes32 deferInitCalldata = keccak256(abi.encode(config, mainTokenAddr, agentTokenAddr));
+        require(sleepingCells[deferInitCell] == deferInitCalldata, DNAMismatch());
+
+        DACCell(dacCell).initializeAfterDeployment(
+            mainTokenAddr,
+            agentTokenAddr,
             coreModuleFactory,
             config.dividendsEnabled,
             config.defaultQuorum
         );
 
-        emit DACDeployed(dacAddr, mainAddr, agentAddr);
-
-        dac.initializeRootCapitalCall(
+        DACCell(dacCell).initializeRootCapitalCall(
             config.treasuryToken,
             config.founder,
             config.founderAllocation,

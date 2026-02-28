@@ -46,7 +46,7 @@ abstract contract ModuleFactory is IModuleFactory {
             IDACCellAdapter(dac).getMainToken()
         );
 
-        DealCell(dealCell).initialize(params, votingConfig);
+        DealCell(dealCell).initialize(dealAddr, params, votingConfig);
 
         IEvaluatorFactory evaluatorFactory = getEvaluatorFactory(params.dealKind, params.evaluatorSelector);
 

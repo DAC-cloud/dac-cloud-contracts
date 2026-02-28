@@ -50,22 +50,22 @@ contract DACDeployTest is Test {
         vm.stopPrank();
 
         DACConfig memory config = DACConfig({
-            symbol: "",
-            name: "",
-            description: "",
+            symbol: "DACX",
+            name: "DAC exchange",
+            description: "future of finance",
             mainTokenMaxSupply: 1_000_000_000e18,
             defaultQuorum: 50,
             founder: user,
             founderAllocation: 200_000_000e18,
             treasuryToken: address(0),
-            founderCommitment: 1e18,
+            founderCommitment: 20_000,
             dividendsEnabled: false
         });
 
         bytes32 salt = keccak256(abi.encode("MyFirstDAC-v1", block.timestamp));
 
         (address dacAddress, address lpAddress, address mpAddress) = dacFactory.deployDAC(
-            config, salt
+            config, salt, address(0)
         );
 
         mainToken = MainToken(lpAddress);

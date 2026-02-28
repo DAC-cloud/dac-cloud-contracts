@@ -290,7 +290,7 @@ library DACCellGovernanceLib {
         IDealManager dealManager,
         mapping(uint256 => address) storage proposals
     ) public returns (uint256 id) {
-        if (msg.sender == address(this)) {
+        if (msg.sender == address(dealManager)) {
             require(
                 (
                     params.typ == DACManagementProposalType.APPROVE_DEAL ||

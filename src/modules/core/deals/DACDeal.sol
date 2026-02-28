@@ -17,6 +17,11 @@ import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.
 
 contract DACDeal is Deal {
 
+    struct DACCellDNA {
+        address dacMainToken;
+        address dacAgentToken;
+    }
+
     error NoFunding();
     error NotEnoughBalance();
     error ConfigMismatchParams();
@@ -25,6 +30,8 @@ contract DACDeal is Deal {
 
     uint256 private _allocation;
     uint256 private _rootCapitalCallId;
+    
+    DACCellDNA public dacCellDNA;
     
     // Events
     event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
@@ -54,7 +61,7 @@ contract DACDeal is Deal {
 
         if (params.dealTarget == address(0)) {
             (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
-            (address dacFactory, bytes32 salt, DACConfig memory config) = abi.decode(dacDeal.config, (address, bytes32, DACConfig));
+            (address dacFactory, address deployer, bytes32 salt, DACConfig memory config) = abi.decode(dacDeal.config, (address, address, bytes32, DACConfig));
 
             require(config.founderAllocation == dacDeal.managedEquity, ConfigMismatchParams());
             require(config.treasuryToken == params.fundingToken, ConfigMismatchParams());
@@ -62,9 +69,14 @@ contract DACDeal is Deal {
 
             config.founder = address(this);
 
-            (address dacAddr,,) = IDACFactory(dacFactory).deployDAC(config, salt);
+            (address dacAddr, address mainTokenAddr, address agentTokenAddr) = IDACFactory(dacFactory).deployDAC(config, salt, deployer);
 
             managedEntity = dacAddr;
+            dacCellDNA = DACCellDNA({
+                dacMainToken: mainTokenAddr,
+                dacAgentToken: agentTokenAddr
+            });
+            
             _allocation = config.founderAllocation;
         }
     }
@@ -77,6 +89,11 @@ contract DACDeal is Deal {
 
         if (params.dealTarget != address(0)) {
             managedEntity = params.dealTarget;
+
+            dacCellDNA = DACCellDNA({
+                dacMainToken: IDACCellAdapter(params.dealTarget).getMainToken(),
+                dacAgentToken: IDACCellAdapter(params.dealTarget).getAgentToken()
+            });
 
             _rootCapitalCallId = dacDeal.capitalCallId;
             _allocation = dacDeal.managedEquity;

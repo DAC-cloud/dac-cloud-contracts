@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
@@ -152,19 +153,20 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
 
     function initialize(
+        address _deal,
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
     ) external {
         require(msg.sender == factory, NotAuthorized());
         require(startTime == 0, AlreadyInitialized());
 
+        deal = IDeal(_deal);
+
         token = StakedAgent(StakedAgentLib.deployStakedAgentToken(
             address(this),
             params.name,
             ERC20(agentTokenAddr).symbol()
         ));
-
-        deal.beforeInitialize(params, defaultVotingConfig);
 
         startTime = block.timestamp;
 
@@ -192,13 +194,25 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         isWhitelistOnly = true;
         isWhitelisted[proposer] = true;
         canInviteOthers[proposer] = true;
+
         emit Invited(proposer, true);
 
+        deal.beforeInitialize(params, defaultVotingConfig);
+    }
+ 
+    function onDACInit(
+        DealParams calldata params,
+        VotingConfig calldata defaultVotingConfig
+    ) external onlyDealManager {
         emit DealInitialized(dacCell, id, params);
 
         deal.afterInitialize(params, defaultVotingConfig);
     }
- 
+
+    function registerControlledAddress(address controlled) external onlyDeal {
+        IDealManagerAdapter(manager).registerControlledAddress(controlled);
+    }
+
     function stake(address staker, uint256 amount) internal {
         DealCellGovernanceLib.stake(
             dacCell,

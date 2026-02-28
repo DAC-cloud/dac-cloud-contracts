@@ -61,7 +61,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
 
     address private immutable proposer;
 
-    address internal managedEntity;
+    address public managedEntity;
 
     // DAC cell in the DAC paradigm is analogue of the "balance sheets"
     // Can store and manage capital on long term basis.

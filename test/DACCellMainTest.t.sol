@@ -23,7 +23,7 @@ contract MockUSDC is ERC20 {
     }
 }
 
-contract DACCellAgentTest is Test {
+contract DACCellMainTest is Test {
     MockUSDC usdc;
 
     DACCell dac;
@@ -38,8 +38,6 @@ contract DACCellAgentTest is Test {
     address moduleOwner = makeAddr("bob");
 
     address founder = makeAddr("alice");
-
-    address agent = makeAddr("claw");
 
     address permit2 = makeAddr("permit2");
 
@@ -113,13 +111,13 @@ contract DACCellAgentTest is Test {
         assertEq(mainToken.balanceOf(founder), 200_000_000e18, "Incorrect main token balance after capital call");
     }
 
-    function testAgentTokens() public {
+    function testMainTokens() public {
         vm.startPrank(founder);
 
         ProposalParams memory params = ProposalParams({
-            typ: DACManagementProposalType.MINT_AGENT_TOKENS,
-            target: agent,
-            i: bytes32(uint256(100_000)),
+            typ: DACManagementProposalType.MINT_MAIN_TOKENS,
+            target: address(0),
+            i: bytes32(uint256(600_000_000e18)),
             data: bytes("")
         });
 
@@ -133,16 +131,16 @@ contract DACCellAgentTest is Test {
 
         vm.stopPrank();
 
-        assertEq(agentToken.balanceOf(agent), 100_000, "Incorrect agent token balance after mint");
+        assertEq(mainToken.balanceOf(address(dac)), 600_000_000e18, "Incorrect main token balance after mint");
 
         vm.warp(block.timestamp + 1);
 
         vm.startPrank(founder);
 
         params = ProposalParams({
-            typ: DACManagementProposalType.REVOKE_AGENT_TOKENS,
-            target: agent,
-            i: bytes32(uint256(50_000)),
+            typ: DACManagementProposalType.BURN_MAIN_TOKENS,
+            target: address(0),
+            i: bytes32(uint256(200_000_000e18)),
             data: bytes("")
         });
 
@@ -156,6 +154,75 @@ contract DACCellAgentTest is Test {
 
         vm.stopPrank();
 
-        assertEq(agentToken.balanceOf(agent), 50_000, "Incorrect agent token balance after revoke");
+        assertEq(mainToken.balanceOf(address(dac)), 400_000_000e18, "Incorrect main token balance after revoke");
+
+        assertEq(IDealManager(dac.dealManager()).totalReleasedVotable(), 200_000_000e18, "Incorrect main token votable after revoke");
     }
-} 
+
+    function test_RevertWhen_ExceedSupply() public {
+        vm.startPrank(founder);
+
+        ProposalParams memory params = ProposalParams({
+            typ: DACManagementProposalType.MINT_MAIN_TOKENS,
+            target: address(0),
+            i: bytes32(uint256(800_000_001e18)),
+            data: bytes("")
+        });
+
+        uint256 propId = dac.createManagementProposal(params);
+
+        vm.warp(block.timestamp + 1);
+
+        IVoting(dac.getProposalVoting(propId)).vote(true);
+
+        vm.expectRevert(MainToken.MaxSupplyExceeded.selector);
+        dac.executeDACProposal(propId);
+
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_ExceedBalance() public {
+        vm.startPrank(founder);
+
+        ProposalParams memory params = ProposalParams({
+            typ: DACManagementProposalType.MINT_MAIN_TOKENS,
+            target: address(0),
+            i: bytes32(uint256(600_000_000e18)),
+            data: bytes("")
+        });
+
+        uint256 propId = dac.createManagementProposal(params);
+
+        vm.warp(block.timestamp + 1);
+
+        IVoting(dac.getProposalVoting(propId)).vote(true);
+
+        dac.executeDACProposal(propId);
+
+        vm.stopPrank();
+
+        assertEq(mainToken.balanceOf(address(dac)), 600_000_000e18, "Incorrect main token balance after mint");
+
+        vm.warp(block.timestamp + 1);
+
+        vm.startPrank(founder);
+
+        params = ProposalParams({
+            typ: DACManagementProposalType.BURN_MAIN_TOKENS,
+            target: address(0),
+            i: bytes32(uint256(600_000_001e18)),
+            data: bytes("")
+        });
+
+        propId = dac.createManagementProposal(params);
+
+        vm.warp(block.timestamp + 1);
+
+        IVoting(dac.getProposalVoting(propId)).vote(true);
+
+        vm.expectRevert();
+        dac.executeDACProposal(propId);
+
+        vm.stopPrank();
+    }
+}

@@ -65,9 +65,9 @@ contract DACCellCapitalCallTest is Test {
         vm.startPrank(founder);
 
         DACConfig memory config = DACConfig({
-            symbol: "",
-            name: "",
-            description: "",
+            symbol: "DACX",
+            name: "DAC exchange",
+            description: "future of finance",
             mainTokenMaxSupply: 1_000_000_000e18,
             defaultQuorum: 50,
             founder: founder,
@@ -80,7 +80,7 @@ contract DACCellCapitalCallTest is Test {
         bytes32 salt = keccak256(abi.encode("MyFirstDAC-v1", block.timestamp));
 
         (address dacAddress, address mainTokenAddress, address agentTokenAddress) = dacFactory.deployDAC(
-            config, salt
+            config, salt, address(0)
         );
 
         mainToken = MainToken(mainTokenAddress);

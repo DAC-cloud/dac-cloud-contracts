@@ -55,7 +55,7 @@ contract TreasuryDeal is Deal {
     ) internal override {
         // Treasury Deal supports opening the wallet without initial funding
 
-        IDealManagerAdapter(IDealCell(dealCell).manager()).registerControlledAddress(address(treasury));
+        IDealCellAdapter(dealCell).registerControlledAddress(address(treasury));
     }
 
     function _afterApprove(uint256 trancheId) internal override {

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {DealParams} from "../interfaces/Structs.sol";
+import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
@@ -107,11 +107,13 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         onlyAgent
         returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr)
     {
+        VotingConfig memory votingConfig = IDACCell(dacCell).getVotingConfig();
+
         (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
-            address(this),
+            dacCell,
             nextId,
             params,
-            IDACCell(dacCell).getVotingConfig(),
+            votingConfig,
             moduleFactories,
             deals,
             dealState
@@ -121,12 +123,14 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         controlledAddresses[dealAddr] = true;
 
         nextId++;
+
+        IDealCellAdapter(dealCell).onDACInit(params, votingConfig);
     }
 
     function createTrancheProposal(
         uint256 dealId,
         uint256 trancheId
-    ) external onlyDealCell nonReentrant override(IDealManager, IDealManagerAdapter) {
+    ) external onlyDealCell nonReentrant override {
         DACCellGovernanceLib.createTrancheProposal(
             address(this),
             dealId,
@@ -240,6 +244,9 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     }
 
     function registerControlledAddress(address controlled) external onlyDealCell {
+        require(controlled != address(0), NotAllowed());
+        require(controlled != address(mainToken), NotAllowed());
+
         controlledAddresses[controlled] = true;
     }
 
