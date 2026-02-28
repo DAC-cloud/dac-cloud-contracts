@@ -16,7 +16,7 @@ import {AgentToken} from "./tokens/AgentToken.sol";
 import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
-import {DACCellGovernance} from "./libraries/DACCellGovernance.sol";
+import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 
 contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     
@@ -188,7 +188,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     }
 
     function fulfillCapitalCall(CapitalCall calldata call) external nonReentrant returns (bool) {
-        return DACCellGovernance.fulfillCapitalCall(
+        return DACCellGovernanceLib.fulfillCapitalCall(
             call, mainToken, capitalCalls, treasuryBalances
         );
     }
@@ -207,7 +207,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         nonReentrant
         returns (uint256 id)
     {
-        id = DACCellGovernance.createManagementProposal(
+        id = DACCellGovernanceLib.createManagementProposal(
             nextId,
             params,
             votingConfig,
@@ -281,7 +281,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         }
 
         else if (typ == DACManagementProposalType.CAPITAL_CALL) {
-            DACCellGovernance.executeCapitalCall(id, prop, capitalCalls);
+            DACCellGovernanceLib.executeCapitalCall(id, prop, capitalCalls);
         }
 
         else if (typ == DACManagementProposalType.TOGGLE_DIVIDENDS) {
@@ -307,7 +307,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             typ == DACManagementProposalType.APPROVE_DEAL || 
             typ == DACManagementProposalType.APPROVE_TRANCHE
         ) {
-            DACCellGovernance.approveFunding(
+            DACCellGovernanceLib.approveFunding(
                 prop, treasuryBalances, IDealManager(dealManager)
             );
         }
@@ -315,7 +315,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         else if (
             typ == DACManagementProposalType.CAST_VETO_DEAL
         ) {
-            DACCellGovernance.castVeto(
+            DACCellGovernanceLib.castVeto(
                 prop, IDealManager(dealManager)
             );
         }
@@ -353,7 +353,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         uint256 amount,
         bytes32[] calldata proof
     ) external {
-        DACCellGovernance.claimDividend(
+        DACCellGovernanceLib.claimDividend(
             proposalId,
             index,
             receiver,

@@ -8,7 +8,7 @@ import {IVoting} from "../interfaces/IVoting.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
-import {DealCellGovernance} from "./libraries/DealCellGovernance.sol";
+import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 
@@ -171,7 +171,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function _beforeWithdrawCapital() internal virtual {}
     function beforeWithdrawCapital() external onlyDealCell {
         _beforeWithdrawCapital();
-        DealCellGovernance.prepareWithdrawal(dealCell);
+        DealCellGovernanceLib.prepareWithdrawal(dealCell);
     }
 
     function _afterWithdrawCapital() internal virtual {}
@@ -225,7 +225,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function createStakedAgentProposal(ProposalParams calldata params) external returns (uint256 proposalId) {
         _beforeCreateProposal(params);
 
-        bool isBase = DealCellGovernance.checkStakedAgentProposal(params, dealCell, _votingConfig);
+        bool isBase = DealCellGovernanceLib.checkStakedAgentProposal(params, dealCell, _votingConfig);
 
         if (!isBase) {
             // If type is not a basic Deal governance type, requiering derived contracts to validate
@@ -237,7 +237,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
 
         proposalId = nextId++;
 
-        DealCellGovernance.createStakedAgentProposal(
+        DealCellGovernanceLib.createStakedAgentProposal(
             proposalId,
             params,
             dacCell,

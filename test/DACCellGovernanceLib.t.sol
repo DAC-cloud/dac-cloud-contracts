@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/kernel/libraries/DACCellGovernance.sol";
+import "../src/kernel/libraries/DACCellGovernanceLib.sol";
 import "../src/interfaces/Structs.sol";
 import "../src/interfaces/IModuleFactory.sol";
 
@@ -82,7 +82,7 @@ contract DACCellGovernanceLibTest is Test {
         // emit DealCreated(mockDACCell, 1, 1, msg.sender, MOCK_DEAL_KIND, mockDealCell, mockDeal);
 
         // Call the library function
-        (uint256 id, address dealCell, address dealAddr, address evaluatorAddr) = DACCellGovernance.createDealProposal(
+        (uint256 id, address dealCell, address dealAddr, address evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
             mockDACCell,
             0, // nextId = 0
             params,

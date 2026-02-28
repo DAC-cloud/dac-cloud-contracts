@@ -15,7 +15,7 @@ import {MainToken} from "./tokens/MainToken.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
-import {DACCellGovernance} from "./libraries/DACCellGovernance.sol";
+import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 
 contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     
@@ -107,7 +107,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         onlyAgent
         returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr)
     {
-        (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernance.createDealProposal(
+        (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
             address(this),
             nextId,
             params,
@@ -127,7 +127,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         uint256 dealId,
         uint256 trancheId
     ) external onlyDealCell nonReentrant override(IDealManager, IDealManagerAdapter) {
-        DACCellGovernance.createTrancheProposal(
+        DACCellGovernanceLib.createTrancheProposal(
             address(this),
             dealId,
             trancheId,
@@ -144,7 +144,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     }
 
     function mintMain(address deal, address to, uint256 amount) external onlyDealCell nonReentrant {
-        DACCellGovernance.mintMain(
+        DACCellGovernanceLib.mintMain(
             deal, 
             to, 
             amount, 
@@ -177,7 +177,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     }
 
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
-        DACCellGovernance.executeTrancheApprove(
+        DACCellGovernanceLib.executeTrancheApprove(
             id,
             trancheId,
             rewardsLimit,
@@ -230,7 +230,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     }
 
     function evaluateDeal(uint256 id) external onlyAgentOrHolder {
-        DACCellGovernance.evaluateDeal(
+        DACCellGovernanceLib.evaluateDeal(
             id,
             agentToken,
             deals,

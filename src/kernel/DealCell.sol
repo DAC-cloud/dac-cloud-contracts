@@ -14,7 +14,7 @@ import {Tranche} from "./interfaces/Structs.sol";
 import {StakedAgent} from "./tokens/StakedAgent.sol";
 import {StakedAgentLib} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
-import {DealCellGovernance} from "./libraries/DealCellGovernance.sol";
+import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 
 contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
 
@@ -200,7 +200,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
  
     function stake(address staker, uint256 amount) internal {
-        DealCellGovernance.stake(
+        DealCellGovernanceLib.stake(
             dacCell,
             staker,
             amount,
@@ -229,7 +229,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function approveFunding(uint256 trancheId) external onlyDealManager {
         deal.beforeApproveFunding(trancheId);
 
-        DealCellGovernance.approveFunding(
+        DealCellGovernanceLib.approveFunding(
             trancheId,
             approved,
             _approveDeadline,
@@ -275,7 +275,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
             require(!recovery, DealInLiquidation());
         }
         
-        DealCellGovernance.unstake(
+        DealCellGovernanceLib.unstake(
             dacCell,
             id,
             deal,
@@ -287,7 +287,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function requestTranche(
         DealManagementProposal prop
     ) external onlyDeal {
-        DealCellGovernance.requestTranche(
+        DealCellGovernanceLib.requestTranche(
             id,
             dacCell,
             prop,
@@ -300,7 +300,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function transferCapital(address _token, uint256 amount) external onlyDeal {
         require(IERC20(_token).transferFrom(address(deal), address(this), amount), TransferFailed());
 
-        DealCellGovernance.transferCapital(
+        DealCellGovernanceLib.transferCapital(
             id,
             _token,
             amount,
@@ -310,7 +310,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
 
     function withdrawCapital() external nonReentrant {
-        DealCellGovernance.withdrawCapital(
+        DealCellGovernanceLib.withdrawCapital(
             id,
             earlyReturns,
             dacCell,
@@ -325,7 +325,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function markAsSuccess(uint256 rewardPercent) external onlyDealManager {
         require(!closed, DealIsClosed());
         
-        DealCellGovernance.markAsSuccess(
+        DealCellGovernanceLib.markAsSuccess(
             rewardPercent,
             id,
             dacCell,
@@ -342,7 +342,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     function markAsFailed(uint256 slashPercent) external onlyDealManager {
         require(!closed, DealIsClosed());
 
-        DealCellGovernance.markAsFailed(
+        DealCellGovernanceLib.markAsFailed(
             slashPercent,
             id,
             dacCell,
@@ -388,7 +388,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     }
 
     function claimMainToken() external nonReentrant {
-        DealCellGovernance.claimMainToken(
+        DealCellGovernanceLib.claimMainToken(
             dacCell,
             deal,
             claimableRewards

@@ -24,7 +24,7 @@ interface IDACGovernanceAdapter {
         returns (uint256 id);
 }
 
-library DACCellGovernance {
+library DACCellGovernanceLib {
     
     // Errors
 

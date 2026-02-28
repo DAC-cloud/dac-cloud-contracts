@@ -20,7 +20,7 @@ interface IDealGovernanceAdapter {
         external;
 }
 
-library DealCellGovernance {
+library DealCellGovernanceLib {
 
     event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
     event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
