@@ -7,6 +7,13 @@ struct DACDealConfig {
     bytes config;
 }
 
+struct TreasurySpendAllowance {
+    uint160 totalAmount;
+    uint160 singleTxAmount;
+    uint256 clockLimit;
+    uint256 duration;
+}
+
 struct Milestone {
     bytes32 milestoneType;          // opaque bytes for milestone type, and byte-masked functionality encoding
     address token;                  // token for accounting purposes

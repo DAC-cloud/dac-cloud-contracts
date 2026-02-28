@@ -15,6 +15,9 @@ contract CoreModuleFactory is ModuleFactory {
     // Evaluators
     address public basicEvaluatorFactory;
 
+    error DealKindNotSupported(bytes4 dealKind);
+    error EvaluatorKindNotSupported(bytes4 dealKind);
+
     constructor(
         address _dacDealFactory,
         address _treasuryDealFactory,
@@ -28,11 +31,27 @@ contract CoreModuleFactory is ModuleFactory {
     function isActive() external pure returns (bool) { return true; }
     function safetyCheck(address) external pure returns (bool) { return true; }
 
-    function getDealFactory(bytes4 dealKind) internal override returns (IDealFactory) {
-        //todo: select deal factory
+    function getDealFactory(bytes4 dealKind) internal view override returns (IDealFactory factory) {
+        if (dealKind == CoreDealType.DAC_DEAL) {
+            factory = IDealFactory(dacDealFactory);
+        }
+        
+        else if (dealKind == CoreDealType.PERMIT2_TREASURY) {
+            factory = IDealFactory(treasuryDealFactory);
+        }
+
+        else {
+            require(false, DealKindNotSupported(dealKind));
+        }
     }
 
-    function getEvaluatorFactory(bytes4 dealKind, bytes4 evaluatorSelector) internal override returns (IEvaluatorFactory) {
-        //todo: select deal factory
+    function getEvaluatorFactory(bytes4, bytes4 evaluatorSelector) internal view override returns (IEvaluatorFactory factory) {
+        if (evaluatorSelector == CoreEvaluatorType.BASIC_REVENUE_MILESTONES) {
+            factory = IEvaluatorFactory(basicEvaluatorFactory);
+        }
+        
+        else {
+            require(false, EvaluatorKindNotSupported(evaluatorSelector));
+        }
     }
 }

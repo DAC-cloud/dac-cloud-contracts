@@ -259,8 +259,9 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     function _afterExecuteProposal(uint256 proposalId) internal virtual {}
 
     function executeStakedAgentProposal(uint256 proposalId) external onlyAfterStakedAgentVote(proposalId) {
+        // Here we protecting from the reentrancy only with check-effect-update pattern
         require(!executed[id], AlreadyExecuted());
-        executed[id] = true;
+        executed[id] = true; // We will not enter this method with the same id twice
 
         _beforeExecuteProposal(proposalId);
 

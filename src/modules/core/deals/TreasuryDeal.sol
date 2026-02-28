@@ -11,6 +11,7 @@ import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
 import {Permit2Treasury, Permit2TreasuryLibrary} from "./Permit2Treasury.sol";
+import {TreasurySpendAllowance} from "../interfaces/Structs.sol";
 
 contract TreasuryDeal is Deal {
     Permit2Treasury public immutable treasury;
@@ -24,7 +25,9 @@ contract TreasuryDeal is Deal {
     // Events
     event PermitApproved(address indexed treasuryToken, uint160 amount);
     event AgentAssigned(address indexed treasuryToken, address indexed agent, uint160 amount);
+    event AgentAllowed(address indexed treasuryToken, address indexed agent, uint160 amount, uint160 dealSize);
     event ProfitsRecovered(address indexed token, uint160 amount);
+    event VotesDelegated(address indexed treasuryToken, address delegatee);
     
     constructor(
         uint256 _id,
@@ -87,7 +90,13 @@ contract TreasuryDeal is Deal {
         bytes4 typ = proposal.typ();
 
         if (typ == CoreDealManagementType.APPROVE_DIRECT_SPEND) {
-            // TODO: Send transfer from treasury
+            address token = proposal.target();
+            (address spender, uint160 amount) = abi.decode(
+                proposal.data(),
+                (address, uint160)
+            );
+            
+            treasury.directSpend(token, spender, amount);
         }
 
         else if (typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND) {
@@ -128,7 +137,26 @@ contract TreasuryDeal is Deal {
         }
 
         else if (typ == CoreDealManagementType.APPROVE_AGENT_SPEND) {
-            // TODO: Approve agents to spend from treasury
+            address token = proposal.target();
+            (address agent, address destination, TreasurySpendAllowance memory allowance) = abi.decode(
+                proposal.data(),
+                (address, address, TreasurySpendAllowance)
+            );
+
+
+            treasury.approveSpendAllowance(agent, token, destination, allowance);
+
+            emit AgentAllowed(token, agent, allowance.totalAmount, allowance.singleTxAmount);
+        }
+
+        else if (typ == CoreDealManagementType.REVOKE_AGENT) {
+            address token = proposal.target();
+            (address agent, address counterparty) = abi.decode(
+                proposal.data(),
+                (address, address)
+            );
+
+            treasury.rewokeAgent(agent, token, counterparty);
         }
 
         else if (typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS) {
@@ -138,6 +166,8 @@ contract TreasuryDeal is Deal {
             );
 
             IVotes(token).delegate(delegatee);
+
+            emit VotesDelegated(token, delegatee);
         }
 
         else {
