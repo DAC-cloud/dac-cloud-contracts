@@ -75,7 +75,7 @@ library DACCellGovernance {
     // Methods implementation
 
     function fulfillCapitalCall(
-        CapitalCall calldata call,
+        CapitalCall memory call,
         MainToken mainToken,
         mapping(bytes32 => CapitalCallState) storage capitalCalls,
         mapping(address => uint256) storage treasuryBalances
@@ -105,7 +105,7 @@ library DACCellGovernance {
     function createDealProposal(
         address dacCell,
         uint256 nextId,
-        DealParams calldata params,
+        DealParams memory params,
         VotingConfig memory votingConfig,
         mapping(address => bool) storage moduleFactories,
         mapping(uint256 => address) storage deals,
@@ -117,7 +117,7 @@ library DACCellGovernance {
 
         require(IModuleFactory(params.moduleFactory).isActive(), ModuleDisabled());
 
-        id = nextId + 1; // proposal id = nextId, deal id = proposal id + 1
+        id = nextId + 1;
 
         (dealCell, dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
             id,
@@ -147,7 +147,7 @@ library DACCellGovernance {
             dacCell,
             id,
             IDACGovernanceAdapter(dacCell).createManagementProposal(dealProposal), 
-            msg.sender, 
+            params.proposer, 
             params.dealKind, 
             dealCell,
             dealAddr
@@ -253,7 +253,7 @@ library DACCellGovernance {
 
     function createManagementProposal(
         uint256 nextId,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         VotingConfig storage votingConfig,
         address proposalFactory,
         MainToken mainToken,
@@ -431,7 +431,7 @@ library DACCellGovernance {
         uint256 index,
         address receiver,
         uint256 amount,
-        bytes32[] calldata proof,
+        bytes32[] memory proof,
         mapping(uint256 => address) storage proposals,
         mapping(uint256 => bytes32) storage dividendMerkleRoots,
         mapping(bytes32 => bool) storage dividendClaimed

@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
+import {IVotes} from "../lib/IVotes.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
@@ -322,7 +323,12 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         else if (
             typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
         ) {
-            //todo delegate vote
+            (address token, address delegatee) = abi.decode(
+                DACManagementProposal(prop).data(), 
+                (address, address)
+            );
+
+            IVotes(token).delegate(delegatee);
         }
 
         else {

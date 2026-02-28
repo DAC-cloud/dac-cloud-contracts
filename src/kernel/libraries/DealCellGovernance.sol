@@ -96,7 +96,7 @@ library DealCellGovernance {
     }
 
     function checkStakedAgentProposal(
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address dealCell,
         VotingConfig memory votingConfig
     ) public view returns (bool isBase) {
@@ -132,7 +132,7 @@ library DealCellGovernance {
 
     function createStakedAgentProposal(
         uint256 id,
-        ProposalParams calldata params,
+        ProposalParams memory params,
         address dacCell,
         address dealCell,
         VotingConfig memory votingConfig,

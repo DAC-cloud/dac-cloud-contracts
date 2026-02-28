@@ -9,6 +9,10 @@ import {IPermit2} from "../../../lib/IPermit2.sol";
 contract Permit2Treasury is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    error NotAuthorized();
+    error ReceiveNotApproved();
+    error InvalidTransfer();
+
     address public immutable treasuryDeal;
     IPermit2 public immutable permit2;
 
@@ -28,11 +32,11 @@ contract Permit2Treasury is ReentrancyGuard {
     // Called by TreasuryDeal after staked-MP quorum approves a spend
     function approveSpend(
         address token,
-        address spender,         // e.g. Uniswap router, another contract
+        address spender,
         uint160 amount,
-        uint48 expiration        // short expiry (e.g. 1 hour)
+        uint48 expiration
     ) external {
-        require(msg.sender == treasuryDeal, "Only TreasuryDeal");
+        require(msg.sender == treasuryDeal, NotAuthorized());
         
         // Approving the whole balance to permit2
         IERC20(token).approve(address(permit2), type(uint160).max);
@@ -47,11 +51,11 @@ contract Permit2Treasury is ReentrancyGuard {
     // Called by TreasuryDeal after staked-MP quorum approves an agent to receive funds
     function approveReceive(
         address agent,
-        address source,          // e.g. client of a DAC, other team treasury, etc.
+        address source,
         address token,
         uint160 amount
     ) external {
-        require(msg.sender == treasuryDeal, "Only TreasuryDeal");
+        require(msg.sender == treasuryDeal, NotAuthorized());
 
         bytes32 calldataHash = keccak256(abi.encode(agent, token, source));
         approvedAgents[calldataHash] = amount;
@@ -68,7 +72,7 @@ contract Permit2Treasury is ReentrancyGuard {
     ) external nonReentrant {
         bytes32 calldataHash = keccak256(abi.encode(msg.sender, token, source));
         
-        require(approvedAgents[calldataHash] >= amount, "Receival not approved");
+        require(approvedAgents[calldataHash] >= amount, ReceiveNotApproved());
 
         approvedAgents[calldataHash] -= amount;
 
@@ -84,11 +88,11 @@ contract Permit2Treasury is ReentrancyGuard {
         address source,
         bytes calldata signature
     ) external nonReentrant {
-        require(transferDetails.to == address(this), "Invalid transfer");
+        require(transferDetails.to == address(this), InvalidTransfer());
         
         bytes32 calldataHash = keccak256(abi.encode(msg.sender, permit.token, source));
 
-        require(approvedAgents[calldataHash] >= transferDetails.requestedAmount, "Receival not approved");
+        require(approvedAgents[calldataHash] >= transferDetails.requestedAmount, ReceiveNotApproved());
         
         approvedAgents[calldataHash] -= transferDetails.requestedAmount;
 
@@ -99,7 +103,7 @@ contract Permit2Treasury is ReentrancyGuard {
 
     // For returning capital to Deal
     function returnCapitalToDeal(address token, uint256 balance) external {
-        require(msg.sender == treasuryDeal, "Only TreasuryDeal");
+        require(msg.sender == treasuryDeal, NotAuthorized());
 
         IERC20(token).safeTransfer(treasuryDeal, balance);
         emit CapitalReturned(token, balance);

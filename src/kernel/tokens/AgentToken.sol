@@ -2,7 +2,9 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
 
 contract AgentToken is ERC20 {
@@ -23,12 +25,16 @@ contract AgentToken is ERC20 {
         dacCell = _dacCell;
     }
 
-    function mint(address to, uint256 amount) external {
-        require(msg.sender == dacCell, NotAuthorized());
+    function mint(address to, uint256 amount) external onlyDACEntities {
         _mint(to, amount);
     }
 
     function stakeToDeal(address deal, uint256 amount) external {
+        require(
+            IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).state(deal).id != 0, 
+            InvalidDeal()
+        );
+        
         require(IDealCell(deal).isValidDeal(), InvalidDeal());
         require(!IDealCell(deal).isApproved(), InvalidDeal());
         
@@ -37,8 +43,7 @@ contract AgentToken is ERC20 {
         emit Staked(msg.sender, deal, amount);
     }
 
-    function burnFrom(address from, uint256 amount) external {
-        require(msg.sender == dacCell, NotAuthorized());
+    function burnFrom(address from, uint256 amount) external onlyDACEntities {
         _burn(from, amount);
     }
 
@@ -48,6 +53,11 @@ contract AgentToken is ERC20 {
     }
 
     function approve(address deal, uint256 amount) public override returns (bool) {
+        require(
+            IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).state(deal).id != 0, 
+            InvalidDeal()
+        );
+        
         require(IDealCell(deal).isValidDeal(), InvalidDeal());
         require(IDealCell(deal).isApproved(), InvalidDeal());
 
@@ -55,5 +65,22 @@ contract AgentToken is ERC20 {
         emit StakeRequested(msg.sender, deal, amount);
 
         return true;
+    }
+
+    modifier onlyDACEntities() {
+        _onlyDACEntities();
+        _;
+    }
+
+    function _onlyDACEntities() internal {
+        // Allowing DACCell, DealManager, and DealCells
+        require(
+            (
+                (msg.sender == dacCell) ||
+                (IDACCellAdapter(dacCell).dealManager() == msg.sender) ||
+                (IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).state(msg.sender).id != 0)
+            ),
+            NotAuthorized()
+        );
     }
 }

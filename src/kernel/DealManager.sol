@@ -275,6 +275,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
         require(!controlledAddresses[to], NoVotingPower());
     }
 
+    function state(address dealCell) external view returns (DealState memory _state) {
+        _state = dealState[dealCell];
+    }
+
     function totalReleasedVotable() external view returns (uint256) {
         return (mainToken.totalSupply() - unreleasedMainTokens) - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell]);
     }
