@@ -11,8 +11,7 @@ interface IModuleFactory {
         uint256 id,
         DealParams calldata params,
         address dac,
-        address mpToken,
-        address lpToken,
+        address manager,
         VotingConfig calldata votingConfig
     ) external returns (address dealCell, address dealAddr, address evaluatorAddr);
 }

@@ -34,15 +34,15 @@ contract DACDeal is Deal {
         uint256 _id,
         address _governanceFactory,
         address _dac,
-        address _mpToken,
-        address _lpToken,
+        address _agentToken,
+        address _mainToken,
         address _proposer
     ) Deal(
         _id, 
         _dac, 
         _governanceFactory, 
-        _mpToken, 
-        _lpToken, 
+        _agentToken, 
+        _mainToken, 
         _proposer
     ) {}
 
@@ -226,7 +226,13 @@ contract DACDeal is Deal {
             _allocation += call.tokenAmount;
         }
 
-        //todo return profits in token different than funding token
+        else if (typ == CoreDealManagementType.RETURN_PROFITS) {
+            address token = proposal.target();
+            (uint256 amount) = abi.decode(proposal.data(), (uint256));
+            
+            require(IERC20(token).approve(dealCell, amount), TransferFailed());
+            IDealCellAdapter(dealCell).transferCapital(token, amount);
+        }
 
         else {
             require(false, UnsupportedProposal());

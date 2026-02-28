@@ -9,20 +9,23 @@ contract DACDealFactory is IDealFactory {
     
     function deployDeal(
         uint256 id,
+        address dealCell,
         DealParams calldata params,
         address dac,
-        address mpToken,
-        address lpToken
+        address agentToken,
+        address mainToken
     ) external returns (address dealAddr) {
         dealAddr = address(
             new DACDeal(
                 id,
                 dac,
                 params.governanceFactory,
-                mpToken,
-                lpToken,
+                agentToken,
+                mainToken,
                 params.proposer
             )
         );
+
+        DACDeal(dealAddr).initialize(dealCell);
     }
 }

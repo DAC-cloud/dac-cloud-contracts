@@ -319,6 +319,12 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             );
         }
 
+        else if (
+            typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
+        ) {
+            //todo delegate vote
+        }
+
         else {
             IDealManagerAdapter(dealManager).executeProp(msg.sender, prop);
         }

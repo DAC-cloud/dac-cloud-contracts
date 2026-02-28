@@ -7,6 +7,7 @@ library DealCellFactory {
     function deployCell(
         uint256 id,
         address dac,
+        address _dealManager,
         address governanceFactory,
         address agentToken,
         address mainToken,
@@ -16,6 +17,7 @@ library DealCellFactory {
             new DealCell(
                 id,
                 dac,
+                _dealManager,
                 governanceFactory,
                 agentToken,
                 mainToken,

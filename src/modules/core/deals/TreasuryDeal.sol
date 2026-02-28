@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, DealParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {Deal} from "../../../kernel/Deal.sol";
 import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
+import {IDealManagerAdapter} from "../../../kernel/interfaces/IDealManagerAdapter.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
@@ -28,27 +29,29 @@ contract TreasuryDeal is Deal {
         uint256 _id,
         address _dac,
         address _governanceFactory,
-        address _mpToken,
-        address _lpToken,
+        address _agentToken,
+        address _mainToken,
         address _proposer,
         address _permit2
     ) Deal(
         _id, 
         _dac, 
         _governanceFactory,
-        _mpToken, 
-        _lpToken, 
+        _agentToken, 
+        _mainToken, 
         _proposer
     ) {
         treasury = Permit2TreasuryLibrary.deployPermit2Treasury(address(this), _permit2);
         managedEntity = address(treasury);
     }
 
-    function _beforeInitialize(
-        DealParams calldata params,
+    function _afterInitialize(
+        DealParams calldata,
         VotingConfig calldata
-    ) internal override pure {
+    ) internal override {
         // Treasury Deal supports opening the wallet without initial funding
+
+        IDealManagerAdapter(IDealCell(dealCell).manager()).registerControlledAddress(address(treasury));
     }
 
     function _afterApprove(uint256 trancheId) internal override {
@@ -125,6 +128,10 @@ contract TreasuryDeal is Deal {
 
         else if (typ == CoreDealManagementType.APPROVE_AGENT_SPEND) {
             // TODO: Approve agents to spend from treasury
+        }
+
+        else if (typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS) {
+            // TODO: delegate vote
         }
 
         else {

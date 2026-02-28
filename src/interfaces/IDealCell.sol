@@ -5,6 +5,7 @@ import {IDeal} from "./IDeal.sol";
 
 interface IDealCell {
     function deal() external view returns (IDeal);
+    function manager() external view returns (address);
 
     function stakeToken() external view returns (address);
 

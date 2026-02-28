@@ -111,13 +111,14 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
             address(this),
             nextId,
             params,
-            mainToken,
-            agentToken,
             IDACCell(dacCell).getVotingConfig(),
             moduleFactories,
             deals,
             dealState
         );
+
+        controlledAddresses[dealCell] = true;
+        controlledAddresses[dealAddr] = true;
 
         nextId++;
     }

@@ -5,6 +5,7 @@ import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IDealFactory} from "../interfaces/modules/IDealFactory.sol";
 import {IEvaluatorFactory} from "../interfaces/modules/IEvaluatorFactory.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {DealCellFactory} from "./factories/DealCellFactory.sol";
 import {DealCell} from "./DealCell.sol";
 
@@ -22,26 +23,27 @@ abstract contract ModuleFactory is IModuleFactory {
         uint256 id,
         DealParams calldata params,
         address dac,
-        address mainToken,
-        address agentToken,
+        address manager,
         VotingConfig calldata votingConfig
     ) external returns (address dealCell, address dealAddr, address evaluatorAddr) {
         dealCell = DealCellFactory.deployCell(
             id,
             dac,
+            manager,
             params.governanceFactory,
-            agentToken,
-            mainToken,
+            IDACCellAdapter(dac).getAgentToken(),
+            IDACCellAdapter(dac).getMainToken(),
             params.proposer
         );
 
         IDealFactory factory = getDealFactory(params.dealKind);
         dealAddr = factory.deployDeal(
             id,
+            dealCell,
             params,
             dac,
-            agentToken,
-            mainToken
+            IDACCellAdapter(dac).getAgentToken(),
+            IDACCellAdapter(dac).getMainToken()
         );
 
         DealCell(dealCell).initialize(params, votingConfig);

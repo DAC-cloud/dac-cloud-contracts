@@ -10,8 +10,6 @@ import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
-import {IDealManager} from "../interfaces/IDealManager.sol";
-import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {Tranche} from "./interfaces/Structs.sol";
 import {StakedAgent} from "./tokens/StakedAgent.sol";
 import {StakedAgentLib} from "./tokens/factories/TokenFactories.sol";
@@ -50,6 +48,8 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     error VoteNotPassed();
 
     address private immutable factory;
+
+    address public immutable manager;
     
     uint256 internal immutable id;
     address internal immutable dacCell;
@@ -112,10 +112,6 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     address[] internal holders; // only for claimable tracking
 
     // Governance
-    uint256 private nextId = 1;
-    mapping(uint256 => address) private proposals;
-    mapping(uint256 => bool) private executed;
-
     VotingConfig private _votingConfig;
     
     // Global events, indexed by DAC and deal id
@@ -133,16 +129,13 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     event LegalWrapperMessageReceived(address indexed wrapper, bytes4 messageKind, bytes message);
     event Invited(address indexed invitee, bool canInvite);
     
-    event DealManagementProposalCreated(uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
-    event DealManagementProposalExecuted(uint256 indexed id, bytes4 indexed typ);
-    
-    event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
     event EarlyReturnsToggled(uint256 indexed id, bool enabled);
     event VetoRightEnabled(uint256 indexed id);
 
     constructor(
         uint256 _id,
         address _dac,
+        address _dealManager,
         address _governanceFactory,
         address _agentToken,
         address _mainToken,
@@ -152,6 +145,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         id = _id;
         governanceFactory = _governanceFactory;
         dacCell = _dac;
+        manager = _dealManager;
         agentTokenAddr = _agentToken;
         mainTokenAddr = _mainToken;
         proposer = _proposer;
@@ -175,10 +169,10 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         startTime = block.timestamp;
 
         linkHash = params.linkHash;
+
         _tokenRewardsLimit = params.rewardsLimit;
         _approveDeadline = params.approveDeadline;
         _dealDeadline = params.dealDeadline;
-        _votingConfig = defaultVotingConfig;
 
         if (params.fundingAmount > 0) {
             if (_requestedFunding[params.fundingToken] == 0) {
@@ -232,7 +226,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         deal.onVoluntaryStake(staker, amount);
     }
 
-    function approveFunding(uint256 trancheId) external onlyDACCell {
+    function approveFunding(uint256 trancheId) external onlyDealManager {
         deal.beforeApproveFunding(trancheId);
 
         DealCellGovernance.approveFunding(
@@ -328,7 +322,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         );
     }
 
-    function markAsSuccess(uint256 rewardPercent) external onlyDACCell {
+    function markAsSuccess(uint256 rewardPercent) external onlyDealManager {
         require(!closed, DealIsClosed());
         
         DealCellGovernance.markAsSuccess(
@@ -345,7 +339,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         );
     }
 
-    function markAsFailed(uint256 slashPercent) external onlyDACCell {
+    function markAsFailed(uint256 slashPercent) external onlyDealManager {
         require(!closed, DealIsClosed());
 
         DealCellGovernance.markAsFailed(
@@ -358,7 +352,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         );
     }
 
-    function extendDeadline(uint256 newDeadline) external onlyDACCell {
+    function extendDeadline(uint256 newDeadline) external onlyDealManager {
         require(!closed, DealIsClosed());
         
         deal.onExtendDeadline(_dealDeadline, newDeadline);
@@ -379,7 +373,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         emit DealClosed(dacCell, id, token.totalSupply());
     }
 
-    function recoverDeal(address liquidator, uint256 liquidatorStake) external onlyDACCell {
+    function recoverDeal(address liquidator, uint256 liquidatorStake) external onlyDealManager {
         require(closed, DealIsNotClosed());
         
         deal.beforeRecovery(liquidator, liquidatorStake);
@@ -408,8 +402,8 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
             if (isWhitelistOnly) {
                 // Inviting all existing manager with invite capability
                 for (uint256 i = 0; i < holders.length; i++) {
-                    address manager = holders[i];
-                    this.invite(manager, true);
+                    address agent = holders[i];
+                    this.invite(agent, true);
                 }
             }
         }
@@ -441,7 +435,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         stake(staker, amount);
     }
     
-    function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDACCell {
+    function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDealManager {
         require(
             deal.onMessageDeal(messageKind, message), 
             MessageNotAccepted()
@@ -450,7 +444,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         emit MessageReceived(messageKind, message);
     }
 
-    function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external onlyDACCell {
+    function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external onlyDealManager {
         deal.onLegalWrapperMessage(legalWrapper, messageKind, message);
         
         emit LegalWrapperMessageReceived(legalWrapper, messageKind, message);
@@ -496,8 +490,8 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         return tranche.amount; 
     }
 
-    modifier onlyDACCell() {
-        _onlyDACCell();
+    modifier onlyDealManager() {
+        _onlyDealManager();
         _;
     }
 
@@ -511,13 +505,8 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         _;
     }
 
-    modifier onlyAfterStakedMPVote(uint256 proposalId) {
-        _onlyAfterStakedMPVote(proposalId);
-        _;
-    }
-
-    function _onlyDACCell() internal view {
-        require(msg.sender == dacCell, NotAuthorized());
+    function _onlyDealManager() internal view {
+        require(msg.sender == manager, NotAuthorized());
     }
 
     function _onlyDeal() internal view {
@@ -526,13 +515,5 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
 
     function _onlyStakedMPHolder() internal view {
         require(token.balanceOf(msg.sender) > 0, NoStake());
-    }
-    
-    function _onlyAfterStakedMPVote(uint256 proposalId) internal view {
-        require(
-            IVoting(proposals[proposalId]).isResolved() &&
-            IVoting(proposals[proposalId]).outcome(),
-            VoteNotPassed()
-        );
     }
 }

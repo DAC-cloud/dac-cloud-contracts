@@ -63,10 +63,15 @@ abstract contract Deal is IDeal, ReentrancyGuard {
 
     address internal managedEntity;
 
-    // Entities in the DAC paradigm are analogue of the "balance sheets"
+    // DAC cell in the DAC paradigm is analogue of the "balance sheets"
     // Can store and manage capital on long term basis.
+    
     // While Deal can have capital on it's "contract balance", Deal is not a storage
     // for it, and only escrow capital within the Deal logic.
+
+    // DealManager and DealCell contracts are not storing capital and fast forwarding
+    // the balance. Any amount of tokens sent directly to this contracts bypass contract
+    // flows - is effectively lost.
 
     // Link with document management system
     string public linkHash;
@@ -114,6 +119,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         VotingConfig calldata defaultVotingConfig
     ) external onlyDealCell {
         _beforeInitialize(params, defaultVotingConfig);
+        _votingConfig = defaultVotingConfig;
     }
 
     function _afterInitialize(

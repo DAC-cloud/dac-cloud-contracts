@@ -66,7 +66,7 @@ library DACCellGovernance {
 
     event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
     
-    event DealCreated(uint256 indexed id, uint256 indexed proposalId, address indexed creator, bytes4 kind, address cell, address deal);
+    event DealCreated(address dac, uint256 indexed id, uint256 indexed proposalId, address creator, bytes4 kind, address cell, address deal);
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 indexed trancheId, uint256 rewardsLimit);
     
@@ -106,8 +106,6 @@ library DACCellGovernance {
         address dacCell,
         uint256 nextId,
         DealParams calldata params,
-        MainToken mainToken,
-        AgentToken agentToken,
         VotingConfig memory votingConfig,
         mapping(address => bool) storage moduleFactories,
         mapping(uint256 => address) storage deals,
@@ -124,9 +122,8 @@ library DACCellGovernance {
         (dealCell, dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
             id,
             params,
+            dacCell,
             address(this),
-            address(agentToken),
-            address(mainToken),
             votingConfig
         );
 
@@ -147,7 +144,8 @@ library DACCellGovernance {
         });
 
         emit DealCreated(
-            id, 
+            dacCell,
+            id,
             IDACGovernanceAdapter(dacCell).createManagementProposal(dealProposal), 
             msg.sender, 
             params.dealKind, 
