@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {UUPSProxy} from "../../../kernel/proxies/UUPSProxy.sol";
 import {DealParams} from "../../../interfaces/Structs.sol";
 import {IDealFactory} from "../../../interfaces/modules/IDealFactory.sol";
 import {DACDeal} from "../deals/DACDeal.sol";
 
 contract DACDealFactory is IDealFactory {
     
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new DACDeal());
+    }
+
     function deployDeal(
         uint256 id,
         address dealCell,
@@ -15,17 +22,18 @@ contract DACDealFactory is IDealFactory {
         address agentToken,
         address mainToken
     ) external returns (address dealAddr) {
-        dealAddr = address(
-            new DACDeal(
-                id,
-                dac,
-                params.governanceFactory,
-                agentToken,
-                mainToken,
-                params.proposer
-            )
+        bytes memory initData = abi.encodeWithSelector(
+            DACDeal.initialize.selector,
+            id,
+            dac,
+            params.governanceFactory,
+            agentToken,
+            mainToken,
+            params.proposer
         );
 
-        DACDeal(dealAddr).initialize(dealCell);
+        dealAddr = address(new UUPSProxy(address(referenceImpl), initData));
+
+        DACDeal(dealAddr).joinDac(dealCell);
     }
 }

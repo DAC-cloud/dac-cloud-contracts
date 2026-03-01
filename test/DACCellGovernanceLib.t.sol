@@ -84,7 +84,7 @@ contract DACCellGovernanceLibTest is Test {
         // Call the library function
         (uint256 id, address dealCell, address dealAddr, address evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
             mockDACCell,
-            0, // nextId = 0
+            1, // nextId = 1
             params,
             votingConfig,
             mockModuleFactories,

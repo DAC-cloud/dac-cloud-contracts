@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {DealParams, ProposalParams, VotingConfig} from "../interfaces/Structs.sol";
@@ -12,9 +13,10 @@ import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 
-abstract contract Deal is IDeal, ReentrancyGuard {
+abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
 
     error NotAuthorized();
+    error NotInitialized();
     error AlreadyInitialized();
 
     error DeadlineNotPassed();
@@ -48,18 +50,18 @@ abstract contract Deal is IDeal, ReentrancyGuard {
 
     error VoteNotPassed();
 
-    address private immutable factory;
+    address private factory;
     
-    uint256 internal immutable id;
-    address internal immutable dacCell;
-    address internal immutable governanceFactory;
+    uint256 internal id;
+    address internal dacCell;
+    address internal governanceFactory;
 
     address internal dealCell;
 
-    address internal immutable agentTokenAddr;
-    address internal immutable mainTokenAddr;
+    address internal agentTokenAddr;
+    address internal mainTokenAddr;
 
-    address private immutable proposer;
+    address private proposer;
 
     address public managedEntity;
 
@@ -77,7 +79,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     string public linkHash;
 
     // Governance
-    uint256 private nextId = 1;
+    uint256 private nextId;
     mapping(uint256 => address) private proposals;
     mapping(uint256 => bool) private executed;
 
@@ -87,14 +89,20 @@ abstract contract Deal is IDeal, ReentrancyGuard {
     event DealManagementProposalExecuted(address indexed cell,uint256 indexed id, bytes4 indexed typ);
     event VotingConfigUpdate(address indexed cell, uint256 indexed id, VotingConfig config);
 
-    constructor(
+    constructor() {
+        _disableInitializers();
+    }
+
+    function __Deal_init(
         uint256 _id,
         address _dac,
         address _governanceFactory,
         address _agentToken,
         address _mainToken,
         address _proposer
-    ) {
+    ) internal onlyInitializing {
+        nextId = 1;
+        
         factory = msg.sender;
         id = _id;
         governanceFactory = _governanceFactory;
@@ -104,7 +112,7 @@ abstract contract Deal is IDeal, ReentrancyGuard {
         proposer = _proposer;
     }
 
-    function initialize(
+    function joinDac(
         address _dealCell
     ) external {
         dealCell = _dealCell;

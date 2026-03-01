@@ -59,7 +59,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     address private coreModuleFactory;
     mapping(address => bool) private moduleFactories;
 
-    uint256 private nextId = 1;
+    uint256 private nextId;
     mapping(uint256 => address) public deals;                   // id => Deal cell address
     
     mapping(address => DealState) public dealState;             // dealCell => Deal state
@@ -83,6 +83,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         address coreModule,
         address _dacCell
     ) public initializer {
+        nextId = 1;
+        
         mainToken = MainToken(_mainToken);
         agentToken = AgentToken(_agentToken);
 
@@ -104,7 +106,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
         (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
             dacCell,
-            nextId,
+            nextId++,
             params,
             votingConfig,
             moduleFactories,
@@ -114,8 +116,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
         controlledAddresses[dealCell] = true;
         controlledAddresses[dealAddr] = true;
-
-        nextId++;
 
         IDealCellAdapter(dealCell).onDACInit(params, votingConfig);
     }

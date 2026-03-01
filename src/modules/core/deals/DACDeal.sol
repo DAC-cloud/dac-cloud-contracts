@@ -37,21 +37,23 @@ contract DACDeal is Deal {
     event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
     event ChildLPVoteCasted(uint256 indexed childProposalId, bool support);
 
-    constructor(
+    function initialize(
         uint256 _id,
-        address _governanceFactory,
         address _dac,
+        address _governanceFactory,
         address _agentToken,
         address _mainToken,
         address _proposer
-    ) Deal(
-        _id, 
-        _dac, 
-        _governanceFactory, 
-        _agentToken, 
-        _mainToken, 
-        _proposer
-    ) {}
+    ) external initializer {
+        __Deal_init(
+            _id,
+            _dac,
+            _governanceFactory,
+            _agentToken,
+            _mainToken,
+            _proposer
+        );
+    }
 
     function _beforeInitialize(
         DealParams calldata params,

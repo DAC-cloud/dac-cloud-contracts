@@ -14,7 +14,7 @@ import {Permit2Treasury, Permit2TreasuryLibrary} from "./Permit2Treasury.sol";
 import {TreasurySpendAllowance} from "../interfaces/Structs.sol";
 
 contract TreasuryDeal is Deal {
-    Permit2Treasury public immutable treasury;
+    Permit2Treasury public treasury;
 
     error EarlyReturnsNotAllowed();
 
@@ -29,7 +29,7 @@ contract TreasuryDeal is Deal {
     event ProfitsRecovered(address indexed token, uint160 amount);
     event VotesDelegated(address indexed treasuryToken, address delegatee);
     
-    constructor(
+    function initialize(
         uint256 _id,
         address _dac,
         address _governanceFactory,
@@ -37,14 +37,16 @@ contract TreasuryDeal is Deal {
         address _mainToken,
         address _proposer,
         address _permit2
-    ) Deal(
-        _id, 
-        _dac, 
-        _governanceFactory,
-        _agentToken, 
-        _mainToken, 
-        _proposer
-    ) {
+    ) external initializer {
+        __Deal_init(
+            _id,
+            _dac,
+            _governanceFactory,
+            _agentToken,
+            _mainToken,
+            _proposer
+        );
+
         treasury = Permit2TreasuryLibrary.deployPermit2Treasury(address(this), _permit2);
         managedEntity = address(treasury);
     }

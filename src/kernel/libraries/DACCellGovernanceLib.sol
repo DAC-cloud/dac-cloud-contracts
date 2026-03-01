@@ -145,7 +145,7 @@ library DACCellGovernanceLib {
 
         require(IModuleFactory(params.moduleFactory).isActive(), ModuleDisabled());
 
-        id = nextId + 1;
+        id = nextId;
 
         (dealCell, dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
             id,

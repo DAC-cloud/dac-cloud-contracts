@@ -66,7 +66,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     bool private rootCapitalCallInitialized;
     mapping(address => uint256) private treasuryBalances;
 
-    uint256 private nextId = 1;
+    uint256 private nextId;
     mapping(uint256 => address) private proposals;               // id => DACManagementProposal address
     mapping(uint256 => bool) private executed;                   // id => proposal executed (set early)
 
@@ -108,6 +108,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         string memory _description,
         address _proposalFactory
     ) external initializer {
+        nextId = 1;
+
         name = _name;
         description = _description;
 
@@ -216,7 +218,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         returns (uint256 id)
     {
         id = DACCellGovernanceLib.createManagementProposal(
-            nextId,
+            nextId++,
             params,
             votingConfig,
             proposalFactory,
@@ -226,8 +228,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             IDealManager(dealManager),
             proposals
         );
-
-        nextId++;
     }
 
     function executeDACProposal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
