@@ -19,10 +19,11 @@ contract CoreModuleFactory is ModuleFactory {
     error EvaluatorKindNotSupported(bytes4 dealKind);
 
     constructor(
+        address _dealCellFactory,
         address _dacDealFactory,
         address _treasuryDealFactory,
         address _basicEvaluatorFactory
-    ) {
+    ) ModuleFactory(_dealCellFactory) {
         dacDealFactory = _dacDealFactory;
         treasuryDealFactory = _treasuryDealFactory;
         basicEvaluatorFactory = _basicEvaluatorFactory;

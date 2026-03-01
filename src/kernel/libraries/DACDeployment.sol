@@ -8,12 +8,14 @@ library DACDeployment {
     // Helper to pre-compute address (useful for frontend / agents)
     function predictDACAddress(
         bytes32 salt,
+        address factory,
         address deployer,
         string calldata name,
         string calldata description,
         address governanceFactory
     ) public pure returns (address) {
         bytes32 bytecodeHash = keccak256(abi.encodePacked(type(DACCell).creationCode, abi.encode(
+            factory,
             name,
             description,
             governanceFactory

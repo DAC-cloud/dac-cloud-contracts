@@ -7,6 +7,8 @@ import "../src/kernel/DACCell.sol";
 import "../src/kernel/tokens/MainToken.sol";
 import "../src/kernel/tokens/AgentToken.sol";
 import "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
+import "../src/kernel/factories/DACCellFactory.sol";
+import "../src/kernel/factories/DealCellFactory.sol";
 import "../src/kernel/factories/DealManagerFactory.sol";
 import "../src/kernel/DACFactory.sol";
 import "../src/interfaces/IDACFactory.sol";
@@ -50,6 +52,7 @@ contract DACCellAgentTest is Test {
         vm.startPrank(moduleOwner);
 
         coreModule = new CoreModuleFactory(
+            address(new DealCellFactory()),
             address(new DACDealFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new BasicEvaluatorFactory())
@@ -58,6 +61,8 @@ contract DACCellAgentTest is Test {
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
+            address(new DACCellFactory()),
+            address(new DealManagerFactory()),
             address(governanceFactory), 
             address(coreModule)
         );

@@ -13,6 +13,8 @@ contract DACFactory is IDACFactory {
     error SleepingCellNotFound();
     error DNAMismatch();
 
+    address public cellFactory;
+    address public managerFactory;
     address public governanceFactory;
     address public coreModuleFactory;
     
@@ -21,9 +23,13 @@ contract DACFactory is IDACFactory {
     event DACDeployed(address indexed dac, address mainToken, address agentToken, bool init);
 
     constructor(
+        address _cellFactory,
+        address _managerFactory,
         address _governanceFactory,
         address _coreModuleFactory
     ) {
+        cellFactory = _cellFactory;
+        managerFactory = _managerFactory;
         governanceFactory = _governanceFactory;
         coreModuleFactory = _coreModuleFactory;
     }
@@ -38,6 +44,7 @@ contract DACFactory is IDACFactory {
         dacAddr = DACDeployment.predictDACAddress(
             salt,
             address(this),
+            cellFactory,
             config.name,
             config.description,
             governanceFactory
@@ -57,7 +64,7 @@ contract DACFactory is IDACFactory {
         );
 
         DACCell dac = DACCell(
-            DACCellFactory.deployDAC(
+            DACCellFactory(cellFactory).deployDAC(
                 salt, 
                 config.name,
                 config.description,
@@ -71,6 +78,7 @@ contract DACFactory is IDACFactory {
             dac.initializeAfterDeployment(
                 mainAddr,
                 agentAddr,
+                managerFactory,
                 coreModuleFactory,
                 config.dividendsEnabled,
                 config.defaultQuorum
@@ -108,6 +116,7 @@ contract DACFactory is IDACFactory {
         DACCell(dacCell).initializeAfterDeployment(
             mainTokenAddr,
             agentTokenAddr,
+            managerFactory,
             coreModuleFactory,
             config.dividendsEnabled,
             config.defaultQuorum

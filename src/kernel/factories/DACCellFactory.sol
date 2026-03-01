@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {DACCell} from "../DACCell.sol";
 
-library DACCellFactory {
+contract DACCellFactory {
 
     function deployDAC(
         bytes32 salt,
@@ -13,6 +13,7 @@ library DACCellFactory {
     ) external returns (address dacAddr) {
         dacAddr = address(
             new DACCell{salt: salt}(
+                msg.sender,
                 name,
                 description,
                 governanceFactory

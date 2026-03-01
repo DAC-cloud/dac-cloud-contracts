@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {DealManager} from "../DealManager.sol";
 
-library DealManagerFactory {
+contract DealManagerFactory {
     
     function deployDealManager(
         address mainToken,

@@ -134,6 +134,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     event VetoRightEnabled(uint256 indexed id);
 
     constructor(
+        address _deployer,
         uint256 _id,
         address _dac,
         address _dealManager,
@@ -142,7 +143,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
         address _mainToken,
         address _proposer
     ) {
-        factory = msg.sender;
+        factory = _deployer;
         id = _id;
         governanceFactory = _governanceFactory;
         dacCell = _dac;

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {DealCell} from "../DealCell.sol";
 
-library DealCellFactory {
+contract DealCellFactory {
     function deployCell(
         uint256 id,
         address dac,
@@ -15,6 +15,7 @@ library DealCellFactory {
     ) public returns (address dacAddr) {
         dacAddr = address(
             new DealCell(
+                msg.sender,
                 id,
                 dac,
                 _dealManager,

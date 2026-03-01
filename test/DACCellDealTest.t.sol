@@ -8,6 +8,7 @@ import "../src/kernel/tokens/MainToken.sol";
 import "../src/kernel/tokens/AgentToken.sol";
 import "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import "../src/kernel/factories/DealManagerFactory.sol";
+import "../src/kernel/factories/DealCellFactory.sol";
 import "../src/kernel/DACFactory.sol";
 import "../src/kernel/Deal.sol";
 import "../src/interfaces/IDACFactory.sol";
@@ -59,23 +60,22 @@ contract DACCellDealTest is Test {
         // Core module
 
         coreModule = new CoreModuleFactory(
+            address(new DealCellFactory()),
             address(new DACDealFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new BasicEvaluatorFactory())
         );
-
-        coreDealGovernanceFactory = new CoreManagementProposalFactory();
-
-        vm.stopPrank();
-
-        // DAC structures
-
+        
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
+            address(new DACCellFactory()),
+            address(new DealManagerFactory()),
             address(governanceFactory), 
             address(coreModule)
         );
+
+        vm.stopPrank();
 
         // DAC entity
 
@@ -194,6 +194,71 @@ contract DACCellDealTest is Test {
     }
 
     function testDACDeal() public {
+        vm.startPrank(agent);
+
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            timestamp: block.timestamp + 1 days,
+            expectedReturnPercent: 100,
+            rewardPercentage: 100,
+            penalty: 0
+        });
+
+        DACConfig memory childDACConfig = DACConfig({
+            symbol: "DAC-L2",
+            name: "DAC L2",
+            description: "future of finance",
+            mainTokenMaxSupply: 1_000_000,
+            defaultQuorum: 50,
+            founder: founder, // will be replaced
+            founderAllocation: 100_000,
+            treasuryToken: address(usdc),
+            founderCommitment: 10_000,
+            dividendsEnabled: false
+        });
+
+        bytes32 salt = keccak256(abi.encode("DAC-L2", block.timestamp));
+
+        DACDealConfig memory dacDealConfig = DACDealConfig({
+            managedEquity: 100_000,
+            capitalCallId: 0,
+            config: abi.encode(address(dacFactory), address(0), salt, childDACConfig)
+        });
+
+        DealParams memory params = DealParams({
+            dealKind: CoreDealType.DAC_DEAL,
+            name: "Test DAC Deal",
+            moduleFactory: address(coreModule),
+            governanceFactory: address(coreDealGovernanceFactory),
+            dealTarget: address(0),
+            proposer: agent,
+            linkHash: "0x00112233",
+            vetoEnabled: false,
+            fundingToken: address(usdc),
+            fundingAmount: 10_000,
+            rewardsLimit: 500e6,
+            approveDeadline: block.timestamp + 1 days,
+            dealDeadline: block.timestamp + 30 days,
+            evaluatorSelector: CoreEvaluatorType.BASIC_REVENUE_MILESTONES,
+            dealConfig: abi.encode(dacDealConfig),
+            evaluatorConfig: abi.encode(milestones)
+        });
+
+        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.dealManager()).createDealProposal(params);
+
+        vm.warp(block.timestamp + 1);
+
+        // IVoting(dac.getProposalVoting(propId)).vote(true);
+
+        // dac.executeDACProposal(propId);
+
+
+        // assertEq(agentToken.balanceOf(agent), 50_000, "Incorrect agent token balance after revoke");
+    }
+
+    function testDACDealSleeping() public {
         vm.startPrank(agent);
 
         Milestone[] memory milestones = new Milestone[](1);

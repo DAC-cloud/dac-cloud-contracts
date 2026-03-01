@@ -10,6 +10,15 @@ import {DealCellFactory} from "./factories/DealCellFactory.sol";
 import {DealCell} from "./DealCell.sol";
 
 abstract contract ModuleFactory is IModuleFactory {
+
+    address public dealCellFactory;
+
+    constructor(
+        address _dealCellFactory
+    ) {
+        dealCellFactory = _dealCellFactory;
+    }
+
     function getDealFactory(
         bytes4 dealKind
     ) internal virtual returns (IDealFactory);
@@ -26,7 +35,7 @@ abstract contract ModuleFactory is IModuleFactory {
         address manager,
         VotingConfig calldata votingConfig
     ) external returns (address dealCell, address dealAddr, address evaluatorAddr) {
-        dealCell = DealCellFactory.deployCell(
+        dealCell = DealCellFactory(dealCellFactory).deployCell(
             id,
             dac,
             manager,

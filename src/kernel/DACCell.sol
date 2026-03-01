@@ -96,6 +96,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
     
     constructor(
+        address _globalFactory,
         string memory _name,
         string memory _description,
         address _proposalFactory
@@ -105,7 +106,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
 
         proposalFactory = _proposalFactory;
 
-        deployer = msg.sender;
+        deployer = _globalFactory;
 
         initialized = false;
         rootCapitalCallInitialized = false;
@@ -118,6 +119,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     function initializeAfterDeployment(
         address _mainToken,
         address _agentToken,
+        address managerFactory,
         address coreModule,
         bool _dividendsEnabled,
         uint256 _quorum
@@ -138,7 +140,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             qualification: 0
         });
 
-        dealManager = DealManagerFactory.deployDealManager(
+        dealManager = DealManagerFactory(managerFactory).deployDealManager(
             _mainToken,
             _agentToken,
             coreModule,
