@@ -7,7 +7,7 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {IClock} from "../../lib/IClock.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
-import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 
 contract MainToken is ERC20, ERC20Permit, ERC20Votes {
     error NotAuthorized();
@@ -28,11 +28,11 @@ contract MainToken is ERC20, ERC20Permit, ERC20Votes {
     }
 
     function _afterTokenTransfer(address from, address to, uint256 amount) private {
-        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).onMainMove(from, to, amount);
+        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).onMainMove(from, to, amount);
     }
 
     function _beforeDelegate(address from, address to) private {
-        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).onMainDelegate(from, to);
+        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).onMainDelegate(from, to);
     }
 
     function _update(address from, address to, uint256 amount) internal override(ERC20, ERC20Votes) {

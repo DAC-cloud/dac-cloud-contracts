@@ -5,7 +5,7 @@ import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IDealFactory} from "../interfaces/modules/IDealFactory.sol";
 import {IEvaluatorFactory} from "../interfaces/modules/IEvaluatorFactory.sol";
-import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {DealCellFactory} from "./factories/DealCellFactory.sol";
 import {DealCell} from "./DealCell.sol";
 

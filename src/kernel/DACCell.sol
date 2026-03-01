@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
 import {IVotes} from "../lib/IVotes.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
-import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
 import {CapitalCallState} from "./interfaces/Structs.sol";
@@ -18,7 +19,7 @@ import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 
-contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
+contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     
     // Errors
     error NotAllowed();
@@ -43,20 +44,20 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     
     // Deployer role limited to initialization call only, in fact deployer will be always 
     // a Create2 DACFactory, and once initialized, DACCell is independent of the factory.
-    address private immutable deployer;
+    address private deployer;
 
     // Tokens for chickens and pigs
     MainToken private mainToken;
     AgentToken private agentToken;
 
     // Deal manager
-    address public dealManager;
+    address private dealManager;
 
     address private proposalFactory;
     VotingConfig private votingConfig;
 
-    string private name;
-    string private description;
+    string public name;
+    string public description;
 
     LegalWrapper private legalWrapper;
 
@@ -95,12 +96,18 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
     event OffchainActionApproved(uint256 indexed id, bytes4 action, bytes data);
     event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
     
-    constructor(
+    constructor() {
+        _disableInitializers();
+    }
+
+    bool public cellStarted;
+
+    function initialize(
         address _globalFactory,
         string memory _name,
         string memory _description,
         address _proposalFactory
-    ) {
+    ) external initializer {
         name = _name;
         description = _description;
 
@@ -108,13 +115,11 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
 
         deployer = _globalFactory;
 
-        initialized = false;
+        cellStarted = false;
         rootCapitalCallInitialized = false;
 
         emit DACCreated(msg.sender, name);
     }
-
-    bool public initialized;
 
     function initializeAfterDeployment(
         address _mainToken,
@@ -125,7 +130,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         uint256 _quorum
     ) external {
         require(msg.sender == deployer, NotAuthorized());
-        require(!initialized, AlreadyInitialized());
+        require(!cellStarted, AlreadyInitialized());
+        cellStarted = true;
 
         mainToken = MainToken(_mainToken);
         agentToken = AgentToken(_agentToken);
@@ -146,8 +152,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
             coreModule,
             address(this)
         );
-
-        initialized = true;
     }
 
     function initializeRootCapitalCall(
@@ -156,28 +160,24 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         uint256 amount,
         uint256 cashAmount
     ) external {
-        require(initialized, NotInitialized());
+        require(cellStarted, NotInitialized());
         require(msg.sender == deployer, NotAuthorized());
         require(!rootCapitalCallInitialized, AlreadyInitialized());
-
-        CapitalCall memory call = CapitalCall({
-            treasuryToken: treasuryToken,
-            nonce: 0, // special nonce for root capital call
-            tokenRecipient: recipient,
-            tokenAmount: amount,
-            cashAmount: cashAmount
-        });
-
-        bytes32 callHash = keccak256(abi.encode(call));
-
-        capitalCalls[callHash] = CapitalCallState({
-            call: call,
-            fulfilled: false
-        });
-
         rootCapitalCallInitialized = true;
 
-        emit CapitalCallCreated(0, recipient, callHash, amount);
+        emit CapitalCallCreated(
+            0, 
+            recipient, 
+            DACCellGovernanceLib.createCapitalCall(
+                0,
+                treasuryToken,
+                recipient,
+                amount,
+                cashAmount,
+                capitalCalls
+            ), 
+            amount
+        );
     }
 
     function depositTreasury(address token, uint256 amount) external nonReentrant {
@@ -380,12 +380,16 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard {
         return proposals[proposalId];
     }
 
-    function getMainToken() external view returns (address) {
+    function getMainToken() external view override(IDACCell, IDACCellAdapter) returns (address) {
         return address(mainToken);
     }
 
-    function getAgentToken() external view returns (address) {
+    function getAgentToken() external view override(IDACCell, IDACCellAdapter) returns (address) {
         return address(agentToken);
+    }
+
+    function getDealManager() external view override(IDACCell, IDACCellAdapter) returns (address) {
+        return dealManager;
     }
 
     modifier onlyAgent() {

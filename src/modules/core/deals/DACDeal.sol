@@ -8,7 +8,7 @@ import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {IDACFactory} from "../../../interfaces/IDACFactory.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
-import {IDACCellAdapter} from "../../../interfaces/IDACCellAdapter.sol";
+import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
 import {AbstractDealManagementType} from "../../../kernel/governance/AbstractDealManagementProposals.sol";
 import {Deal} from "../../../kernel/Deal.sol";
@@ -91,8 +91,8 @@ contract DACDeal is Deal {
             managedEntity = params.dealTarget;
 
             dacCellDNA = DACCellDNA({
-                dacMainToken: IDACCellAdapter(params.dealTarget).getMainToken(),
-                dacAgentToken: IDACCellAdapter(params.dealTarget).getAgentToken()
+                dacMainToken: IDACCell(params.dealTarget).getMainToken(),
+                dacAgentToken: IDACCell(params.dealTarget).getAgentToken()
             });
 
             _rootCapitalCallId = dacDeal.capitalCallId;
@@ -138,7 +138,7 @@ contract DACDeal is Deal {
         // these LP tokens as dividends, or establish a new Deal
         // with new management
 
-        address token = IDACCellAdapter(managedEntity).getMainToken();
+        address token = IDACCell(managedEntity).getMainToken();
 
         require(IERC20(token).approve(dealCell, _allocation), TransferFailed());
 
@@ -178,7 +178,7 @@ contract DACDeal is Deal {
                 require(!IDealCell(dealCell).allowEarlyReturns(), NotAllowed());
             }
             else {
-                address lpTokenAddress = IDACCellAdapter(managedEntity).getMainToken();
+                address lpTokenAddress = IDACCell(managedEntity).getMainToken();
                 require(token != lpTokenAddress);
             }
             

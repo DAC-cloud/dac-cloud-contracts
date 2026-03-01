@@ -7,7 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
-import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealAdmin} from "../interfaces/IDealAdmin.sol";

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
-import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../../interfaces/IDeal.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
@@ -201,7 +201,7 @@ library DealCellGovernanceLib {
             settled: false
         });
 
-        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).createTrancheProposal(dealId, prop.id());
+        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).createTrancheProposal(dealId, prop.id());
     }
 
     function claimMainToken(
@@ -215,7 +215,7 @@ library DealCellGovernanceLib {
         deal.beforeClaimMainToken(msg.sender, amount);
 
         claimableRewards[msg.sender] = 0;
-        IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).mintMain(address(this), msg.sender, amount);
+        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).mintMain(address(this), msg.sender, amount);
         
         emit RewardsClaimed(dacCell, msg.sender, amount);
 

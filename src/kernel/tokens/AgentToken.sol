@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {IDACCellAdapter} from "../../interfaces/IDACCellAdapter.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
@@ -31,7 +31,7 @@ contract AgentToken is ERC20 {
 
     function stakeToDeal(address deal, uint256 amount) external {
         require(
-            IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).state(deal).id != 0, 
+            IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).state(deal).id != 0, 
             InvalidDeal()
         );
         
@@ -54,7 +54,7 @@ contract AgentToken is ERC20 {
 
     function approve(address deal, uint256 amount) public override returns (bool) {
         require(
-            IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).state(deal).id != 0, 
+            IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).state(deal).id != 0, 
             InvalidDeal()
         );
         
@@ -77,8 +77,8 @@ contract AgentToken is ERC20 {
         require(
             (
                 (msg.sender == dacCell) ||
-                (IDACCellAdapter(dacCell).dealManager() == msg.sender) ||
-                (IDealManagerAdapter(IDACCellAdapter(dacCell).dealManager()).state(msg.sender).id != 0)
+                (IDACCellAdapter(dacCell).getDealManager() == msg.sender) ||
+                (IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).state(msg.sender).id != 0)
             ),
             NotAuthorized()
         );

@@ -181,7 +181,7 @@ contract DACCellDealTest is Test {
             evaluatorConfig: abi.encode(milestones)
         });
 
-        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.dealManager()).createDealProposal(params);
+        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);
 
         vm.stopPrank();
 
@@ -246,7 +246,7 @@ contract DACCellDealTest is Test {
             evaluatorConfig: abi.encode(milestones)
         });
 
-        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.dealManager()).createDealProposal(params);
+        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);
 
         vm.warp(block.timestamp + 1);
 
@@ -311,7 +311,7 @@ contract DACCellDealTest is Test {
             evaluatorConfig: abi.encode(milestones)
         });
 
-        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.dealManager()).createDealProposal(params);
+        (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);
 
         vm.warp(block.timestamp + 1);
 

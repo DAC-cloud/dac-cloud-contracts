@@ -44,6 +44,7 @@ contract DACFactory is IDACFactory {
         dacAddr = DACDeployment.predictDACAddress(
             salt,
             address(this),
+            DACCellFactory(cellFactory).referenceImpl(),
             cellFactory,
             config.name,
             config.description,

@@ -374,6 +374,30 @@ library DACCellGovernanceLib {
         mainToken.mint(to, amount);
     }
 
+    function createCapitalCall(
+        uint256 id,
+        address treasuryToken,
+        address recipient,
+        uint256 amount,
+        uint256 cashAmount,
+        mapping(bytes32 => CapitalCallState) storage capitalCalls
+    ) public returns (bytes32 callHash) {
+        CapitalCall memory call = CapitalCall({
+            treasuryToken: treasuryToken,
+            nonce: id,
+            tokenRecipient: recipient,
+            tokenAmount: amount,
+            cashAmount: cashAmount
+        });
+
+        callHash = keccak256(abi.encode(call));
+
+        capitalCalls[callHash] = CapitalCallState({
+            call: call,
+            fulfilled: false
+        });
+    }
+
     function executeCapitalCall(
         uint256 id,
         DACManagementProposal prop,
@@ -384,21 +408,19 @@ library DACCellGovernanceLib {
             (address, uint256)
         );
 
-        CapitalCall memory call = CapitalCall({
-            treasuryToken: treasuryToken,
-            nonce: id,
-            tokenRecipient: prop.target(),
-            tokenAmount: uint256(prop.i()),
-            cashAmount: cashAmount
-        });
-
-        bytes32 hash = keccak256(abi.encode(call));
-        capitalCalls[hash] = CapitalCallState({
-            call: call,
-            fulfilled: false
-        });
-
-        emit CapitalCallCreated(id, prop.target(), hash, uint256(prop.i()));
+        emit CapitalCallCreated(
+            id, 
+            prop.target(), 
+            createCapitalCall(
+                id,
+                treasuryToken,
+                prop.target(),
+                uint256(prop.i()),
+                cashAmount,
+                capitalCalls
+            ), 
+            uint256(prop.i())
+        );
     }
 
     function _performTransformation(

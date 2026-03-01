@@ -160,7 +160,7 @@ contract DACCellMainTest is Test {
 
         assertEq(mainToken.balanceOf(address(dac)), 400_000_000e18, "Incorrect main token balance after revoke");
 
-        assertEq(IDealManager(dac.dealManager()).totalReleasedVotable(), 200_000_000e18, "Incorrect main token votable after revoke");
+        assertEq(IDealManager(dac.getDealManager()).totalReleasedVotable(), 200_000_000e18, "Incorrect main token votable after revoke");
     }
 
     function test_RevertWhen_ExceedSupply() public {
