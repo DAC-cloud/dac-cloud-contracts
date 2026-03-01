@@ -14,7 +14,7 @@ import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {Tranche} from "./interfaces/Structs.sol";
 import {StakedAgent} from "./tokens/StakedAgent.sol";
-import {StakedAgentLib} from "./tokens/factories/TokenFactories.sol";
+import {StakedAgentFactory} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 
@@ -165,6 +165,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
 
     function initializeDealCell(
         address _deal,
+        address _stakedAgentFactory,
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
     ) external {
@@ -173,7 +174,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
 
         deal = IDeal(_deal);
 
-        token = StakedAgent(StakedAgentLib.deployStakedAgentToken(
+        token = StakedAgent(StakedAgentFactory(_stakedAgentFactory).deployStakedAgentToken(
             address(this),
             params.name,
             ERC20(agentTokenAddr).symbol()

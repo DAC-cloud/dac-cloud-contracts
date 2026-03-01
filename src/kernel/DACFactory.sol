@@ -6,12 +6,15 @@ import {IDACFactory} from "../interfaces/IDACFactory.sol";
 import {DACCellFactory} from "./factories/DACCellFactory.sol";
 import {DACCell} from "./DACCell.sol";
 import {DACDeployment} from "./libraries/DACDeployment.sol";
-import {MainTokenLib, AgentTokenLib} from "./tokens/factories/TokenFactories.sol";
+import {MainTokenFactory, AgentTokenFactory} from "./tokens/factories/TokenFactories.sol";
 
 contract DACFactory is IDACFactory {
     error Create2Failed();
     error SleepingCellNotFound();
     error DNAMismatch();
+
+    address public mainTokenFactory;
+    address public agentTokenFactory;
 
     address public cellFactory;
     address public managerFactory;
@@ -23,11 +26,15 @@ contract DACFactory is IDACFactory {
     event DACDeployed(address indexed dac, address mainToken, address agentToken, bool init);
 
     constructor(
+        address _mainTokenFactory,
+        address _agentTokenFactory,
         address _cellFactory,
         address _managerFactory,
         address _governanceFactory,
         address _coreModuleFactory
     ) {
+        mainTokenFactory = _mainTokenFactory;
+        agentTokenFactory = _agentTokenFactory;
         cellFactory = _cellFactory;
         managerFactory = _managerFactory;
         governanceFactory = _governanceFactory;
@@ -51,14 +58,14 @@ contract DACFactory is IDACFactory {
             governanceFactory
         );
 
-        mainAddr = MainTokenLib.deployMainToken(
+        mainAddr = MainTokenFactory(mainTokenFactory).deployMainToken(
             dacAddr, 
             config.mainTokenMaxSupply, 
             string.concat(config.name, " Token"), 
             config.symbol
         );
 
-        agentAddr = AgentTokenLib.deployAgentToken(
+        agentAddr = AgentTokenFactory(agentTokenFactory).deployAgentToken(
             dacAddr, 
             string.concat(config.name, " Agent Token"), 
             string.concat(config.symbol, "A")

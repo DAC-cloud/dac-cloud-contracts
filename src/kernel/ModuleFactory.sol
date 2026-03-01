@@ -12,11 +12,14 @@ import {DealCell} from "./DealCell.sol";
 abstract contract ModuleFactory is IModuleFactory {
 
     address public dealCellFactory;
+    address public stakedAgentTokenFactory;
 
     constructor(
-        address _dealCellFactory
+        address _dealCellFactory,
+        address _stakedAgentTokenFactory
     ) {
         dealCellFactory = _dealCellFactory;
+        stakedAgentTokenFactory = _stakedAgentTokenFactory;
     }
 
     function getDealFactory(
@@ -55,7 +58,12 @@ abstract contract ModuleFactory is IModuleFactory {
             IDACCellAdapter(dac).getMainToken()
         );
 
-        DealCell(dealCell).initializeDealCell(dealAddr, params, votingConfig);
+        DealCell(dealCell).initializeDealCell(
+            dealAddr,
+            stakedAgentTokenFactory,
+            params, 
+            votingConfig
+        );
 
         IEvaluatorFactory evaluatorFactory = getEvaluatorFactory(params.dealKind, params.evaluatorSelector);
 

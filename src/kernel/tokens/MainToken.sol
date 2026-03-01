@@ -1,41 +1,64 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {ERC20PermitUpgradeable} from"@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {ERC20VotesUpgradeable} from"@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {AccessControlUpgradeable} from"@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IClock} from "../../lib/IClock.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 
-contract MainToken is ERC20, ERC20Permit, ERC20Votes {
+contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, AccessControlUpgradeable {
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    
+    address public dacCell;
+    uint256 public maxSupply;
+    
+    address public dealManager;
+
     error NotAuthorized();
     error MaxSupplyExceeded();
 
-    address public immutable dacCell;
+    constructor() {
+        _disableInitializers();
+    }
 
-    uint256 public immutable maxSupply;
+    function initialize(
+        address _dacCell,
+        uint256 _maxSupply,
+        string memory name, 
+        string memory symbol
+    ) external initializer {
+        __ERC20_init(name, symbol);
+        __ERC20Permit_init(name);
+        __ERC20Votes_init();
+        __AccessControl_init();
 
-    constructor(
-        address _dacCell, 
-        uint256 _maxSupply, 
-        string memory name_, 
-        string memory symbol_
-    ) ERC20(name_, symbol_) ERC20Permit(name_) {
         dacCell = _dacCell;
         maxSupply = _maxSupply;
+
+        _grantRole(MINTER_ROLE, dacCell);
+    }
+
+    function dacInit(
+        address _dealManager
+    ) external {
+        dealManager = _dealManager;
+        _grantRole(MINTER_ROLE, _dealManager);
     }
 
     function _afterTokenTransfer(address from, address to, uint256 amount) private {
-        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).onMainMove(from, to, amount);
+        IDealManagerAdapter(dealManager).onMainMove(from, to, amount);
     }
 
     function _beforeDelegate(address from, address to) private {
-        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).onMainDelegate(from, to);
+        IDealManagerAdapter(dealManager).onMainDelegate(from, to);
     }
 
-    function _update(address from, address to, uint256 amount) internal override(ERC20, ERC20Votes) {
+    function _update(address from, address to, uint256 amount) internal override(ERC20Upgradeable, ERC20VotesUpgradeable) {
         super._update(from, to, amount);
         _afterTokenTransfer(from, to, amount);
     }
@@ -45,12 +68,13 @@ contract MainToken is ERC20, ERC20Permit, ERC20Votes {
         super._delegate(from, to);
     }
 
-    function nonces(address owner) public view virtual override(ERC20Permit, Nonces) returns (uint256) {
+    function nonces(address owner) public view virtual override(ERC20PermitUpgradeable, NoncesUpgradeable) returns (uint256) {
         return super.nonces(owner);
     }
 
     function mint(address to, uint256 amount) external {
-        require(msg.sender == dacCell, NotAuthorized());
+        require(hasRole(MINTER_ROLE, msg.sender), NotAuthorized());
+
         require(totalSupply() + amount <= maxSupply, MaxSupplyExceeded());
         _mint(to, amount);
     }

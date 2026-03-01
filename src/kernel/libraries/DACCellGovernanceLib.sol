@@ -439,8 +439,10 @@ library DACCellGovernanceLib {
         mapping(uint256 => address) storage deals
     ) internal {
         address dealCell = deals[id];
-        uint256 totalTokens = IDealCell(dealCell).getStakedAgentTotal();
-        AgentToken(agentToken).burnFrom(dealCell, totalTokens);
+        
+        uint256 slashedTokens = IDealCell(dealCell).getStakedAgentTotal() * slashPercent / 100;
+        AgentToken(agentToken).burnFrom(dealCell, slashedTokens);
+        
         IDealAdmin(dealCell).markAsFailed(slashPercent);
     }
 

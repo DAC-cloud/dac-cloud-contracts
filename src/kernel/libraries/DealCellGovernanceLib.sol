@@ -87,8 +87,7 @@ library DealCellGovernanceLib {
 
         token.burn(agent, agentStake);
 
-        AgentToken(agentTokenAddr).burnFrom(address(this), agentStake); // burn agent tokens on our balance
-        AgentToken(agentTokenAddr).mint(agent, agentStake);             // return agent tokens back to agent
+        AgentToken(agentTokenAddr).transfer(agent, agentStake);
 
         emit AgentTokensReleased(dacCell, id, agent, agentStake);
 

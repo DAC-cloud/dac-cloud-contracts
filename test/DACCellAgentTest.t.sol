@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../src/kernel/DACCell.sol";
 import "../src/kernel/tokens/MainToken.sol";
 import "../src/kernel/tokens/AgentToken.sol";
+import "../src/kernel/tokens/factories/TokenFactories.sol";
 import "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import "../src/kernel/factories/DACCellFactory.sol";
 import "../src/kernel/factories/DealCellFactory.sol";
@@ -54,6 +55,7 @@ contract DACCellAgentTest is Test {
         coreModule = new CoreModuleFactory(
             address(new DealCellFactory()),
             address(new DACDealFactory()),
+            address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new BasicEvaluatorFactory())
         );
@@ -61,6 +63,8 @@ contract DACCellAgentTest is Test {
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
+            address(new MainTokenFactory()),
+            address(new AgentTokenFactory()),
             address(new DACCellFactory()),
             address(new DealManagerFactory()),
             address(governanceFactory), 

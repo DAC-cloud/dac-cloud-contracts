@@ -4,53 +4,76 @@ pragma solidity ^0.8.20;
 import {AgentToken} from "../AgentToken.sol";
 import {MainToken} from "../MainToken.sol";
 import {StakedAgent} from "../StakedAgent.sol";
+import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
 
-library MainTokenLib {
+contract MainTokenFactory {
+
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new MainToken());
+    }
+
     function deployMainToken(
         address dac,
         uint256 maxSupply,
         string memory name,
         string memory symbol
     ) public returns (address mainToken) {
-        mainToken = address(
-            new MainToken(
-                dac,
-                maxSupply,
-                name,
-                symbol
-            )
+        bytes memory initData = abi.encodeWithSelector(
+            MainToken.initialize.selector,
+            dac,
+            maxSupply,
+            name,
+            symbol
         );
+
+        mainToken = address(new UUPSProxy(address(referenceImpl), initData));
     }
 }
 
-library AgentTokenLib {
+contract AgentTokenFactory {
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new AgentToken());
+    }
+
     function deployAgentToken(
         address dac,
         string memory name,
         string memory symbol
     ) public returns (address agentToken) {
-        agentToken = address(
-            new AgentToken(
-                dac,
-                name,
-                symbol
-            )
+        bytes memory initData = abi.encodeWithSelector(
+            AgentToken.initialize.selector,
+            dac,
+            name,
+            symbol
         );
+
+        agentToken = address(new UUPSProxy(address(referenceImpl), initData));
     }
 }
 
-library StakedAgentLib {
+contract StakedAgentFactory {
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new StakedAgent());
+    }
+
     function deployStakedAgentToken(
         address deal,
         string memory name,
         string memory symbol
     ) public returns (address stakedAgentToken) {
-        stakedAgentToken = address(
-            new StakedAgent(
-                deal,
-                name,
-                symbol
-            )
+        bytes memory initData = abi.encodeWithSelector(
+            StakedAgent.initialize.selector,
+            deal,
+            name,
+            symbol
         );
+
+        stakedAgentToken = address(new UUPSProxy(address(referenceImpl), initData));
     }
 }

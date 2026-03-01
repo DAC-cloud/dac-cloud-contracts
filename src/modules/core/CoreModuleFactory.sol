@@ -21,9 +21,10 @@ contract CoreModuleFactory is ModuleFactory {
     constructor(
         address _dealCellFactory,
         address _dacDealFactory,
+        address _stakedAgentTokenFactory,
         address _treasuryDealFactory,
         address _basicEvaluatorFactory
-    ) ModuleFactory(_dealCellFactory) {
+    ) ModuleFactory(_dealCellFactory, _stakedAgentTokenFactory) {
         dacDealFactory = _dacDealFactory;
         treasuryDealFactory = _treasuryDealFactory;
         basicEvaluatorFactory = _basicEvaluatorFactory;
