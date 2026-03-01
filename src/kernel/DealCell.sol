@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -17,7 +18,7 @@ import {StakedAgentLib} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 
-contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
+contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
 
     error NotAuthorized();
     error AlreadyInitialized();
@@ -48,18 +49,18 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
 
     error VoteNotPassed();
 
-    address private immutable factory;
+    address private factory;
 
-    address public immutable manager;
+    address public manager;
     
-    uint256 internal immutable id;
-    address internal immutable dacCell;
-    address internal immutable governanceFactory;
+    uint256 internal id;
+    address internal dacCell;
+    address internal governanceFactory;
     
-    address internal immutable agentTokenAddr;
-    address internal immutable mainTokenAddr;
+    address internal agentTokenAddr;
+    address internal mainTokenAddr;
 
-    address private immutable proposer;
+    address private proposer;
 
     IDeal public deal;
     address internal managedEntity;
@@ -133,27 +134,36 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard {
     event EarlyReturnsToggled(uint256 indexed id, bool enabled);
     event VetoRightEnabled(uint256 indexed id);
 
-    constructor(
-        address _deployer,
-        uint256 _id,
-        address _dac,
-        address _dealManager,
-        address _governanceFactory,
-        address _agentToken,
-        address _mainToken,
-        address _proposer
-    ) {
-        factory = _deployer;
-        id = _id;
-        governanceFactory = _governanceFactory;
-        dacCell = _dac;
-        manager = _dealManager;
-        agentTokenAddr = _agentToken;
-        mainTokenAddr = _mainToken;
-        proposer = _proposer;
+    constructor() {
+        _disableInitializers();
+    }
+
+    struct DACAddresses {
+        address _deployer;
+        address _dac;
+        address _dealManager;
+        address _governanceFactory;
+        address _agentToken;
+        address _mainToken;
+        address _proposer;
     }
 
     function initialize(
+        uint256 _id,
+        DACAddresses memory addresses
+    ) public initializer {
+        id = _id;
+    
+        factory = addresses._deployer;
+        dacCell = addresses._dac;
+        manager = addresses._dealManager;
+        governanceFactory = addresses._governanceFactory;
+        agentTokenAddr = addresses._agentToken;
+        mainTokenAddr = addresses._mainToken;
+        proposer = addresses._proposer;
+    }
+
+    function initializeDealCell(
         address _deal,
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
