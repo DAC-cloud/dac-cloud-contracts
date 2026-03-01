@@ -2,22 +2,30 @@
 pragma solidity ^0.8.20;
 
 import {DealManager} from "../DealManager.sol";
+import {UUPSProxy} from "../proxies/UUPSProxy.sol";
 
 contract DealManagerFactory {
     
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new DealManager());
+    }
+
     function deployDealManager(
         address mainToken,
         address agentToken,
         address coreModule,
         address dacCell
     ) external returns (address dealManager) {
-        dealManager = address(new DealManager());
-
-        DealManager(dealManager).initializeAfterDeployment(
+        bytes memory initData = abi.encodeWithSelector(
+            DealManager.initialize.selector,
             mainToken,
             agentToken,
             coreModule,
             dacCell
         );
+
+        dealManager = address(new UUPSProxy(address(referenceImpl), initData));
     }
 }

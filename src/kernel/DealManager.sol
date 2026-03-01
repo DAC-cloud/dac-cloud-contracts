@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
@@ -17,7 +18,7 @@ import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 
-contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
+contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Initializable {
     
     // Errors
     error NotAllowed();
@@ -73,21 +74,15 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
     event ModuleRemoved(address indexed factory);
 
     constructor() {
-        initialized = false;
-        deployer = msg.sender;
+        _disableInitializers();
     }
 
-    bool public initialized;
-
-    function initializeAfterDeployment(
+    function initialize(
         address _mainToken,
         address _agentToken,
         address coreModule,
         address _dacCell
-    ) external {
-        require(msg.sender == deployer, NotAuthorized());
-        require(!initialized, AlreadyInitialized());
-
+    ) public initializer {
         mainToken = MainToken(_mainToken);
         agentToken = AgentToken(_agentToken);
 
@@ -98,8 +93,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard {
 
         controlledAddresses[_dacCell] = true;
         controlledAddresses[address(this)] = true;
-
-        initialized = true;
     }
 
     function createDealProposal(DealParams calldata params)
