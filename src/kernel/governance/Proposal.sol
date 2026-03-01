@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
 import {IClock} from "../../lib/IClock.sol";
 import {ProposalParams} from "../../interfaces/Structs.sol";
 
-abstract contract Proposal is IVoting, IClock {
+abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
 
+    error NotInitialized();
     error NotResolved();
     error VetoNotEnabled();
     error NotAuthorized();
@@ -16,20 +19,22 @@ abstract contract Proposal is IVoting, IClock {
     error AlreadyVoted();
     error NoVotingPower();
 
-    address public immutable token;
+    bool private initialized;
+
+    address public token;
 
     // Voting configuration
-    uint256 public immutable endTime;
-    uint256 public immutable quorum;
-    uint256 public immutable blockingQuorum;
+    uint256 public endTime;
+    uint256 public quorum;
+    uint256 public blockingQuorum;
 
     // Voting power snapshot is taken at the proposal creation moment
-    uint256 public immutable snapshotTime;
+    uint256 public snapshotTime;
 
-    uint256 public immutable totalVotingPower;
+    uint256 public totalVotingPower;
 
-    bool public immutable vetoRight;
-    address public immutable vetoRightOwner;
+    bool public vetoRight;
+    address public vetoRightOwner;
 
     // Voting state
     uint256 public yesVotes;
@@ -44,7 +49,11 @@ abstract contract Proposal is IVoting, IClock {
     // Events
     event Voted(address indexed voter, bool support, uint256 weight);
 
-    constructor(
+    constructor() {
+        _disableInitializers();
+    }
+
+    function __Proposal_init(
         ProposalParams memory _proposal, 
         address _token, 
         uint256 _duration, 
@@ -52,7 +61,9 @@ abstract contract Proposal is IVoting, IClock {
         uint256 _quorum, 
         uint256 _blockingQuorum,
         address _vetoRightOwner
-    ) {
+    ) internal onlyInitializing {
+        initialized = true;
+
         snapshotTime = clock();
         
         endTime = block.timestamp + _duration;
@@ -78,7 +89,9 @@ abstract contract Proposal is IVoting, IClock {
         return "mode=timestamp";
     }
 
-    function vote(bool support) external {
+    function vote(bool support) external nonReentrant {
+        require(initialized, NotInitialized());
+
         require(clock() <= endTime, VotingEnded());
         require(!voted[msg.sender], AlreadyVoted());
 
@@ -92,6 +105,7 @@ abstract contract Proposal is IVoting, IClock {
         else {
             noVotes += weight;
         }
+
         voted[msg.sender] = true;
         
         emit Voted(msg.sender, support, weight);

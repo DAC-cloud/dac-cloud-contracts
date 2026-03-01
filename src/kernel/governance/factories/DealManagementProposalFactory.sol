@@ -3,12 +3,19 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
 import {IDealManagementProposalFactory} from "../../../interfaces/IDealManagementProposalFactory.sol";
 import {AbstractDealManagementType} from "../AbstractDealManagementProposals.sol";
 import {DealManagementProposal} from "../DealManagementProposal.sol";
 
 abstract contract DealManagementProposalFactory is IDealManagementProposalFactory {
     error ProposalNotSupported();
+
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new DealManagementProposal());
+    }
 
     struct QuorumConfig {
         bool allowed;
@@ -25,7 +32,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
         address token,
         bool vetoEnabled,
         VotingConfig memory votingConfig
-    ) external returns (address) {
+    ) external returns (address proposalAddress) {
         uint256 quorum;
         uint256 blockingQuorum;
         address vetoRightOwner = address(0);
@@ -103,20 +110,15 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             }
         }
 
-        DealManagementProposal prop = new DealManagementProposal(
-            id, 
-            dac,
-            deal,
-            token, 
-            params, 
-            votingConfig.duration,
-            totalSupply, 
-            quorum,
-            blockingQuorum,
-            vetoRightOwner
+        bytes memory initData = abi.encodeWithSelector(
+            DealManagementProposal.initialize.selector,
+            id,
+            abi.encode(dac, deal, token, vetoRightOwner),
+            abi.encode(votingConfig.duration, totalSupply, quorum, blockingQuorum),
+            params
         );
 
-        return address(prop);
+        proposalAddress = address(new UUPSProxy(address(referenceImpl), initData));
     }
 
     function moduleManagementProposalQuorum(

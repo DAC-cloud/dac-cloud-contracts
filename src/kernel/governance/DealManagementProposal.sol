@@ -5,32 +5,39 @@ import {ProposalParams} from "../../interfaces/Structs.sol";
 import {Proposal} from "./Proposal.sol";
 
 contract DealManagementProposal is Proposal {
-    uint256 public immutable id;
-    address public immutable dacEntity;
-    address public immutable deal;
+    uint256 public id;
+    address public dacEntity;
+    address public deal;
     
-    constructor(
+    function initialize(
         uint256 _id,
-        address _dac,
-        address _deal,
-        address _token,
-        ProposalParams memory params,
-        uint256 _votingDuration,
-        uint256 _totalVotingPower,
-        uint256 _votingQuorum, 
-        uint256 _blockingQuorum,
-        address vetoRightOwner
-    ) Proposal(
-        params, 
-        _token, 
-        _votingDuration, 
-        _totalVotingPower,
-        _votingQuorum, 
-        _blockingQuorum, 
-        vetoRightOwner
-    ) {
+        bytes memory addresses,
+        bytes memory variables,
+        ProposalParams memory params
+    ) external initializer {
+        address _token;
+        address vetoRightOwner;
+
+        (dacEntity, deal, _token, vetoRightOwner) = abi.decode(
+            addresses,
+            (address, address, address, address)
+        );
+
+        (uint256 _votingDuration, uint256 _totalVotingPower, uint256 _votingQuorum, uint256 _blockingQuorum) = abi.decode(
+            variables,
+            (uint256, uint256, uint256, uint256)
+        );
+
+        __Proposal_init(
+            params, 
+            _token, 
+            _votingDuration, 
+            _totalVotingPower,
+            _votingQuorum, 
+            _blockingQuorum, 
+            vetoRightOwner
+        );
+
         id = _id;
-        dacEntity = _dac;
-        deal = _deal;
     }
 }

@@ -3,11 +3,19 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
+import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
 import {IDACManagementFactory} from "../../../interfaces/IDACManagementFactory.sol";
 import {DACManagementProposalType} from "../DACManagementProposals.sol";
 import {DACManagementProposal} from "../DACManagementProposal.sol";
 
 contract DACManagementProposalFactory is IDACManagementFactory {
+
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new DACManagementProposal());
+    }
+
     function deployProposal(
         uint256 id,
         ProposalParams memory proposalParams,
@@ -15,7 +23,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
         address token,
         uint256 totalVotingSupply,
         VotingConfig memory votingConfig
-    ) external returns (address) {
+    ) external returns (address proposalAddress) {
         uint256 quorum;
         uint256 blockingQuorum;
 
@@ -45,7 +53,8 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             blockingQuorum = totalVotingSupply * votingConfig.blockingPercent / 100;
         }
 
-        DACManagementProposal prop = new DACManagementProposal(
+        bytes memory initData = abi.encodeWithSelector(
+            DACManagementProposal.initialize.selector,
             id, 
             dac, 
             token, 
@@ -56,6 +65,6 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             blockingQuorum
         );
 
-        return address(prop);
+        proposalAddress = address(new UUPSProxy(address(referenceImpl), initData));
     }
 }

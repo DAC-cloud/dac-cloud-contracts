@@ -5,10 +5,10 @@ import {ProposalParams} from "../../interfaces/Structs.sol";
 import {Proposal} from "./Proposal.sol";
 
 contract DACManagementProposal is Proposal {
-    uint256 public immutable id;
-    address public immutable dacEntity;
+    uint256 public id;
+    address public dacEntity;
     
-    constructor(
+    function initialize(
         uint256 _id,
         address _dac,
         address _token,
@@ -17,15 +17,17 @@ contract DACManagementProposal is Proposal {
         uint256 _totalVotingPower,
         uint256 _votingQuorum, 
         uint256 _blockingQuorum
-    ) Proposal(
-        params, 
-        _token, 
-        _votingDuration, 
-        _totalVotingPower, 
-        _votingQuorum, 
-        _blockingQuorum, 
-        address(0)
-    ) {
+    ) external initializer {
+        __Proposal_init(
+            params, 
+            _token, 
+            _votingDuration, 
+            _totalVotingPower, 
+            _votingQuorum, 
+            _blockingQuorum, 
+            address(0)
+        );
+
         id = _id;
         dacEntity = _dac;
     }
