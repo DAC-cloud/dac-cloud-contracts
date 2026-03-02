@@ -7,6 +7,7 @@ interface IAbstractDealManagementProposals {
     function requestTranche() external pure returns (bytes4);
 
     function addStake() external pure returns (bytes4);
+    function permitUnstake() external pure returns (bytes4);
 
     function enableVetoRight() external pure returns (bytes4);
 
@@ -21,6 +22,7 @@ library AbstractDealManagementType {
     bytes4 public constant REQUEST_TRANCHE      = IAbstractDealManagementProposals.requestTranche.selector;     // Default quorum, blocking allowed
     
     bytes4 public constant ADD_STAKE            = IAbstractDealManagementProposals.addStake.selector;           // High quorum
+    bytes4 public constant PERMIT_UNSTAKE       = IAbstractDealManagementProposals.permitUnstake.selector;      // High quorum
 
     bytes4 public constant TOGGLE_WHITELIST     = IAbstractDealManagementProposals.toggleWhitelist.selector;    // High quorum
     

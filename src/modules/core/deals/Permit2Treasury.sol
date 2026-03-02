@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPermit2} from "../../../lib/IPermit2.sol";
 import {IClock} from "../../../lib/IClock.sol";
 import {TreasurySpendAllowance} from "../interfaces/Structs.sol";
+import {UUPSProxy} from "../../../kernel/proxies/UUPSProxy.sol";
 
-contract Permit2Treasury is ReentrancyGuard, IClock {
+contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
     using SafeERC20 for IERC20;
 
     error NotAuthorized();
@@ -21,8 +23,8 @@ contract Permit2Treasury is ReentrancyGuard, IClock {
 
     error InvalidTransfer();
 
-    address public immutable treasuryDeal;
-    IPermit2 public immutable permit2;
+    address public treasuryDeal;
+    IPermit2 public permit2;
 
     mapping(bytes32 => uint256) public approvedAgents; // calldataHash(agent, token, source) => totalAmount
     mapping(bytes32 => TreasurySpendAllowance) public agentAllowance; // calldataHash(agent, token, destination) => allowance
@@ -41,7 +43,14 @@ contract Permit2Treasury is ReentrancyGuard, IClock {
 
     event CapitalReturned(address token, uint256 amount);
 
-    constructor(address _treasuryDeal, address _permit2) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
+        address _treasuryDeal, 
+        address _permit2
+    ) external initializer {
         treasuryDeal = _treasuryDeal;
         permit2 = IPermit2(_permit2);
     }
@@ -212,11 +221,28 @@ contract Permit2Treasury is ReentrancyGuard, IClock {
     }
 }
 
-library Permit2TreasuryLibrary {
-    function deployPermit2Treasury(
-        address deal,
+contract Permit2TreasuryFactory {
+
+    address private referenceImpl;
+    address private permit2;
+
+    constructor(
         address _permit2
+    ) {
+        referenceImpl = address(new Permit2Treasury());
+        
+        permit2 = _permit2;
+    }
+
+    function deployPermit2Treasury(
+        address deal
     ) public returns (Permit2Treasury) {
-        return new Permit2Treasury(deal, _permit2);
+        bytes memory initData = abi.encodeWithSelector(
+            Permit2Treasury.initialize.selector,
+            deal,
+            permit2
+        );
+
+        return Permit2Treasury(address(new UUPSProxy(address(referenceImpl), initData)));
     }
 }

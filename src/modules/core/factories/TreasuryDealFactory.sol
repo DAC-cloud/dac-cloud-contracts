@@ -5,14 +5,15 @@ import {UUPSProxy} from "../../../kernel/proxies/UUPSProxy.sol";
 import {DealParams} from "../../../interfaces/Structs.sol";
 import {IDealFactory} from "../../../interfaces/modules/IDealFactory.sol";
 import {TreasuryDeal} from "../deals/TreasuryDeal.sol";
+import {Permit2TreasuryFactory} from "../deals/Permit2Treasury.sol";
 
 contract TreasuryDealFactory is IDealFactory {
-    address public immutable PERMIT2;
+    address public immutable permit2VaultFactory;
     address public immutable referenceImpl;
 
     constructor(address permit2) {
         referenceImpl = address(new TreasuryDeal());
-        PERMIT2 = permit2;
+        permit2VaultFactory = address(new Permit2TreasuryFactory(permit2));
     }
 
     function deployDeal(
@@ -31,7 +32,7 @@ contract TreasuryDealFactory is IDealFactory {
             agentToken,
             mainToken,
             params.proposer,
-            PERMIT2
+            permit2VaultFactory
         );
 
         dealAddr = address(new UUPSProxy(address(referenceImpl), initData));

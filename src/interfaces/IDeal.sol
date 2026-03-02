@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {DealParams, VotingConfig} from "./Structs.sol";
+import {DealParams, VotingConfig, ProposalParams} from "./Structs.sol";
 
 interface IDeal {
     function getProposal(uint256 proposalId) external view returns (address);
+
+    function createStakedAgentProposal(ProposalParams calldata params) external returns (uint256 proposalId);
 
     function beforeInitialize(
         DealParams calldata params,

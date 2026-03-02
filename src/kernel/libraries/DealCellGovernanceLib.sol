@@ -22,9 +22,6 @@ interface IDealGovernanceAdapter {
 
 library DealCellGovernanceLib {
 
-    event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-    event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-
     error NoStake();
 
     error DeadlineNotPassed();
@@ -37,10 +34,15 @@ library DealCellGovernanceLib {
     error TrancheNotExists();
     error TrancheAlreadySettled();
 
+    error ProposalNotSupported();
+
     error InsufficientRewards();
     error NoClaimableRewards();
 
     error TransferFailed();
+
+    event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
+    event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
 
     event CapitalReturned(address indexed dac, uint256 indexed id, address token, uint256 amount);
 
@@ -77,17 +79,17 @@ library DealCellGovernanceLib {
         address dacCell,
         uint256 id,
         IDeal deal,
+        address agent,
         address agentTokenAddr,
         StakedAgent token
     ) public {
-        address agent = msg.sender;
         require(token.balanceOf(agent) > 0, NoStake());
 
         uint256 agentStake = token.balanceOf(agent);
 
         token.burn(agent, agentStake);
 
-        AgentToken(agentTokenAddr).transfer(agent, agentStake);
+        require(AgentToken(agentTokenAddr).transfer(agent, agentStake), TransferFailed());
 
         emit AgentTokensReleased(dacCell, id, agent, agentStake);
 
@@ -100,12 +102,30 @@ library DealCellGovernanceLib {
         VotingConfig memory votingConfig
     ) public view returns (bool isBase) {
         if (msg.sender != address(this)) {
-            require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NotStakedAgent());
+            if (msg.sender != dealCell) {
+                require(
+                    !(
+                        params.typ == AbstractDealManagementType.PERMIT_UNSTAKE
+                    ),
+                    ProposalNotSupported()
+                );
 
-            require(
-                IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig.qualification,
-                NotEnoughBalance()
-            );
+                require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NotStakedAgent());
+
+                require(
+                    IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig.qualification,
+                    NotEnoughBalance()
+                );
+            }
+            else {
+                // Deal cell is only allowed to propose PERMIT_UNSTAKE
+                require(
+                    (
+                        params.typ == AbstractDealManagementType.PERMIT_UNSTAKE
+                    ),
+                    ProposalNotSupported()
+                );
+            }
         }
 
         if (!IDealCell(dealCell).isApproved()) {
@@ -125,7 +145,8 @@ library DealCellGovernanceLib {
             params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
             params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
-            params.typ == AbstractDealManagementType.ADD_STAKE
+            params.typ == AbstractDealManagementType.ADD_STAKE ||
+            params.typ == AbstractDealManagementType.PERMIT_UNSTAKE
         );
     }
 

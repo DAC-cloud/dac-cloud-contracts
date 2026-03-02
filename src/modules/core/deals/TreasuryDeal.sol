@@ -10,7 +10,7 @@ import {IDealManagerAdapter} from "../../../kernel/interfaces/IDealManagerAdapte
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
-import {Permit2Treasury, Permit2TreasuryLibrary} from "./Permit2Treasury.sol";
+import {Permit2Treasury, Permit2TreasuryFactory} from "./Permit2Treasury.sol";
 import {TreasurySpendAllowance} from "../interfaces/Structs.sol";
 
 contract TreasuryDeal is Deal {
@@ -36,7 +36,7 @@ contract TreasuryDeal is Deal {
         address _agentToken,
         address _mainToken,
         address _proposer,
-        address _permit2
+        address _permit2TreasuryFactory
     ) external initializer {
         __Deal_init(
             _id,
@@ -47,7 +47,7 @@ contract TreasuryDeal is Deal {
             _proposer
         );
 
-        treasury = Permit2TreasuryLibrary.deployPermit2Treasury(address(this), _permit2);
+        treasury = Permit2TreasuryFactory(_permit2TreasuryFactory).deployPermit2Treasury(address(this));
         managedEntity = address(treasury);
     }
 

@@ -43,6 +43,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
             params.typ == AbstractDealManagementType.ADD_STAKE || 
+            params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
             params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
             params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
         ) {
@@ -50,6 +51,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
                 params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
                 params.typ == AbstractDealManagementType.ADD_STAKE || 
+                params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
                 params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
             ) {

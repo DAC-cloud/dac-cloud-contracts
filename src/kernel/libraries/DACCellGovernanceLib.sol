@@ -36,6 +36,8 @@ library DACCellGovernanceLib {
     error InvalidDeal(address deal);
     error InvalidDealId(uint256 deal);
     
+    error NoStake();
+
     error InvalidTranche();
     error InsufficientTreasury();
     error InsufficientRewards();
@@ -244,6 +246,8 @@ library DACCellGovernanceLib {
 
         address dealCell = dealManager.deals(dealId);
         require(dealCell != address(0), InvalidDealId(dealId));
+
+        require(IDealCell(dealCell).getStakedAgentTotal() > 0, NoStake());
 
         uint256 amount = IDealCell(dealCell).fundingAmount(trancheId);
         address token = IDealCell(dealCell).fundingToken(trancheId);

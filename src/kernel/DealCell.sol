@@ -5,7 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
+import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
@@ -17,6 +17,7 @@ import {StakedAgent} from "./tokens/StakedAgent.sol";
 import {StakedAgentFactory} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
+import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 
 contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
 
@@ -36,6 +37,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
     error InvalidTranche();
 
     error NoStake();
+    error NotAllowed();
     
     error NotEnoughBalance();
 
@@ -300,8 +302,27 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
     function unstake() external nonReentrant {
         // allow to unstake if the deal is closed
         if (!closed) {
-            // of if the deal is not approved within deadline
-            require(!approved || (block.timestamp > _approveDeadline), DeadlineNotPassed());
+            if (!approved) {
+                // if deadline passed, allowing to unstake
+                require(block.timestamp > _approveDeadline, DeadlineNotPassed());
+            }
+            else {
+                require(token.balanceOf(msg.sender) > 0, NoStake());
+
+                require(token.totalSupply() > token.balanceOf(msg.sender), NotAllowed());
+
+                // Deal is approved, creating a proposal so agents can agree on allowing
+                // agent to leave the deal
+
+                deal.createStakedAgentProposal(ProposalParams({
+                    typ: AbstractDealManagementType.PERMIT_UNSTAKE,
+                    target: msg.sender,
+                    i: bytes32(token.balanceOf(msg.sender)),
+                    data: abi.encode(0)
+                }));
+
+                return;
+            }
         }
         else {
             // if the recovery is on, no more unstakes
@@ -312,6 +333,7 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
             dacCell,
             id,
             deal,
+            msg.sender,
             agentTokenAddr,
             token
         );
@@ -468,6 +490,23 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
         stake(staker, amount);
     }
     
+    function unstakeAllowed(address agent) external onlyDeal {
+        // if the deal is not approved adding stakes not allowed
+        require(!recovery, DealInLiquidation());
+
+        require(token.balanceOf(agent) > 0, NoStake());
+        require(token.totalSupply() > token.balanceOf(agent), NotAllowed());
+
+        DealCellGovernanceLib.unstake(
+            dacCell,
+            id,
+            deal,
+            agent,
+            agentTokenAddr,
+            token
+        );
+    }
+
     function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDealManager {
         require(
             deal.onMessageDeal(messageKind, message), 
