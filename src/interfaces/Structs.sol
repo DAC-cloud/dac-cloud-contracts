@@ -50,11 +50,12 @@ struct ProposalParams {
 struct DealParams {
     bytes4 dealKind;
     string name;
+    string description;
+    string linkHash;                // For hash of the document submission in external document management system
     address moduleFactory;
     address governanceFactory;
     address dealTarget;             // childDAC or Vault-based deal address
     address proposer;
-    string linkHash;                // Hash of the Deal submission in external document management system
     bool vetoEnabled;               // If enabled, chickens can push a veto on High-quorum proposals through their Default+blocking proposal
     address fundingToken;
     uint256 fundingAmount;

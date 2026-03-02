@@ -4,6 +4,9 @@ pragma solidity ^0.8.20;
 import {IDeal} from "./IDeal.sol";
 
 interface IDealCell {
+    function name() external view returns (string memory);
+    function description() external view returns (string memory);
+
     function deal() external view returns (IDeal);
     function manager() external view returns (address);
 

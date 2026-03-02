@@ -78,6 +78,10 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
     uint256 internal _approveDeadline;
     uint256 internal _dealDeadline;
 
+    // Name and description
+    string public name;
+    string public description;
+
     // Link with document management system
     string public linkHash;
 
@@ -181,6 +185,9 @@ contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
         ));
 
         startTime = block.timestamp;
+
+        name = params.name;
+        description = params.description;
 
         linkHash = params.linkHash;
 

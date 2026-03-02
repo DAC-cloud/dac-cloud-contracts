@@ -35,11 +35,12 @@ contract DACCellGovernanceLibTest is Test {
         DealParams memory params = DealParams({
             dealKind: MOCK_DEAL_KIND,
             name: "Test Deal",
+            description: "Test Deal description",
+            linkHash: "0x00112233",
             moduleFactory: mockModuleFactory,
             governanceFactory: makeAddr("governanceFactory"),
             dealTarget: makeAddr("target"),
             proposer: msg.sender,
-            linkHash: "0x00112233",
             vetoEnabled: false,
             fundingToken: makeAddr("usdc"),
             fundingAmount: 1000e6,

@@ -169,11 +169,12 @@ contract DACCellDealTest is Test {
         DealParams memory params = DealParams({
             dealKind: CoreDealType.PERMIT2_TREASURY,
             name: "Test Treasury Deal",
+            description: "Test Treasury Deal description",
+            linkHash: "0x00112233",
             moduleFactory: address(coreModule),
             governanceFactory: address(coreDealGovernanceFactory),
             dealTarget: address(0),
             proposer: agent,
-            linkHash: "0x00112233",
             vetoEnabled: false,
             fundingToken: address(usdc),
             fundingAmount: 10_000,
@@ -188,6 +189,8 @@ contract DACCellDealTest is Test {
         (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);
 
         vm.stopPrank();
+
+        assertEq(IDealCell(IDealManager(dac.getDealManager()).deals(dealId)).name(), "Test Treasury Deal", "deal name by id wiring");
 
         // IVoting(dac.getProposalVoting(propId)).vote(true);
 
@@ -234,11 +237,12 @@ contract DACCellDealTest is Test {
         DealParams memory params = DealParams({
             dealKind: CoreDealType.DAC_DEAL,
             name: "Test DAC Deal",
+            description: "Test DAC Deal description",
+            linkHash: "0x00112233",
             moduleFactory: address(coreModule),
             governanceFactory: address(coreDealGovernanceFactory),
             dealTarget: address(0),
             proposer: agent,
-            linkHash: "0x00112233",
             vetoEnabled: false,
             fundingToken: address(usdc),
             fundingAmount: 10_000,
@@ -299,11 +303,12 @@ contract DACCellDealTest is Test {
         DealParams memory params = DealParams({
             dealKind: CoreDealType.DAC_DEAL,
             name: "Test DAC Deal",
+            description: "Test DAC Deal description #2",
+            linkHash: "0x00112233",
             moduleFactory: address(coreModule),
             governanceFactory: address(coreDealGovernanceFactory),
             dealTarget: address(0),
             proposer: agent,
-            linkHash: "0x00112233",
             vetoEnabled: false,
             fundingToken: address(usdc),
             fundingAmount: 10_000,
