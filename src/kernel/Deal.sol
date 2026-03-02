@@ -102,7 +102,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         address _proposer
     ) internal onlyInitializing {
         nextId = 1;
-        
+
         factory = msg.sender;
         id = _id;
         governanceFactory = _governanceFactory;
@@ -285,32 +285,16 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
             emit VotingConfigUpdate(dealCell, proposalId, _votingConfig);
         }
 
-        else if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
-            IDealCellAdapter(dealCell).requestTranche(DealManagementProposal(prop));
-        }
-
-        else if (typ == AbstractDealManagementType.ADD_STAKE) {
-            IDealCellAdapter(dealCell).addStake(
-                DealManagementProposal(prop).target(), 
-                uint256(DealManagementProposal(prop).i())
-            );
-        }
-
-        else if (typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS) {
-            IDealCellAdapter(dealCell).toggleEarlyReturns(
-                abi.decode(DealManagementProposal(prop).data(), (bool))
-            );
-        }
-
-        else if (typ == AbstractDealManagementType.TOGGLE_WHITELIST) {
-            IDealCellAdapter(dealCell).toggleWhitelist(
-                abi.decode(DealManagementProposal(prop).data(), (bool))
-            );
-        }
-
         else {
-            // Forward to module for specific types
-            _executeModuleManagementProposal(DealManagementProposal(prop));
+            if (
+                !IDealCellAdapter(dealCell).executeCellAgentProposal(
+                    DealManagementProposal(prop)
+                )
+            ) {
+                // Forward to module if not executed by cell
+
+                _executeModuleManagementProposal(DealManagementProposal(prop));
+            }            
         }
         
         emit DealManagementProposalExecuted(dealCell, proposalId, typ);

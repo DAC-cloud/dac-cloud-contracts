@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
+import {ProposalParams, VotingConfig, Tranche} from "../../interfaces/Structs.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../../interfaces/IDeal.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
@@ -13,45 +13,25 @@ import {DealManagementProposal} from "../governance/DealManagementProposal.sol";
 import {AgentToken} from "../tokens/AgentToken.sol";
 import {StakedAgent} from "../tokens/StakedAgent.sol";
 import {AbstractDealManagementType} from "../governance/AbstractDealManagementProposals.sol";
-import {Tranche} from "../interfaces/Structs.sol";
+import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
-interface IDealGovernanceAdapter {
-    function closeDeal()
-        external;
+interface IDealCellGovernanceAdapter {
+    function closeDeal() external;
+    function invite(address invitee, bool grantInviteRight) external;
 }
 
 library DealCellGovernanceLib {
 
-    error NoStake();
-
-    error DeadlineNotPassed();
-    error NotStakedAgent();
-    error NotEnoughBalance();
-
-    error DealIsNotApproved();
-    error DealAlreadyApproved();
-
-    error TrancheNotExists();
-    error TrancheAlreadySettled();
-
-    error ProposalNotSupported();
-
-    error InsufficientRewards();
-    error NoClaimableRewards();
-
-    error TransferFailed();
-
-    event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-    event AgentTokensReleased(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);
-
-    event CapitalReturned(address indexed dac, uint256 indexed id, address token, uint256 amount);
-
-    event RewardsAllocated(address indexed dac, uint256 indexed id, uint256 reward);
-    event StakesSlashed(address indexed dac, uint256 indexed id, uint256 slashAmount);
-    
-    event RewardsClaimed(address indexed dac, address indexed agent, uint256 amount);
-
-    event DealManagementProposalCreated(address indexed cell, uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
+    function whitelistHolders(
+        address[] storage holders
+    ) public {
+        // Inviting all existing manager with invite capability
+        for (uint256 i = 0; i < holders.length; i++) {
+            address agent = holders[i];
+            IDealCellGovernanceAdapter(address(this)).invite(agent, true);
+        }
+    }
 
     function stake(
         address dacCell,
@@ -70,7 +50,7 @@ library DealCellGovernanceLib {
         
         token.mint(staker, amount);
         
-        emit AgentTokensStaked(dacCell, id, staker, amount);
+        emit DACEventsLib.AgentTokensStaked(dacCell, id, staker, amount);
 
         deal.afterEveryStake(staker, amount);
     }
@@ -83,15 +63,15 @@ library DealCellGovernanceLib {
         address agentTokenAddr,
         StakedAgent token
     ) public {
-        require(token.balanceOf(agent) > 0, NoStake());
+        require(token.balanceOf(agent) > 0, DACErrorsLib.NoStake());
 
         uint256 agentStake = token.balanceOf(agent);
 
         token.burn(agent, agentStake);
 
-        require(AgentToken(agentTokenAddr).transfer(agent, agentStake), TransferFailed());
+        require(AgentToken(agentTokenAddr).transfer(agent, agentStake), DACErrorsLib.TransferFailed());
 
-        emit AgentTokensReleased(dacCell, id, agent, agentStake);
+        emit DACEventsLib.AgentTokensReleased(dacCell, id, agent, agentStake);
 
         deal.onUnstake(agent, agentStake);
     }
@@ -102,28 +82,44 @@ library DealCellGovernanceLib {
         VotingConfig memory votingConfig
     ) public view returns (bool isBase) {
         if (msg.sender != address(this)) {
-            if (msg.sender != dealCell) {
-                require(
-                    !(
-                        params.typ == AbstractDealManagementType.PERMIT_UNSTAKE
-                    ),
-                    ProposalNotSupported()
-                );
-
-                require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NotStakedAgent());
-
-                require(
-                    IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig.qualification,
-                    NotEnoughBalance()
-                );
-            }
-            else {
+            if (msg.sender == dealCell) {
                 // Deal cell is only allowed to propose PERMIT_UNSTAKE
                 require(
                     (
                         params.typ == AbstractDealManagementType.PERMIT_UNSTAKE
                     ),
-                    ProposalNotSupported()
+                    DACErrorsLib.ProposalNotSupported()
+                );
+            }
+
+            else if(msg.sender == IDealCell(dealCell).manager()) {
+                // Deal manager is only allowed to propose PERMIT_EVALUATOR_ADD
+                require(
+                    (
+                        params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
+                    ),
+                    DACErrorsLib.ProposalNotSupported()
+                );
+            }
+
+            else {
+                // Checking that agents do not propose special proposals
+                require(
+                    !(
+                        params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
+                        params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
+                    ),
+                    DACErrorsLib.ProposalNotSupported()
+                );
+
+                require(
+                    IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, 
+                    DACErrorsLib.NotStakedAgent()
+                );
+
+                require(
+                    IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig.qualification,
+                    DACErrorsLib.NotEnoughBalance()
                 );
             }
         }
@@ -135,7 +131,7 @@ library DealCellGovernanceLib {
                     params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
                     params.typ == AbstractDealManagementType.TOGGLE_WHITELIST
                 ),
-                DealIsNotApproved()
+                DACErrorsLib.DealIsNotApproved()
             );
         }
 
@@ -146,7 +142,8 @@ library DealCellGovernanceLib {
             params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
             params.typ == AbstractDealManagementType.ADD_STAKE ||
-            params.typ == AbstractDealManagementType.PERMIT_UNSTAKE
+            params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
+            params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
         );
     }
 
@@ -171,7 +168,9 @@ library DealCellGovernanceLib {
 
         proposals[id] = prop;
 
-        emit DealManagementProposalCreated(dealCell, id, params.typ, params.target, params.i, params.data);
+        emit DACEventsLib.DealManagementProposalCreated(
+            dealCell, id, params.typ, params.target, params.i, params.data
+        );
     }
 
     function approveFunding(
@@ -183,16 +182,24 @@ library DealCellGovernanceLib {
         mapping(address => uint256) storage investedCapital
     ) public {
         if (trancheId == 0) {
-            require(!approved, DealAlreadyApproved());
-            require(block.timestamp > _approveDeadline, DeadlineNotPassed());
+            require(!approved, DACErrorsLib.DealAlreadyApproved());
+            require(block.timestamp > _approveDeadline, DACErrorsLib.DeadlineNotPassed());
         }
         else {
-            require(_fundingTranches[trancheId].amount > 0, TrancheNotExists());
-            require(!_fundingTranches[trancheId].settled, TrancheAlreadySettled());
+            require(_fundingTranches[trancheId].amount > 0, DACErrorsLib.TrancheNotExists());
+            require(!_fundingTranches[trancheId].settled, DACErrorsLib.TrancheAlreadySettled());
         }
         
         if (_fundingTranches[trancheId].amount > 0) {
-            require(IERC20(_fundingTranches[trancheId].token).transfer(address(deal), _fundingTranches[trancheId].amount), TransferFailed());
+            require(
+                IERC20(
+                    _fundingTranches[trancheId].token
+                ).transfer(
+                    address(deal), 
+                    _fundingTranches[trancheId].amount
+                ), 
+                DACErrorsLib.TransferFailed()
+            );
 
             investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
         }
@@ -227,17 +234,20 @@ library DealCellGovernanceLib {
     function claimMainToken(
         address dacCell,
         IDeal deal,
+        uint256 evaluatorId,
         mapping(address => uint256) storage claimableRewards
     ) public {
         uint256 amount = claimableRewards[msg.sender];
-        require(amount > 0, NoClaimableRewards());
+        require(amount > 0, DACErrorsLib.NoClaimableRewards());
         
         deal.beforeClaimMainToken(msg.sender, amount);
 
         claimableRewards[msg.sender] = 0;
-        IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).mintMain(address(this), msg.sender, amount);
+        IDealManagerAdapter(
+            IDACCellAdapter(dacCell).getDealManager()
+        ).mintMain(address(this), evaluatorId, msg.sender, amount);
         
-        emit RewardsClaimed(dacCell, msg.sender, amount);
+        emit DACEventsLib.RewardsClaimed(dacCell, msg.sender, amount);
 
         deal.afterClaimMainToken(msg.sender, amount);
     }
@@ -269,7 +279,23 @@ library DealCellGovernanceLib {
         IDACCellAdapter(dacCell).depositTreasury(_token, amount);
         returnedCapital[_token] += amount;
         
-        emit CapitalReturned(dacCell, id, _token, amount);
+        emit DACEventsLib.CapitalReturned(dacCell, id, _token, amount);
+    }
+
+    function transferCapitalFromDeal(
+        uint256 id,
+        address deal,
+        address _token,
+        uint256 amount,
+        address dacCell,
+        mapping(address => uint256) storage returnedCapital
+    ) public {
+        require(
+            IERC20(_token).transferFrom(deal, address(this), amount), 
+            DACErrorsLib.TransferFailed()
+        );
+
+        transferCapital(id, _token, amount, dacCell, returnedCapital);
     }
 
     function withdrawCapital(
@@ -283,12 +309,12 @@ library DealCellGovernanceLib {
         mapping(address => uint256) storage returnedCapital
     ) public {
         if (msg.sender == dacCell) {
-            require(block.timestamp > _dealDeadline, DeadlineNotPassed());
+            require(block.timestamp > _dealDeadline, DACErrorsLib.DeadlineNotPassed());
         }
         else {
-            require(token.balanceOf(msg.sender) != 0, NotStakedAgent());
+            require(token.balanceOf(msg.sender) != 0, DACErrorsLib.NotStakedAgent());
             if (!earlyReturns) {
-                require(block.timestamp > _dealDeadline, DeadlineNotPassed());
+                require(block.timestamp > _dealDeadline, DACErrorsLib.DeadlineNotPassed());
             }
         }
         
@@ -302,7 +328,7 @@ library DealCellGovernanceLib {
             if (dealAllowance > 0) {
                 require(
                     IERC20(_fundingToken).transferFrom(address(deal), address(this), dealAllowance),
-                    TransferFailed()
+                    DACErrorsLib.TransferFailed()
                 );
             }
 
@@ -326,12 +352,14 @@ library DealCellGovernanceLib {
         address[] storage holders,
         mapping(address => uint256) storage claimableRewards,
         address self
-    ) public {
-        require(rewardsConverted + rewardPercent <= 100, InsufficientRewards());
+    ) public returns (uint256 rewardsConvertedPct, uint256 reward) {
+        rewardsConvertedPct = rewardsConverted;
+        
+        require(rewardsConvertedPct + rewardPercent <= 100, DACErrorsLib.InsufficientRewards());
 
         deal.onMarkAsSuccess(rewardPercent);
 
-        uint256 reward = (_tokenRewardsLimit * rewardPercent) / 100;
+        reward = (_tokenRewardsLimit * rewardPercent) / 100;
 
         uint256 transformAmount = reward; // for event
 
@@ -341,14 +369,14 @@ library DealCellGovernanceLib {
             claimableRewards[h] = holderShare;
         }
 
-        rewardsConverted += rewardPercent;
+        rewardsConvertedPct += rewardPercent;
 
         // if all rewards were paid out, marking the deal as closed so MP tokens can withdraw stakes
-        if (rewardsConverted == 100) {
-            IDealGovernanceAdapter(self).closeDeal();
+        if (rewardsConvertedPct == 100) {
+            IDealCellGovernanceAdapter(self).closeDeal();
         }
 
-        emit RewardsAllocated(dacCell, id, transformAmount);
+        emit DACEventsLib.RewardsAllocated(dacCell, id, transformAmount);
     }
 
     function markAsFailed(
@@ -366,7 +394,7 @@ library DealCellGovernanceLib {
             token.burn(h, holderSlash);
         }
         
-        emit StakesSlashed(dacCell, id, slashAmount);
+        emit DACEventsLib.StakesSlashed(dacCell, id, slashAmount);
 
         deal.onMarkAsFailed(slashPercent);
     }

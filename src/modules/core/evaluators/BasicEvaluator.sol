@@ -50,8 +50,11 @@ contract BasicEvaluator is IEvaluator {
         }
 
         // todo: for DAC deals need to also have an oracle proxy for pricing
-        //  lp equity in the escrow, as this equity calculates into the deal
-        //  and have the only way to be returned natively to DAC balance sheet
+        //  child-DAC equity in the escrow, as these tokens has the price and
+        //  should be calculated into the deal returns, as this is the only
+        //  way to be returned natively to parent-DAC balance sheet after the
+        //  deal is expired (presuming pigs decided to not liquidate all deal
+        //  assets into cash)
 
         // todo: returning not 100%, but as set by reward percentage in the milestone
         //  think about calculations that makes sense economically for real projects

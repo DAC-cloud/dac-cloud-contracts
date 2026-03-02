@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Tranche} from "./Structs.sol";
 import {IDeal} from "./IDeal.sol";
 
 interface IDealCell {
@@ -12,17 +13,17 @@ interface IDealCell {
 
     function stakeToken() external view returns (address);
 
-    function claimMainToken() external;
+    function claimMainToken(uint256 evaluatorId) external;
     function unstake() external;
     
-    function fundingToken(uint256 trancheId) external view returns (address);
-    function fundingAmount(uint256 trancheId) external view returns (uint256);
+    function fundingTranche(uint256 trancheId) external view returns (Tranche memory tranche);
     function fundingTokens() external view returns (address[] memory);
 
     function getStakedAgentTotal() external view returns (uint256);
+    function getMainRewardsLimit() external view returns (uint256);
+    
     function getReturnedCapital(address token) external view returns (uint256);
     function getInvestedCapital(address token) external view returns (uint256);
-    function getMainRewardsLimit() external view returns (uint256);
     
     function allowEarlyReturns() external view returns (bool);
     function allowDACVeto() external view returns (bool);

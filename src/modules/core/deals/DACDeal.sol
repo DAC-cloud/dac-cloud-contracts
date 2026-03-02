@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
+import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall, Tranche} from "../../../interfaces/Structs.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
 import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
@@ -105,15 +105,19 @@ contract DACDeal is Deal {
     function _afterApprove(uint256 trancheId) internal override {
         // Approving spend towards DAC, so child can fulfill capital call
         // We always approve the last tranche amount, as we immediately sending the funds out
-        IERC20(IDealCell(dealCell).fundingToken(trancheId)).approve(managedEntity, IDealCell(dealCell).fundingAmount(trancheId));
+
+        address token = IDealCell(dealCell).fundingTranche(trancheId).token;
+        uint256 amount = IDealCell(dealCell).fundingTranche(trancheId).amount;
+
+        IERC20(token).approve(managedEntity, amount);
 
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
-                treasuryToken: IDealCell(dealCell).fundingToken(trancheId),
+                treasuryToken: token,
                 nonce: _rootCapitalCallId,
                 tokenRecipient: address(this),
                 tokenAmount: _allocation,
-                cashAmount: IDealCell(dealCell).fundingAmount(trancheId)
+                cashAmount: amount
             });
 
             IDACCell(managedEntity).fulfillCapitalCall(call);

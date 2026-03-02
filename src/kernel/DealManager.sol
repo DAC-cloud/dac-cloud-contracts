@@ -16,33 +16,11 @@ import {AgentToken} from "./tokens/AgentToken.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
+import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Initializable {
     
-    // Errors
-    error NotAllowed();
-    error NotAuthorized();
-    error NotInitialized();
-    error AlreadyInitialized();
-
-    error NoVotingPower();
-
-    error VoteNotPassed();
-
-    error ProposalAlreadyExecuted();
-    error InvalidDeal(address deal);
-    error InvalidDealId(uint256 deal);
-    error InvalidDealState(address deal);
-    error InvalidTranche();
-    error InsufficientTreasury();
-    error TransferFailed();
-
-    error InvalidCapitalCall();
-    error AlreadyFulfilled();
-
-    error LegalWrapperNotSet();
-    error LegalWrapperExecutionExpected();
-
     // DACCell has no upgrade or pause capabilities by design.
     
     // Deployer role limited to initialization call only, in fact deployer will be always 
@@ -64,13 +42,11 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     mapping(address => DealState) public dealState;             // dealCell => Deal state
 
     // Main token flow tracking
+    uint256 public mainTokenObligations;
+
     uint256 private unreleasedMainTokens;
     mapping(address => uint256) private lockedMainTokens;
     mapping(address => bool) private controlledAddresses;
-
-    // Events
-    event ModuleAdded(address indexed factory);
-    event ModuleRemoved(address indexed factory);
 
     constructor() {
         _disableInitializers();
@@ -139,40 +115,57 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         IDealCellAdapter(deals[id]).legalWrapperMessage(msg.sender, kind, message);
     }
 
-    function mintMain(address deal, address to, uint256 amount) external onlyDealCell nonReentrant {
+    function mintMain(
+        address deal, 
+        uint256 evaluatorId, 
+        address to, 
+        uint256 amount
+    ) external onlyDealCell nonReentrant {
         DACCellGovernanceLib.mintMain(
             deal, 
+            evaluatorId,
             to, 
             amount, 
             mainToken, 
             dealState
         );
+
+        mainTokenObligations -= amount;
     }
 
     function forceReturnCapital(uint256 id) external onlyHolderOrSelf {
         address deal = deals[id];
-        require(deal != address(0), InvalidDealId(id));
+        require(deal != address(0), DACErrorsLib.InvalidDealId(id));
         IDealCellAdapter(deal).withdrawCapital();
     }
 
     function isRecoverable(uint256 id) external view override(IDealManager, IDealManagerAdapter) returns (bool) {
         address deal = deals[id];
-        require(deal != address(0), InvalidDeal(deal));
+        require(deal != address(0), DACErrorsLib.InvalidDeal(deal));
         
         require(
             IDealCell(deal).isClosed(),
-            InvalidDealState(deal)
+            DACErrorsLib.InvalidDealState(deal)
         );
 
         require(
             IDealCell(deal).getStakedAgentTotal() == 0,
-            InvalidDealState(deal)
+            DACErrorsLib.InvalidDealState(deal)
         );
 
         return true;
     }
 
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
+        if (rewardsLimit > 0) {
+            require(
+                (mainToken.totalSupply() + mainTokenObligations) + rewardsLimit <= mainToken.maxSupply(),
+                DACErrorsLib.InsufficientRewards()
+            );
+            
+            mainTokenObligations += rewardsLimit;
+        }
+        
         DACCellGovernanceLib.executeTrancheApprove(
             id,
             trancheId,
@@ -183,7 +176,12 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function executeProp(address msgSender, DACManagementProposal prop) external onlyDACCell {
-        if (prop.typ() == DACManagementProposalType.RECOVER_DEAL) {
+        if (prop.typ() == DACManagementProposalType.RECOVER_DEAL) { // ADD EVALUATOR
+            //todo: add governance proposal to the deal
+            //todo: whitelist evaluator
+        }
+        
+        else if (prop.typ() == DACManagementProposalType.RECOVER_DEAL) {
             (uint256 dealId) = abi.decode(prop.data(), (uint256));
             address deal = deals[dealId];
 
@@ -207,43 +205,62 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         else if (prop.typ() == DACManagementProposalType.ADD_MODULE) {
             moduleFactories[prop.target()] = true;
 
-            emit ModuleAdded(prop.target());
+            emit DACEventsLib.ModuleAdded(dacCell, prop.target());
         } 
 
         else if (prop.typ() == DACManagementProposalType.REMOVE_MODULE) {
             if (IDACCell(dacCell).getLegalWrapper().wrapperAddr != address(0)) {
-                require(msgSender == IDACCell(dacCell).getLegalWrapper().wrapperAddr, LegalWrapperExecutionExpected());
+                require(
+                    msgSender == IDACCell(dacCell).getLegalWrapper().wrapperAddr,
+                    DACErrorsLib.LegalWrapperExecutionExpected()
+                );
             }
 
             address factory = DACManagementProposal(prop).target();
 
-            require(factory != coreModuleFactory, NotAllowed());
+            require(factory != coreModuleFactory, DACErrorsLib.NotAllowed());
 
             moduleFactories[factory] = false;
 
-            emit ModuleRemoved(factory);
+            emit DACEventsLib.ModuleRemoved(dacCell, factory);
         }
     }
 
-    function evaluateDeal(uint256 id) external onlyAgentOrHolder {
-        DACCellGovernanceLib.evaluateDeal(
-            dacCell,
-            id,
-            agentToken,
-            deals,
-            dealState
-        );
+    function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder {
+        if (
+            DACCellGovernanceLib.evaluateDeal(
+                dacCell,
+                id,
+                evaluatorId,
+                agentToken,
+                deals,
+                dealState
+            )
+        ) {
+            // If the deal is closed, rewards are no longer available,
+            //  whatever is left locked need to free, the difference between 
+            //  unlocked and paid still will be accounted as obligations
+            mainTokenObligations -= (dealState[deals[id]].rewardsLimit - dealState[deals[id]].rewardsUnlocked);
+        }
+    }
+
+    function permitEvaluatorAdd(uint256 dealId, address evaluator) external onlyDealCell {
+        require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
+
+        //todo check that evaluator was whitelisted first
+
+        dealState[deals[dealId]].evaluators.push(evaluator);
     }
 
     function registerControlledAddress(address controlled) external onlyDealCell {
-        require(controlled != address(0), NotAllowed());
-        require(controlled != address(mainToken), NotAllowed());
+        require(controlled != address(0), DACErrorsLib.NotAllowed());
+        require(controlled != address(mainToken), DACErrorsLib.NotAllowed());
 
         controlledAddresses[controlled] = true;
     }
 
     function onMainMove(address from, address to, uint256 amount) external {
-        require(msg.sender == address(mainToken), NotAuthorized());
+        require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
 
         if (from == address(0)) {
             if (controlledAddresses[to]) {
@@ -269,10 +286,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function onMainDelegate(address from, address to) external view {
-        require(msg.sender == address(mainToken), NotAuthorized());
+        require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
 
-        require(!controlledAddresses[from], NoVotingPower());
-        require(!controlledAddresses[to], NoVotingPower());
+        require(!controlledAddresses[from], DACErrorsLib.NoVotingPower());
+        require(!controlledAddresses[to], DACErrorsLib.NoVotingPower());
     }
 
     function state(address dealCell) external view returns (DealState memory _state) {
@@ -322,7 +339,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function _onlyAgent() internal view {
-        require(agentToken.balanceOf(msg.sender) > 0, NotAuthorized());
+        require(agentToken.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
     }
 
     function _onlyHolderOrSelf() internal view {
@@ -331,7 +348,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
                 msg.sender == address(this) ||
                 mainToken.balanceOf(msg.sender) > 0
             ), 
-            NotAuthorized()
+            DACErrorsLib.NotAuthorized()
         );
     }
 
@@ -341,23 +358,29 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
                 mainToken.balanceOf(msg.sender) > 0 ||
                 agentToken.balanceOf(msg.sender) > 0
             ), 
-            NotAuthorized()
+            DACErrorsLib.NotAuthorized()
         );
     }
 
     function _onlyDealCell(address dealCell) internal view {
         require(
             IModuleFactory(dealState[dealCell].module).isActive(), 
-            InvalidDeal(dealCell)
+            DACErrorsLib.InvalidDeal(dealCell)
         );
     }
 
     function _onlyLegalWrapper() internal view {
-        require(IDACCell(dacCell).getLegalWrapper().wrapperAddr != address(0), LegalWrapperNotSet());
-        require(IDACCell(dacCell).getLegalWrapper().wrapperAddr == msg.sender, LegalWrapperExecutionExpected());
+        require(
+            IDACCell(dacCell).getLegalWrapper().wrapperAddr != address(0), 
+            DACErrorsLib.LegalWrapperNotSet()
+        );
+        require(
+            IDACCell(dacCell).getLegalWrapper().wrapperAddr == msg.sender, 
+            DACErrorsLib.LegalWrapperExecutionExpected()
+        );
     }
 
     function _onlyDACCell() internal view {
-        require(msg.sender == dacCell, NotAuthorized());
+        require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
     }
 }

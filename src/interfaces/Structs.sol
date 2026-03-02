@@ -62,8 +62,8 @@ struct DealParams {
     uint256 rewardsLimit;
     uint256 approveDeadline;
     uint256 dealDeadline;           // The deadline before the first evaluation
-    bytes4 evaluatorSelector;       // evaluator selector. Deal factory shall confirm that the evaluator supports the deal
     bytes dealConfig;               // future-proof field for deal-specific init data (like DACConfig)
+    bytes4 evaluatorSelector;       // evaluator selector. Deal factory shall confirm that the evaluator supports the deal
     bytes evaluatorConfig;          // config for evaluator (e.g. abi.encode(Milestone[]))
 }
 
@@ -71,4 +71,10 @@ struct EvaluationResult {
     uint8 action;                   // 0=slash, 1=convert, 2=extend, 3=close
     uint256 percent;                // % to slash/convert
     uint256 newDeadline;            // only for extend
+}
+
+struct Tranche {
+    address token;
+    uint256 amount;
+    bool settled;
 }

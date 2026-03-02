@@ -62,12 +62,14 @@ contract TreasuryDeal is Deal {
 
     function _afterApprove(uint256 trancheId) internal override {
         if (trancheId > 0) {
-            require(IDealCell(dealCell).fundingAmount(trancheId) > 0, InvalidTranche());
+            require(IDealCell(dealCell).fundingTranche(trancheId).amount > 0, InvalidTranche());
             
             require(
-                IERC20(IDealCell(dealCell).fundingToken(trancheId)).transfer(
+                IERC20(
+                    IDealCell(dealCell).fundingTranche(trancheId).token
+                ).transfer(
                     managedEntity, 
-                    IDealCell(dealCell).fundingAmount(trancheId)
+                    IDealCell(dealCell).fundingTranche(trancheId).amount
                 ),
                 TransferFailed()
             );

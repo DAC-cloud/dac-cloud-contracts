@@ -12,10 +12,6 @@ interface IDealCellAdapter {
 
     function registerControlledAddress(address controlled) external;
 
-    function requestTranche(
-        DealManagementProposal prop
-    ) external;
-
     function onAgentTokenStaked(address staker, uint256 amount) external;
     
     function transferCapital(address token, uint256 amount) external;
@@ -23,13 +19,11 @@ interface IDealCellAdapter {
     function approveFunding(uint256 trancheId) external;
     function withdrawCapital() external;
     
-    function toggleEarlyReturns(bool earlyReturns) external;
-    function toggleWhitelist(bool whitelistOnly) external;
-    function enableVeto() external;
-
-    function addStake(address staker, uint256 amount) external;
-
-    function markAsSuccess(uint256 rewardPercent) external;
+    function executeCellAgentProposal(
+        DealManagementProposal prop
+    ) external returns (bool);
+    
+    function markAsSuccess(uint256 rewardPercent) external returns (uint256 currentReward);
     function markAsFailed(uint256 slashPercent) external;
     function extendDeadline(uint256 newDeadline) external;
     function closeDeal() external;

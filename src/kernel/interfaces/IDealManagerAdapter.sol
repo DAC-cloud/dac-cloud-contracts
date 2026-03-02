@@ -14,9 +14,13 @@ interface IDealManagerAdapter {
 
     function legalWrapperMessage(uint256 id, bytes4 kind, bytes calldata message) external;
     function isRecoverable(uint256 id) external view returns (bool);
+    
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external;
-    function executeProp(address msgSender, DACManagementProposal prop) external;
-    function mintMain(address deal, address to, uint256 amount) external;
-
     function createTrancheProposal(uint256 dealId, uint256 trancheId) external;
+    
+    function executeProp(address msgSender, DACManagementProposal prop) external;
+    
+    function mintMain(address deal, uint256 evaluatorId, address to, uint256 amount) external;
+
+    function permitEvaluatorAdd(uint256 dealId, address evaluator) external;
 }

@@ -18,6 +18,7 @@ import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
+import {DACCellCapitalLib} from "./libraries/DACCellCapitalLib.sol";
 
 contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     
@@ -173,7 +174,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         emit CapitalCallCreated(
             0, 
             recipient, 
-            DACCellGovernanceLib.createCapitalCall(
+            DACCellCapitalLib.createCapitalCall(
                 0,
                 treasuryToken,
                 recipient,
@@ -186,19 +187,19 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function depositTreasury(address token, uint256 amount) external nonReentrant {
-        return DACCellGovernanceLib.depositTreasury(
+        return DACCellCapitalLib.depositTreasury(
             token, amount, dealManager, treasuryBalances
         );
     }
 
     function recoverTreasury(address token) external nonReentrant onlyHolderOrManager {
-        return DACCellGovernanceLib.recoverTreasury(
+        return DACCellCapitalLib.recoverTreasury(
             token, treasuryBalances
         );
     }
 
     function fulfillCapitalCall(CapitalCall calldata call) external nonReentrant returns (bool) {
-        return DACCellGovernanceLib.fulfillCapitalCall(
+        return DACCellCapitalLib.fulfillCapitalCall(
             call, mainToken, capitalCalls, treasuryBalances
         );
     }
@@ -289,7 +290,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         }
 
         else if (typ == DACManagementProposalType.CAPITAL_CALL) {
-            DACCellGovernanceLib.executeCapitalCall(id, prop, capitalCalls);
+            DACCellCapitalLib.executeCapitalCall(id, prop, capitalCalls);
         }
 
         else if (typ == DACManagementProposalType.TOGGLE_DIVIDENDS) {
@@ -361,7 +362,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         uint256 amount,
         bytes32[] calldata proof
     ) external {
-        DACCellGovernanceLib.claimDividend(
+        DACCellCapitalLib.claimDividend(
             proposalId,
             index,
             receiver,

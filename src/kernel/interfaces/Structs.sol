@@ -8,17 +8,15 @@ struct DealState {
     uint256 id;
     address deal;
     IModuleFactory module;
+    bool active;
     uint256 rewardsLimit;
-    address evaluator;
+    uint256 rewardsUnlocked;
+    uint256 rewardsPaid;
+    address[] evaluators;
+    bytes initParams;
 }
 
 struct CapitalCallState {
     CapitalCall call;
     bool fulfilled;
-}
-
-struct Tranche {
-    address token;
-    uint256 amount;
-    bool settled;
 }

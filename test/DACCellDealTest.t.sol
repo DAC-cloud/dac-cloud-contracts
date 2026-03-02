@@ -161,9 +161,11 @@ contract DACCellDealTest is Test {
             milestoneType: 0,
             token: address(usdc),
             timestamp: block.timestamp + 1 days,
+            duration: 0,
             expectedReturnPercent: 100,
             rewardPercentage: 100,
-            penalty: 0
+            penalty: 0,
+            penaltyProRata: false
         });
 
         DealParams memory params = DealParams({
@@ -208,9 +210,11 @@ contract DACCellDealTest is Test {
             milestoneType: 0,
             token: address(usdc),
             timestamp: block.timestamp + 1 days,
+            duration: 0,
             expectedReturnPercent: 100,
             rewardPercentage: 100,
-            penalty: 0
+            penalty: 0,
+            penaltyProRata: false
         });
 
         DACConfig memory childDACConfig = DACConfig({
@@ -274,9 +278,11 @@ contract DACCellDealTest is Test {
             milestoneType: 0,
             token: address(usdc),
             timestamp: block.timestamp + 1 days,
+            duration: 0,
             expectedReturnPercent: 100,
             rewardPercentage: 100,
-            penalty: 0
+            penalty: 0,
+            penaltyProRata: false
         });
 
         DACConfig memory childDACConfig = DACConfig({

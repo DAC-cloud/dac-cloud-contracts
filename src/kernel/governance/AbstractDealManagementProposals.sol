@@ -14,6 +14,8 @@ interface IAbstractDealManagementProposals {
     function toggleWhitelist() external pure returns (bytes4);
 
     function toggleEarlyReturns() external pure returns (bytes4);
+
+    function permitEvaluatorAdd() external pure returns (bytes4);
 }
 
 library AbstractDealManagementType {
@@ -29,4 +31,6 @@ library AbstractDealManagementType {
     bytes4 public constant ENABLE_VETO_RIGHT    = IAbstractDealManagementProposals.enableVetoRight.selector;    // High quorum
 
     bytes4 public constant TOGGLE_EARLY_RETURNS = IAbstractDealManagementProposals.toggleEarlyReturns.selector; // High quorum
+
+    bytes4 public constant PERMIT_EVALUATOR_ADD = IAbstractDealManagementProposals.permitEvaluatorAdd.selector; // High quorum
 }

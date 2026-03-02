@@ -5,50 +5,21 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.sol";
+import {DealParams, VotingConfig, ProposalParams, Tranche} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
-import {Tranche} from "./interfaces/Structs.sol";
 import {StakedAgent} from "./tokens/StakedAgent.sol";
 import {StakedAgentFactory} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
+import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 contract DealCell is IDealCell, ReentrancyGuard, Initializable {
-
-    error NotAuthorized();
-    error AlreadyInitialized();
-
-    error DeadlineNotPassed();
-    error DealAlreadyApproved();
-    error NotWhitelistedAgent();
-
-    error NotWhitelistDeal();
-    error DealIsNotApproved();
-    error DealIsClosed();
-    error DealIsNotClosed();
-    error DealInLiquidation();
-
-    error InvalidTranche();
-
-    error NoStake();
-    error NotAllowed();
-    
-    error NotEnoughBalance();
-
-    error TransferFailed();
-    
-    error ProposalNotSupported();
-    error InvalidProposal();
-    error AlreadyExecuted();
-
-    error MessageNotAccepted();
-
-    error VoteNotPassed();
 
     address private factory;
 
@@ -120,24 +91,6 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
     // Governance
     VotingConfig private _votingConfig;
-    
-    // Global events, indexed by DAC and deal id
-    event DealInitialized(address indexed dac, uint256 indexed id, DealParams params);
-    event DealActivated(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
-    event TrancheRequested(address indexed dac, uint256 indexed id, uint256 tranche, address token, uint256 amount);
-    
-    event CapitalReturned(address indexed dac, uint256 indexed id, address token, uint256 amount);
-    event DeadlineExtended(address indexed dac, uint256 indexed id, uint256 newDeadline);
-    event DealClosed(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
-    event DealRecovered(address indexed dac, uint256 indexed id, address liquidator);
-    
-    // Deal specific events, indexed by Deal address, proposal id, or agent
-    event MessageReceived(bytes4 messageKind, bytes message);
-    event LegalWrapperMessageReceived(address indexed wrapper, bytes4 messageKind, bytes message);
-    event Invited(address indexed invitee, bool canInvite);
-    
-    event EarlyReturnsToggled(uint256 indexed id, bool enabled);
-    event VetoRightEnabled(uint256 indexed id);
 
     constructor() {
         _disableInitializers();
@@ -174,8 +127,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
     ) external {
-        require(msg.sender == factory, NotAuthorized());
-        require(startTime == 0, AlreadyInitialized());
+        require(msg.sender == factory, DACErrorsLib.NotAuthorized());
+        require(startTime == 0, DACErrorsLib.AlreadyInitialized());
 
         deal = IDeal(_deal);
 
@@ -215,7 +168,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         isWhitelisted[proposer] = true;
         canInviteOthers[proposer] = true;
 
-        emit Invited(proposer, true);
+        emit DACEventsLib.Invited(proposer, true);
 
         deal.beforeInitialize(params, defaultVotingConfig);
     }
@@ -224,7 +177,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
     ) external onlyDealManager {
-        emit DealInitialized(dacCell, id, params);
+        emit DACEventsLib.DealInitialized(dacCell, id, params);
 
         deal.afterInitialize(params, defaultVotingConfig);
     }
@@ -246,13 +199,13 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function onAgentTokenStaked(address staker, uint256 amount) external {
-        require(msg.sender == agentTokenAddr || msg.sender == dacCell, NotAuthorized());
+        require(msg.sender == agentTokenAddr || msg.sender == dacCell, DACErrorsLib.NotAuthorized());
 
         // if the deal is approved no more direct stakes allowed
-        require(!approved, DealAlreadyApproved());
+        require(!approved, DACErrorsLib.DealAlreadyApproved());
 
         if (isWhitelistOnly) {
-            require(isWhitelisted[staker], NotWhitelistedAgent());
+            require(isWhitelisted[staker], DACErrorsLib.NotWhitelistedAgent());
         }
 
         stake(staker, amount);
@@ -275,24 +228,24 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         if (!approved) {
             approved = true;
         
-            emit DealActivated(dacCell, id, token.totalSupply());
+            emit DACEventsLib.DealActivated(dacCell, id, token.totalSupply());
         }
 
         deal.afterApproveFunding(trancheId);
     }
 
     function invite(address invitee, bool grantInviteRight) external nonReentrant {
-        require(isWhitelistOnly, NotWhitelistDeal());
+        require(isWhitelistOnly, DACErrorsLib.NotWhitelistDeal());
 
         if (msg.sender != address(this)) {
-            require(isWhitelisted[msg.sender] && canInviteOthers[msg.sender], NotAuthorized());
+            require(isWhitelisted[msg.sender] && canInviteOthers[msg.sender], DACErrorsLib.NotAuthorized());
         }
         
         if(!isWhitelisted[invitee]) {
             isWhitelisted[invitee] = true;
             canInviteOthers[invitee] = grantInviteRight;
             
-            emit Invited(invitee, grantInviteRight);
+            emit DACEventsLib.Invited(invitee, grantInviteRight);
 
             deal.onInvite(invitee, grantInviteRight);
         }   
@@ -303,12 +256,12 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         if (!closed) {
             if (!approved) {
                 // if deadline passed, allowing to unstake
-                require(block.timestamp > _approveDeadline, DeadlineNotPassed());
+                require(block.timestamp > _approveDeadline, DACErrorsLib.DeadlineNotPassed());
             }
             else {
-                require(token.balanceOf(msg.sender) > 0, NoStake());
+                require(token.balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
 
-                require(token.totalSupply() > token.balanceOf(msg.sender), NotAllowed());
+                require(token.totalSupply() > token.balanceOf(msg.sender), DACErrorsLib.NotAllowed());
 
                 // Deal is approved, creating a proposal so agents can agree on allowing
                 // agent to leave the deal
@@ -325,7 +278,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         }
         else {
             // if the recovery is on, no more unstakes
-            require(!recovery, DealInLiquidation());
+            require(!recovery, DACErrorsLib.DealInLiquidation());
         }
         
         DealCellGovernanceLib.unstake(
@@ -338,24 +291,10 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         );
     }
 
-    function requestTranche(
-        DealManagementProposal prop
-    ) external onlyDeal {
-        DealCellGovernanceLib.requestTranche(
-            id,
-            dacCell,
-            prop,
-            _fundingTranches,
-            _fundingTokens,
-            _requestedFunding
-        );
-    }
-
     function transferCapital(address _token, uint256 amount) external onlyDeal {
-        require(IERC20(_token).transferFrom(address(deal), address(this), amount), TransferFailed());
-
-        DealCellGovernanceLib.transferCapital(
+        DealCellGovernanceLib.transferCapitalFromDeal(
             id,
+            address(deal),
             _token,
             amount,
             dacCell,
@@ -376,10 +315,10 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         );
     }
 
-    function markAsSuccess(uint256 rewardPercent) external onlyDealManager {
-        require(!closed, DealIsClosed());
+    function markAsSuccess(uint256 rewardPercent) external onlyDealManager returns (uint256 currentReward) {
+        require(!closed, DACErrorsLib.DealIsClosed());
         
-        DealCellGovernanceLib.markAsSuccess(
+        (rewardsConverted, currentReward) = DealCellGovernanceLib.markAsSuccess(
             rewardPercent,
             id,
             dacCell,
@@ -394,7 +333,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function markAsFailed(uint256 slashPercent) external onlyDealManager {
-        require(!closed, DealIsClosed());
+        require(!closed, DACErrorsLib.DealIsClosed());
 
         DealCellGovernanceLib.markAsFailed(
             slashPercent,
@@ -407,28 +346,28 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function extendDeadline(uint256 newDeadline) external onlyDealManager {
-        require(!closed, DealIsClosed());
+        require(!closed, DACErrorsLib.DealIsClosed());
         
         deal.onExtendDeadline(_dealDeadline, newDeadline);
 
         _dealDeadline = newDeadline;
         
-        emit DeadlineExtended(dacCell, id, newDeadline);
+        emit DACEventsLib.DeadlineExtended(dacCell, id, newDeadline);
     }
 
     function closeDeal() external {
-        require(msg.sender == address(this) || msg.sender == dacCell, NotAuthorized());
-        require(!closed, DealIsClosed());
+        require(msg.sender == address(this) || msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+        require(!closed, DACErrorsLib.DealIsClosed());
         
         deal.beforeClose();
 
         closed = true;
         
-        emit DealClosed(dacCell, id, token.totalSupply());
+        emit DACEventsLib.DealClosed(dacCell, id, token.totalSupply());
     }
 
     function recoverDeal(address liquidator, uint256 liquidatorStake) external onlyDealManager {
-        require(closed, DealIsNotClosed());
+        require(closed, DACErrorsLib.DealIsNotClosed());
         
         deal.beforeRecovery(liquidator, liquidatorStake);
 
@@ -436,65 +375,44 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         stake(liquidator, liquidatorStake);
         
-        emit DealRecovered(dacCell, id, liquidator);
+        emit DACEventsLib.DealRecovered(dacCell, id, liquidator);
 
         deal.afterRecovery(liquidator, liquidatorStake);
     }
 
-    function claimMainToken() external nonReentrant {
+    function claimMainToken(uint256 evaluatorId) external nonReentrant {
         DealCellGovernanceLib.claimMainToken(
             dacCell,
             deal,
+            evaluatorId,
             claimableRewards
         );
     }
 
-    function toggleWhitelist(bool whitelistOnly) external onlyDeal {
+    function toggleWhitelist(bool whitelistOnly) internal {
         if (isWhitelistOnly != whitelistOnly) {
             isWhitelistOnly = whitelistOnly;
             
             if (isWhitelistOnly) {
-                // Inviting all existing manager with invite capability
-                for (uint256 i = 0; i < holders.length; i++) {
-                    address agent = holders[i];
-                    this.invite(agent, true);
-                }
+                DealCellGovernanceLib.whitelistHolders(holders);
             }
         }
     }
 
-    function toggleEarlyReturns(uint256 propId, bool _ealryReturns) external onlyDeal {
-        earlyReturns = _ealryReturns;
-
-        emit EarlyReturnsToggled(propId, earlyReturns);
-    }
-
-    function enableVeto() external onlyDeal {
+    function enableVeto() internal {
         if (!vetoEnabled) {
             vetoEnabled = true;
 
-            emit VetoRightEnabled(id);
+            emit DACEventsLib.VetoRightEnabled(id);
         }
     }
-
-    function addStake(address staker, uint256 amount) external onlyDeal {
-        // if the deal is not approved adding stakes not allowed
-        require(approved, DealIsNotApproved());
-
-        require(
-            IERC20(agentTokenAddr).transferFrom(staker, address(this), amount),
-            TransferFailed()
-        );
-
-        stake(staker, amount);
-    }
     
-    function unstakeAllowed(address agent) external onlyDeal {
+    function unstakeAllowed(address agent) internal {
         // if the deal is not approved adding stakes not allowed
-        require(!recovery, DealInLiquidation());
+        require(!recovery, DACErrorsLib.DealInLiquidation());
 
-        require(token.balanceOf(agent) > 0, NoStake());
-        require(token.totalSupply() > token.balanceOf(agent), NotAllowed());
+        require(token.balanceOf(agent) > 0, DACErrorsLib.NoStake());
+        require(token.totalSupply() > token.balanceOf(agent), DACErrorsLib.NotAllowed());
 
         DealCellGovernanceLib.unstake(
             dacCell,
@@ -506,19 +424,85 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         );
     }
 
+    function executeCellAgentProposal(DealManagementProposal prop) external onlyDeal returns (bool) {
+        bytes4 typ = DealManagementProposal(prop).typ();
+
+        if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
+            DealCellGovernanceLib.requestTranche(
+                id,
+                dacCell,
+                prop,
+                _fundingTranches,
+                _fundingTokens,
+                _requestedFunding
+            );
+        }
+
+        else if (typ == AbstractDealManagementType.ADD_STAKE) {
+            // if the deal is not approved adding stakes not allowed
+            require(approved, DACErrorsLib.DealIsNotApproved());
+
+            address staker = DealManagementProposal(prop).target();
+            uint256 amount = uint256(DealManagementProposal(prop).i());
+
+            require(
+                IERC20(agentTokenAddr).transferFrom(
+                    staker, address(this), amount
+                ),
+                DACErrorsLib.TransferFailed()
+            );
+
+            stake(staker, amount);
+        }
+
+        else if (typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS) {
+            earlyReturns = abi.decode(DealManagementProposal(prop).data(), (bool));
+
+            emit DACEventsLib.EarlyReturnsToggled(prop.id(), earlyReturns);
+        }
+
+        else if (typ == AbstractDealManagementType.TOGGLE_WHITELIST) {
+            toggleWhitelist(
+                abi.decode(DealManagementProposal(prop).data(), (bool))
+            );
+        }
+
+        else if (typ == AbstractDealManagementType.ENABLE_VETO_RIGHT) {
+            enableVeto();
+        }
+
+        else if (typ == AbstractDealManagementType.PERMIT_UNSTAKE) {
+            unstakeAllowed(DealManagementProposal(prop).target());
+        }
+
+        else if (typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD) {
+            IDealManagerAdapter(manager).permitEvaluatorAdd(id, DealManagementProposal(prop).target());
+        }
+
+        else {
+            // Proposal not recognized by DealCell, will be forwarded to module
+
+            return false;
+        }
+        
+        // Proposal was executed
+
+        return true;
+    }
+
     function messageDeal(bytes4 messageKind, bytes calldata message) external onlyDealManager {
         require(
             deal.onMessageDeal(messageKind, message), 
-            MessageNotAccepted()
+            DACErrorsLib.MessageNotAccepted()
         );
 
-        emit MessageReceived(messageKind, message);
+        emit DACEventsLib.MessageReceived(messageKind, message);
     }
 
     function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external onlyDealManager {
         deal.onLegalWrapperMessage(legalWrapper, messageKind, message);
         
-        emit LegalWrapperMessageReceived(legalWrapper, messageKind, message);
+        emit DACEventsLib.LegalWrapperMessageReceived(legalWrapper, messageKind, message);
     }
 
     function approveDeadline() external view returns (uint256) { return _approveDeadline; }
@@ -539,28 +523,14 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function fundingTokens() public view returns (address[] memory) {
         return _fundingTokens;
     }
-    function fundingSettled(uint256 trancheId) public view returns (bool) {
-        Tranche memory tranche = _fundingTranches[trancheId];
-        if (trancheId != 0) {
-            require(tranche.amount > 0, InvalidTranche());
-        }
-        return tranche.settled; 
-    }
-    function fundingToken(uint256 trancheId) public view returns (address) { 
-        Tranche memory tranche = _fundingTranches[trancheId];
-        if (trancheId != 0) {
-            require(tranche.amount > 0, InvalidTranche());
-        }
-        return tranche.token; 
-    }
-    function fundingAmount(uint256 trancheId) public view returns (uint256) { 
-        Tranche memory tranche = _fundingTranches[trancheId];
-        if (trancheId != 0) {
-            require(tranche.amount > 0, InvalidTranche());
-        }
-        return tranche.amount; 
-    }
 
+    function fundingTranche(uint256 trancheId) public view returns (Tranche memory tranche) {
+        tranche = _fundingTranches[trancheId];
+        if (trancheId != 0) {
+            require(tranche.amount > 0, DACErrorsLib.InvalidTranche());
+        }
+    }
+    
     modifier onlyDealManager() {
         _onlyDealManager();
         _;
@@ -577,14 +547,14 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function _onlyDealManager() internal view {
-        require(msg.sender == manager, NotAuthorized());
+        require(msg.sender == manager, DACErrorsLib.NotAuthorized());
     }
 
     function _onlyDeal() internal view {
-        require(msg.sender == address(deal), NotAuthorized());
+        require(msg.sender == address(deal), DACErrorsLib.NotAuthorized());
     }
 
     function _onlyStakedMPHolder() internal view {
-        require(token.balanceOf(msg.sender) > 0, NoStake());
+        require(token.balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
     }
 }
