@@ -8,16 +8,10 @@ import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Vo
 import {IVoting} from "../../interfaces/IVoting.sol";
 import {IClock} from "../../lib/IClock.sol";
 import {ProposalParams} from "../../interfaces/Structs.sol";
+import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
 abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
-
-    error NotInitialized();
-    error NotResolved();
-    error VetoNotEnabled();
-    error NotAuthorized();
-    error VotingEnded();
-    error AlreadyVoted();
-    error NoVotingPower();
 
     bool private initialized;
 
@@ -45,9 +39,6 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
 
     // Proposal
     ProposalParams public proposal;
-
-    // Events
-    event Voted(address indexed voter, bool support, uint256 weight);
 
     constructor() {
         _disableInitializers();
@@ -90,14 +81,14 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
     }
 
     function vote(bool support) external nonReentrant {
-        require(initialized, NotInitialized());
+        require(initialized, DACErrorsLib.NotInitialized());
 
-        require(clock() <= endTime, VotingEnded());
-        require(!voted[msg.sender], AlreadyVoted());
+        require(clock() <= endTime, DACErrorsLib.VotingEnded());
+        require(!voted[msg.sender], DACErrorsLib.AlreadyVoted());
 
         uint256 weight = ERC20Votes(token).getPastVotes(msg.sender, snapshotTime);
 
-        require(weight > 0, NoVotingPower());
+        require(weight > 0, DACErrorsLib.NoVotingPower());
 
         if (support) {
             yesVotes += weight; 
@@ -108,14 +99,16 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
 
         voted[msg.sender] = true;
         
-        emit Voted(msg.sender, support, weight);
+        emit DACEventsLib.Voted(msg.sender, support, weight);
     }
 
     function castVeto() external {
-        require(vetoRight, VetoNotEnabled());
-        require(msg.sender == vetoRightOwner, NotAuthorized());
+        require(vetoRight, DACErrorsLib.VetoNotEnabled());
+        require(msg.sender == vetoRightOwner, DACErrorsLib.NotAuthorized());
         
         vetoCasted = true;
+
+        emit DACEventsLib.VetoCasted();
     }
 
     function isResolved() external view returns (bool resolved) { 
@@ -138,7 +131,7 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
         if (vetoCasted) return false;
 
         if (vetoRight) {
-            require(clock() > endTime, NotResolved());
+            require(clock() > endTime, DACErrorsLib.NotResolved());
         }
 
         bool yesQuorumReached = yesVotes >= quorum;
@@ -149,7 +142,7 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
             }
 
             if (!(yesVotes >= totalVotingPower - blockingQuorum)) {
-                require(clock() > endTime, NotResolved());
+                require(clock() > endTime, DACErrorsLib.NotResolved());
             }
         }
 

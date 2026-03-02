@@ -2,21 +2,17 @@
 pragma solidity ^0.8.20;
 
 library DACErrorsLib {
+
     error NotAllowed();
     error NotAuthorized();
     error NotInitialized();
     error AlreadyInitialized();
-
-    error NoVotingPower();
 
     error VoteNotPassed();
 
     error ProposalAlreadyExecuted();
     error InvalidDeal(address deal);
     error InvalidDealId(uint256 deal);
-    error InvalidDealState(address deal);
-    error InvalidTranche();
-    error InsufficientTreasury();
     error TransferFailed();
 
     error InvalidCapitalCall();
@@ -25,6 +21,15 @@ library DACErrorsLib {
     error LegalWrapperNotSet();
     error LegalWrapperExecutionExpected();
 
+
+    
+    error NoVotingPower();
+
+    error InvalidDealState(address deal);
+    error InvalidTranche();
+    error InsufficientTreasury();
+    
+    
     error NotFound();
 
     error InsufficientBalance();
@@ -71,4 +76,19 @@ library DACErrorsLib {
     error TrancheAlreadySettled();
 
     error NoClaimableRewards();
+
+    error NotResolved();
+    error VetoNotEnabled();
+    error VotingEnded();
+    error AlreadyVoted();
+
+    error NoFunding();
+    error ConfigMismatchParams();
+    error UnsupportedProposal();
+
+    error EarlyReturnsNotAllowed();
+
+    error CapitalWithdrawNotSupported();
+
+    error InvalidToken();
 }

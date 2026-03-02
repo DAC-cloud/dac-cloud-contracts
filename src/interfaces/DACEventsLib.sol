@@ -1,9 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {EvaluationResult, DealParams} from "./Structs.sol";
+import {EvaluationResult, DealParams, VotingConfig, LegalWrapper} from "./Structs.sol";
 
 library DACEventsLib {
+    // DAC Cell Events
+    event DACCreated(address indexed creator, string name);
+
+    event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
+    event LegalWrapperMessage(address indexed wrapper, bytes4 messageKind, bytes message);
+    event DividendsConfigUpdate(uint256 indexed id, bool enabled);
+
+    // Indexed by proposal id
+    event DACProposalExecuted(uint256 indexed id, bytes4 indexed typ);
+
+    event TokenMinted(uint256 indexed id, uint256 amount);
+    event TokenBurnt(uint256 indexed id, uint256 amount);
+
+    event AgentTokenMinted(uint256 indexed id, address indexed agent, uint256 amount);
+    event AgentTokenRevoked(uint256 indexed id, address indexed agent, uint256 amount);
+    
+    event LegalWrapperSet(uint256 indexed id, LegalWrapper legalWrapper);
+    event OffchainActionApproved(uint256 indexed id, bytes4 action, bytes data);
+    event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
+    
+
     event CapitalCallCreated(uint256 indexed id, address indexed recipient, bytes32 callHash, uint256 amount);
     event CapitalCallFulfilled(address indexed recipient, bytes32 callHash, uint256 amount);
     
@@ -22,6 +43,10 @@ library DACEventsLib {
     event ModuleAdded(address indexed dacCell, address indexed factory);
     event ModuleRemoved(address indexed dacCell, address indexed factory);
 
+    // Proposal event
+    event Voted(address indexed voter, bool support, uint256 weight);
+    event VetoCasted();
+
     // Global events, indexed by DAC and deal id
     event DealInitialized(address indexed dac, uint256 indexed id, DealParams params);
     event DealActivated(address indexed dac, uint256 indexed id, uint256 totalAgentTokens);
@@ -39,6 +64,9 @@ library DACEventsLib {
     
     event EarlyReturnsToggled(uint256 indexed id, bool enabled);
     event VetoRightEnabled(uint256 indexed id);
+
+    event DealManagementProposalExecuted(address indexed cell,uint256 indexed id, bytes4 indexed typ);
+    event VotingConfigUpdate(address indexed cell, uint256 indexed id, VotingConfig config);
 
     // Deal cell events    
     event AgentTokensStaked(address indexed dac, uint256 indexed id, address indexed agent, uint256 amount);

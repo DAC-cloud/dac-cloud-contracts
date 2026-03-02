@@ -12,43 +12,10 @@ import {IDeal} from "../interfaces/IDeal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
+import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
-
-    error NotAuthorized();
-    error NotInitialized();
-    error AlreadyInitialized();
-
-    error DeadlineNotPassed();
-    error DealAlreadyApproved();
-    error NotWhitelistedAgent();
-
-    error NotStakedAgent();
-
-    error NotWhitelistDeal();
-    
-    error ProposalNotSupported();
-
-    error DealIsClosed();
-    error DealIsNotClosed();
-    error DealInLiquidation();
-
-    error InvalidTranche();
-
-    error NoStake();
-    error NoClaimableRewards();
-    error InsufficientRewards();
-
-    error TrancheNotExists();
-    error TrancheAlreadySettled();
-    error TransferFailed();
-    
-    error InvalidProposal();
-    error AlreadyExecuted();
-
-    error MessageNotAccepted();
-
-    error VoteNotPassed();
 
     address private factory;
     
@@ -85,10 +52,6 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
 
     VotingConfig private _votingConfig;
     
-    // Deal specific events, indexed by Deal address, proposal id, or agent
-    event DealManagementProposalExecuted(address indexed cell,uint256 indexed id, bytes4 indexed typ);
-    event VotingConfigUpdate(address indexed cell, uint256 indexed id, VotingConfig config);
-
     constructor() {
         _disableInitializers();
     }
@@ -239,7 +202,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
             // If type is not a basic Deal governance type, requiering derived contracts to validate
             require(
                 _checkStackedAgentProposalSupported(params),
-                ProposalNotSupported()
+                DACErrorsLib.ProposalNotSupported()
             );
         }
 
@@ -268,7 +231,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
 
     function executeStakedAgentProposal(uint256 proposalId) external onlyAfterStakedAgentVote(proposalId) {
         // Here we protecting from the reentrancy only with check-effect-update pattern
-        require(!executed[id], AlreadyExecuted());
+        require(!executed[id], DACErrorsLib.AlreadyExecuted());
         executed[id] = true; // We will not enter this method with the same id twice
 
         _beforeExecuteProposal(proposalId);
@@ -282,7 +245,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
                 (VotingConfig)
             );
 
-            emit VotingConfigUpdate(dealCell, proposalId, _votingConfig);
+            emit DACEventsLib.VotingConfigUpdate(dealCell, proposalId, _votingConfig);
         }
 
         else {
@@ -297,14 +260,14 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
             }            
         }
         
-        emit DealManagementProposalExecuted(dealCell, proposalId, typ);
+        emit DACEventsLib.DealManagementProposalExecuted(dealCell, proposalId, typ);
 
         _afterExecuteProposal(proposalId);
     }
 
     function _executeModuleManagementProposal(DealManagementProposal) internal virtual {
         // Children override this to handle their specific proposals
-        require(false, ProposalNotSupported());
+        require(false, DACErrorsLib.ProposalNotSupported());
     }
 
     function _onMessageDeal(bytes4, bytes calldata) internal virtual returns (bool) { return true; }
@@ -320,7 +283,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
     function getCell() external view returns (address) { return dealCell; }
     
     function getProposal(uint256 proposalId) public view returns (address) {
-        require(proposals[proposalId] != address(0), InvalidProposal());
+        require(proposals[proposalId] != address(0), DACErrorsLib.InvalidProposal());
         return proposals[proposalId];
     }
 
@@ -342,18 +305,18 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
     }
 
     function _onlyDealCell() internal view {
-        require(msg.sender == dealCell, NotAuthorized());
+        require(msg.sender == dealCell, DACErrorsLib.NotAuthorized());
     }
 
     function _onlyStakedAgent() internal view {
-        require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NoStake());
+        require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
     }
     
     function _onlyAfterStakedAgentVote(uint256 proposalId) internal view {
         require(
             IVoting(proposals[proposalId]).isResolved() &&
             IVoting(proposals[proposalId]).outcome(),
-            VoteNotPassed()
+            DACErrorsLib.VoteNotPassed()
         );
     }
 }

@@ -14,6 +14,8 @@ import {AbstractDealManagementType} from "../../../kernel/governance/AbstractDea
 import {Deal} from "../../../kernel/Deal.sol";
 import {DACDealConfig} from "../interfaces/Structs.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
+import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../../../interfaces/DACEventsLib.sol";
 
 contract DACDeal is Deal {
 
@@ -21,12 +23,6 @@ contract DACDeal is Deal {
         address dacMainToken;
         address dacAgentToken;
     }
-
-    error NoFunding();
-    error NotEnoughBalance();
-    error ConfigMismatchParams();
-    error NotAllowed();
-    error UnsupportedProposal();
 
     uint256 private _allocation;
     uint256 private _rootCapitalCallId;
@@ -59,15 +55,15 @@ contract DACDeal is Deal {
         DealParams calldata params,
         VotingConfig calldata
     ) internal override {
-        require(params.fundingAmount > 0, NoFunding());
+        require(params.fundingAmount > 0, DACErrorsLib.NoFunding());
 
         if (params.dealTarget == address(0)) {
             (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
             (address dacFactory, address deployer, bytes32 salt, DACConfig memory config) = abi.decode(dacDeal.config, (address, address, bytes32, DACConfig));
 
-            require(config.founderAllocation == dacDeal.managedEquity, ConfigMismatchParams());
-            require(config.treasuryToken == params.fundingToken, ConfigMismatchParams());
-            require(config.founderCommitment == params.fundingAmount, ConfigMismatchParams());
+            require(config.founderAllocation == dacDeal.managedEquity, DACErrorsLib.ConfigMismatchParams());
+            require(config.treasuryToken == params.fundingToken, DACErrorsLib.ConfigMismatchParams());
+            require(config.founderCommitment == params.fundingAmount, DACErrorsLib.ConfigMismatchParams());
 
             config.founder = address(this);
 
@@ -146,7 +142,7 @@ contract DACDeal is Deal {
 
         address token = IDACCell(managedEntity).getMainToken();
 
-        require(IERC20(token).approve(dealCell, _allocation), TransferFailed());
+        require(IERC20(token).approve(dealCell, _allocation), DACErrorsLib.TransferFailed());
 
         IDealCellAdapter(dealCell).transferCapital(token, _allocation);
     }
@@ -181,7 +177,7 @@ contract DACDeal is Deal {
                 // With early returns, all capital in any of funding tokens is siphoned back
                 // to chickens by any manager will, and automatically counts into returns
                 // so we make reinvest not possible
-                require(!IDealCell(dealCell).allowEarlyReturns(), NotAllowed());
+                require(!IDealCell(dealCell).allowEarlyReturns(), DACErrorsLib.NotAllowed());
             }
             else {
                 address lpTokenAddress = IDACCell(managedEntity).getMainToken();
@@ -190,7 +186,7 @@ contract DACDeal is Deal {
             
             require(
                 IERC20(token).balanceOf(address(this)) >= fundingAmount,
-                NotEnoughBalance()
+                DACErrorsLib.NotEnoughBalance()
             );
 
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(capitalCallHash);
@@ -253,12 +249,12 @@ contract DACDeal is Deal {
             address token = proposal.target();
             (uint256 amount) = abi.decode(proposal.data(), (uint256));
             
-            require(IERC20(token).approve(dealCell, amount), TransferFailed());
+            require(IERC20(token).approve(dealCell, amount), DACErrorsLib.TransferFailed());
             IDealCellAdapter(dealCell).transferCapital(token, amount);
         }
 
         else {
-            require(false, UnsupportedProposal());
+            require(false, DACErrorsLib.UnsupportedProposal());
         }
     }
 

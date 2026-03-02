@@ -19,27 +19,10 @@ import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 import {DACCellCapitalLib} from "./libraries/DACCellCapitalLib.sol";
+import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
-    
-    // Errors
-    error NotAllowed();
-    error NotAuthorized();
-    error NotInitialized();
-    error AlreadyInitialized();
-
-    error VoteNotPassed();
-
-    error ProposalAlreadyExecuted();
-    error InvalidDeal(address deal);
-    error InvalidDealId(uint256 deal);
-    error TransferFailed();
-
-    error InvalidCapitalCall();
-    error AlreadyFulfilled();
-
-    error LegalWrapperNotSet();
-    error LegalWrapperExecutionExpected();
 
     // DACCell has no upgrade or pause capabilities by design.
     
@@ -75,28 +58,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     mapping(uint256 => bytes32) private dividendMerkleRoots;     // proposalId => root
     mapping(bytes32 => bool) private dividendClaimed;            // keccak(root + leaf) => claimed
 
-    // Events
-    event DACCreated(address indexed creator, string name);
-
-    event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
-    event LegalWrapperMessage(address indexed wrapper, bytes4 messageKind, bytes message);
-    event DividendsConfigUpdate(uint256 indexed id, bool enabled);
-
-    // Indexed by proposal id
-    event DACProposalExecuted(uint256 indexed id, bytes4 indexed typ);
-
-    event TokenMinted(uint256 indexed id, uint256 amount);
-    event TokenBurnt(uint256 indexed id, uint256 amount);
-
-    event AgentTokenMinted(uint256 indexed id, address indexed agent, uint256 amount);
-    event AgentTokenRevoked(uint256 indexed id, address indexed agent, uint256 amount);
-
-    event CapitalCallCreated(uint256 indexed id, address indexed recipient, bytes32 callHash, uint256 amount);
-    
-    event LegalWrapperSet(uint256 indexed id, LegalWrapper legalWrapper);
-    event OffchainActionApproved(uint256 indexed id, bytes4 action, bytes data);
-    event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
-    
     constructor() {
         _disableInitializers();
     }
@@ -121,7 +82,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         cellStarted = false;
         rootCapitalCallInitialized = false;
 
-        emit DACCreated(msg.sender, name);
+        emit DACEventsLib.DACCreated(msg.sender, name);
     }
 
     function initializeAfterDeployment(
@@ -132,8 +93,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         bool _dividendsEnabled,
         uint256 _quorum
     ) external {
-        require(msg.sender == deployer, NotAuthorized());
-        require(!cellStarted, AlreadyInitialized());
+        require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
+        require(!cellStarted, DACErrorsLib.AlreadyInitialized());
         cellStarted = true;
 
         mainToken = MainToken(_mainToken);
@@ -166,12 +127,12 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         uint256 amount,
         uint256 cashAmount
     ) external {
-        require(cellStarted, NotInitialized());
-        require(msg.sender == deployer, NotAuthorized());
-        require(!rootCapitalCallInitialized, AlreadyInitialized());
+        require(cellStarted, DACErrorsLib.NotInitialized());
+        require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
+        require(!rootCapitalCallInitialized, DACErrorsLib.AlreadyInitialized());
         rootCapitalCallInitialized = true;
 
-        emit CapitalCallCreated(
+        emit DACEventsLib.CapitalCallCreated(
             0, 
             recipient, 
             DACCellCapitalLib.createCapitalCall(
@@ -209,7 +170,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         onlyLegalWrapper 
         nonReentrant
     {
-        emit LegalWrapperMessage(msg.sender, kind, message);
+        emit DACEventsLib.LegalWrapperMessage(msg.sender, kind, message);
     }
 
     function createManagementProposal(ProposalParams calldata params)
@@ -232,7 +193,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function executeDACProposal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
-        require(!executed[id], ProposalAlreadyExecuted());
+        require(!executed[id], DACErrorsLib.ProposalAlreadyExecuted());
         executed[id] = true;
         
         DACManagementProposal prop = DACManagementProposal(proposals[id]);
@@ -241,13 +202,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         if (typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
             votingConfig = abi.decode(prop.data(), (VotingConfig));
 
-            emit VotingConfigUpdate(id, votingConfig);
+            emit DACEventsLib.VotingConfigUpdate(id, votingConfig);
         }
         
         else if (typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER) {
             legalWrapper = abi.decode(prop.data(), (LegalWrapper));
 
-            emit LegalWrapperSet(id, legalWrapper);
+            emit DACEventsLib.LegalWrapperSet(id, legalWrapper);
         }
 
         else if (typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION) {
@@ -256,7 +217,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
                 (bytes4, bytes)
             );
 
-            emit OffchainActionApproved(
+            emit DACEventsLib.OffchainActionApproved(
                 id, 
                 selector, 
                 data
@@ -267,26 +228,26 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             mainToken.mint(address(this), uint256(prop.i()));
 
             treasuryBalances[address(mainToken)] += uint256(prop.i());
-            emit TokenMinted(id, uint256(prop.i()));
+            emit DACEventsLib.TokenMinted(id, uint256(prop.i()));
         }
 
         else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
             mainToken.burn(uint256(prop.i()));
 
-            emit TokenBurnt(id, uint256(prop.i()));
+            emit DACEventsLib.TokenBurnt(id, uint256(prop.i()));
         }
 
         else if (typ == DACManagementProposalType.MINT_AGENT_TOKENS) {
             agentToken.mint(address(prop.target()), uint256(prop.i()));
 
             treasuryBalances[address(mainToken)] += uint256(prop.i());
-            emit AgentTokenMinted(id, prop.target(), uint256(prop.i()));
+            emit DACEventsLib.AgentTokenMinted(id, prop.target(), uint256(prop.i()));
         }
 
         else if (typ == DACManagementProposalType.REVOKE_AGENT_TOKENS) {
             agentToken.burnFrom(prop.target(), uint256(prop.i()));
 
-            emit AgentTokenRevoked(id, prop.target(), uint256(prop.i()));
+            emit DACEventsLib.AgentTokenRevoked(id, prop.target(), uint256(prop.i()));
         }
 
         else if (typ == DACManagementProposalType.CAPITAL_CALL) {
@@ -294,11 +255,14 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         }
 
         else if (typ == DACManagementProposalType.TOGGLE_DIVIDENDS) {
-            require(msg.sender == legalWrapper.wrapperAddr, LegalWrapperExecutionExpected());
+            require(
+                msg.sender == legalWrapper.wrapperAddr, 
+                DACErrorsLib.LegalWrapperExecutionExpected()
+            );
 
             dividendsEnabled = abi.decode(prop.data(), (bool));
 
-            emit DividendsConfigUpdate(id, dividendsEnabled);
+            emit DACEventsLib.DividendsConfigUpdate(id, dividendsEnabled);
         }
 
         else if (typ == DACManagementProposalType.DIVIDEND_PAYOUT) {
@@ -309,7 +273,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             
             dividendMerkleRoots[id] = merkleRoot;
 
-            emit DividendPayout(id, token, totalPayout, merkleRoot);
+            emit DACEventsLib.DividendPayout(id, token, totalPayout, merkleRoot);
         }
 
         else if (
@@ -344,7 +308,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             IDealManagerAdapter(dealManager).executeProp(msg.sender, prop);
         }
 
-        emit DACProposalExecuted(id, typ);
+        emit DACEventsLib.DACProposalExecuted(id, typ);
     }
 
     function getVotingConfig() external view returns (VotingConfig memory config) {
@@ -375,9 +339,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function getCapitalCall(bytes32 calldataHash) external view returns (CapitalCall memory capitalCall) {
-        require(!capitalCalls[calldataHash].fulfilled, AlreadyFulfilled());
+        require(!capitalCalls[calldataHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
         capitalCall = capitalCalls[calldataHash].call;
-        require(capitalCall.tokenAmount > 0, InvalidCapitalCall());
+        require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {
@@ -422,7 +386,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function _onlyAgent() internal view {
-        require(agentToken.balanceOf(msg.sender) > 0, NotAuthorized());
+        require(agentToken.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
     }
 
     function _onlyHolderOrManager() internal view {
@@ -431,7 +395,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
                 msg.sender == dealManager ||
                 mainToken.balanceOf(msg.sender) > 0
             ), 
-            NotAuthorized()
+            DACErrorsLib.NotAuthorized()
         );
     }
 
@@ -441,20 +405,20 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
                 mainToken.balanceOf(msg.sender) > 0 ||
                 agentToken.balanceOf(msg.sender) > 0
             ), 
-            NotAuthorized()
+            DACErrorsLib.NotAuthorized()
         );
     }
 
     function _onlyLegalWrapper() internal view {
-        require(legalWrapper.wrapperAddr != address(0), LegalWrapperNotSet());
-        require(legalWrapper.wrapperAddr == msg.sender, LegalWrapperExecutionExpected());
+        require(legalWrapper.wrapperAddr != address(0), DACErrorsLib.LegalWrapperNotSet());
+        require(legalWrapper.wrapperAddr == msg.sender, DACErrorsLib.LegalWrapperExecutionExpected());
     }
 
     function _onlyAfterVote(uint256 id, bool requiredOutcome) internal view {
         require(
             IVoting(proposals[id]).isResolved() &&
             IVoting(proposals[id]).outcome() == requiredOutcome,
-            VoteNotPassed()
+            DACErrorsLib.VoteNotPassed()
         );
     }
 }
