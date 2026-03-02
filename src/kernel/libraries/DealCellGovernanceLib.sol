@@ -8,7 +8,7 @@ import {IDeal} from "../../interfaces/IDeal.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
-import {IDealManagementProposalFactory} from "../../interfaces/IDealManagementProposalFactory.sol";
+import {IDealManagementProposalFactory} from "../interfaces/IDealManagementProposalFactory.sol";
 import {DealManagementProposal} from "../governance/DealManagementProposal.sol";
 import {AgentToken} from "../tokens/AgentToken.sol";
 import {StakedAgent} from "../tokens/StakedAgent.sol";

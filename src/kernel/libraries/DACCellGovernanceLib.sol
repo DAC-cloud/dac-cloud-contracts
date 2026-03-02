@@ -4,9 +4,9 @@ pragma solidity ^0.8.20;
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig, DealParams, CapitalCall, EvaluationResult} from "../../interfaces/Structs.sol";
-import {IDealAdmin} from "../../interfaces/IDealAdmin.sol";
+import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
 import {IEvaluator} from "../../interfaces/IEvaluator.sol";
-import {IDACManagementFactory} from "../../interfaces/IDACManagementFactory.sol";
+import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
@@ -229,7 +229,7 @@ library DACCellGovernanceLib {
             dealState[dealCell].rewardsLimit = rewardsLimit;
         }
 
-        IDealAdmin(dealCell).approveFunding(trancheId);
+        IDealCellAdapter(dealCell).approveFunding(trancheId);
         
         emit FundingApproved(dealId, trancheId, rewardsLimit);
     }
@@ -433,7 +433,7 @@ library DACCellGovernanceLib {
         mapping(uint256 => address) storage deals
     ) internal {
         address dealCell = deals[id];
-        IDealAdmin(dealCell).markAsSuccess(transformationPercent);
+        IDealCellAdapter(dealCell).markAsSuccess(transformationPercent);
     }
 
     function _performSlash(
@@ -447,7 +447,7 @@ library DACCellGovernanceLib {
         uint256 slashedTokens = IDealCell(dealCell).getStakedAgentTotal() * slashPercent / 100;
         AgentToken(agentToken).burnFrom(dealCell, slashedTokens);
         
-        IDealAdmin(dealCell).markAsFailed(slashPercent);
+        IDealCellAdapter(dealCell).markAsFailed(slashPercent);
     }
 
     function evaluateDeal(
@@ -474,9 +474,9 @@ library DACCellGovernanceLib {
             } else if (evaluations[i].action == 1) {    // convert
                 _performTransformation(id, evaluations[i].percent, deals);
             } else if (evaluations[i].action == 2) {    // extend
-                IDealAdmin(dealCell).extendDeadline(evaluations[i].newDeadline);
+                IDealCellAdapter(dealCell).extendDeadline(evaluations[i].newDeadline);
             } else if (evaluations[i].action == 3) {    // close
-                IDealAdmin(dealCell).closeDeal();
+                IDealCellAdapter(dealCell).closeDeal();
             }
         }
         

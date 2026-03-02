@@ -20,6 +20,7 @@ interface IDealCellAdapter {
     
     function transferCapital(address token, uint256 amount) external;
 
+    function approveFunding(uint256 trancheId) external;
     function withdrawCapital() external;
     
     function toggleEarlyReturns(bool earlyReturns) external;
@@ -27,4 +28,13 @@ interface IDealCellAdapter {
     function enableVeto() external;
 
     function addStake(address staker, uint256 amount) external;
+
+    function markAsSuccess(uint256 rewardPercent) external;
+    function markAsFailed(uint256 slashPercent) external;
+    function extendDeadline(uint256 newDeadline) external;
+    function closeDeal() external;
+    function recoverDeal(address liquidator, uint256 stakedAmount) external;
+
+    function legalWrapperMessage(address legalWrapper, bytes4 messageKind, bytes calldata message) external;
+    function messageDeal(bytes4 message, bytes calldata data) external;
 }

@@ -5,7 +5,6 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
-import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {DealState} from "./interfaces/Structs.sol";
@@ -84,7 +83,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         address _dacCell
     ) public initializer {
         nextId = 1;
-        
+
         mainToken = MainToken(_mainToken);
         agentToken = AgentToken(_agentToken);
 
@@ -137,7 +136,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         onlyLegalWrapper 
         nonReentrant
     {
-        IDealAdmin(deals[id]).legalWrapperMessage(msg.sender, kind, message);
+        IDealCellAdapter(deals[id]).legalWrapperMessage(msg.sender, kind, message);
     }
 
     function mintMain(address deal, address to, uint256 amount) external onlyDealCell nonReentrant {
@@ -190,7 +189,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
             address liquidator = prop.target();
             
-            IDealAdmin(deal).recoverDeal(liquidator, uint256(prop.i()));
+            IDealCellAdapter(deal).recoverDeal(liquidator, uint256(prop.i()));
         }
 
         else if (prop.typ() == DACManagementProposalType.DEAL_MESSAGE) {
@@ -202,7 +201,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
                 (bytes4, bytes)
             );
 
-            IDealAdmin(deal).messageDeal(message, data);  
+            IDealCellAdapter(deal).messageDeal(message, data);  
         }
 
         else if (prop.typ() == DACManagementProposalType.ADD_MODULE) {

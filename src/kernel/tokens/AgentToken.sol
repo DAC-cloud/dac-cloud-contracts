@@ -5,10 +5,11 @@ import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/
 import {AccessControlUpgradeable} from"@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {IAgentToken} from "../../interfaces/IAgentToken.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
 
-contract AgentToken is ERC20Upgradeable, AccessControlUpgradeable {
+contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     

@@ -16,8 +16,14 @@ interface IDACCell {
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);
 
     function createManagementProposal(ProposalParams calldata params) external returns (uint256 id);
+    function executeDACProposal(uint256 id) external;
+    
     function getProposalVoting(uint256 proposalId) external view returns (address);
     
     function getVotingConfig() external view returns (VotingConfig memory config);
     function getLegalWrapper() external view returns (LegalWrapper memory wrapper);
+
+    function recoverTreasury(address token) external;
+
+    function logLegalWrapperMessage(bytes4 kind, bytes calldata message) external;
 }

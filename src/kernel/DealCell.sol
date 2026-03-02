@@ -10,7 +10,6 @@ import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
-import {IDealAdmin} from "../interfaces/IDealAdmin.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {Tranche} from "./interfaces/Structs.sol";
 import {StakedAgent} from "./tokens/StakedAgent.sol";
@@ -19,7 +18,7 @@ import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 
-contract DealCell is IDealCell, IDealAdmin, ReentrancyGuard, Initializable {
+contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
     error NotAuthorized();
     error AlreadyInitialized();

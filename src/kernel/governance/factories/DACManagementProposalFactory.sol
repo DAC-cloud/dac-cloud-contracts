@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
-import {IDACManagementFactory} from "../../../interfaces/IDACManagementFactory.sol";
+import {IDACManagementFactory} from "../../interfaces/IDACManagementFactory.sol";
 import {DACManagementProposalType} from "../DACManagementProposals.sol";
 import {DACManagementProposal} from "../DACManagementProposal.sol";
 
