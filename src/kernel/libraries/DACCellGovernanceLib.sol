@@ -86,6 +86,13 @@ library DACCellGovernanceLib {
             dealCell,
             dealAddr
         );
+
+        emit DACEventsLib.EvaluatorAdded(
+            dacCell,
+            id,
+            params.evaluatorSelector,
+            evaluatorAddr
+        );
     }
 
     function createTrancheProposal(
@@ -225,7 +232,15 @@ library DACCellGovernanceLib {
                 DACErrorsLib.InsufficientBalance()
             );
 
-            //todo: validate ADD_EVALUATOR
+            if (params.typ == DACManagementProposalType.ADD_EVALUATOR) {
+                (uint256 dealId,) = abi.decode(params.data, (uint256, bytes));
+
+                address dealCell = dealManager.deals(dealId);
+                require(dealCell != address(0), DACErrorsLib.NotFound());
+
+                DealState memory state = IDealManagerAdapter(address(dealManager)).state(dealCell);
+                require(state.active, DACErrorsLib.InvalidDealState(state.deal));
+            }
 
             if (params.typ == DACManagementProposalType.RECOVER_DEAL) {
                 (uint256 dealId) = abi.decode(params.data, (uint256));
@@ -367,4 +382,51 @@ library DACCellGovernanceLib {
         
         emit DACEventsLib.DealEvaluated(dacCell, id, evaluations);
     }
+
+    function permitEvaluatorAdd(
+        uint256 dealId, 
+        bytes memory evaluatorConfig,
+        address dacCell,
+        mapping(bytes32 => bool) storage evaluatorWhitelist,
+        mapping(uint256 => address) storage deals,
+        mapping(address => DealState) storage dealState
+    ) public {
+        require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
+
+        require(
+            evaluatorWhitelist[keccak256(
+                abi.encode(
+                    deals[dealId],
+                    keccak256(evaluatorConfig)
+                )
+            )], 
+            DACErrorsLib.NotAllowed()
+        );
+
+        (bytes4 evaluatorSelector, bytes memory evaluatorParams) = abi.decode(
+            evaluatorConfig,
+            (bytes4, bytes)
+        );
+
+        DealState memory state = dealState[deals[dealId]];
+
+        address evaluator = IModuleFactory(state.module).deployEvaluator(
+            dacCell,
+            dealId,
+            deals[dealId],
+            abi.decode(state.initParams, (DealParams)),
+            evaluatorSelector,
+            evaluatorParams
+        );
+
+        dealState[deals[dealId]].evaluators.push(evaluator);
+
+        emit DACEventsLib.EvaluatorAdded(
+            dacCell,
+            dealId,
+            evaluatorSelector,
+            evaluator
+        );
+    }
+
 }

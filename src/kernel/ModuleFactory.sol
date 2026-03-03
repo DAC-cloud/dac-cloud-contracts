@@ -67,8 +67,19 @@ abstract contract ModuleFactory is IModuleFactory {
 
         IEvaluatorFactory evaluatorFactory = getEvaluatorFactory(params.dealKind, params.evaluatorSelector);
 
-        evaluatorAddr = evaluatorFactory.deployEvaluator(dac, id, dealCell, params);
+        evaluatorAddr = evaluatorFactory.deployEvaluator(dac, id, dealCell, params, params.evaluatorConfig);
     }
 
-    //todo: deploy evaluator
+    function deployEvaluator(
+        address dac,
+        uint256 id,
+        address dealCell,
+        DealParams calldata params,
+        bytes4 evaluatorSelector,
+        bytes calldata evaluatorConfig
+    ) external returns (address evaluatorAddr) {
+        IEvaluatorFactory evaluatorFactory = getEvaluatorFactory(params.dealKind, evaluatorSelector);
+
+        evaluatorAddr = evaluatorFactory.deployEvaluator(dac, id, dealCell, params, evaluatorConfig);
+    }
 }

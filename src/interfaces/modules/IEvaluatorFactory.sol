@@ -8,6 +8,7 @@ interface IEvaluatorFactory {
         address dac, 
         uint256 id,
         address dealCell,
-        DealParams calldata deal
+        DealParams calldata deal,
+        bytes calldata evaluatorConfig
     ) external returns (address);
 }

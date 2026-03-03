@@ -34,10 +34,26 @@ library DACEventsLib {
 
     event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
     
-    event DealCreated(address dac, uint256 indexed id, uint256 indexed proposalId, address creator, bytes4 kind, address cell, address deal);
+    event DealCreated(
+        address indexed dac, 
+        uint256 indexed id, 
+        uint256 indexed proposalId, 
+        address creator, 
+        bytes4 kind, 
+        address cell, 
+        address deal
+    );
+
     event TrancheCreated(uint256 indexed id, uint256 indexed proposalId, uint256 trancheId);
     event FundingApproved(uint256 indexed id, uint256 indexed trancheId, uint256 rewardsLimit);
     
+    event EvaluatorAdded(
+        address indexed dac,
+        uint256 indexed id,
+        bytes4 evaluator,
+        address evaluatorAddr
+    );
+
     event DealEvaluated(address dac, uint256 indexed id, EvaluationResult[] evaluations);
 
     event ModuleAdded(address indexed dacCell, address indexed factory);

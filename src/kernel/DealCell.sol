@@ -399,14 +399,6 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         }
     }
 
-    function enableVeto() internal {
-        if (!vetoEnabled) {
-            vetoEnabled = true;
-
-            emit DACEventsLib.VetoRightEnabled(id);
-        }
-    }
-    
     function unstakeAllowed(address agent) internal {
         // if the deal is not approved adding stakes not allowed
         require(!recovery, DACErrorsLib.DealInLiquidation());
@@ -468,7 +460,11 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         }
 
         else if (typ == AbstractDealManagementType.ENABLE_VETO_RIGHT) {
-            enableVeto();
+            if (!vetoEnabled) {
+                vetoEnabled = true;
+
+                emit DACEventsLib.VetoRightEnabled(id);
+            }
         }
 
         else if (typ == AbstractDealManagementType.PERMIT_UNSTAKE) {
@@ -476,7 +472,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         }
 
         else if (typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD) {
-            IDealManagerAdapter(manager).permitEvaluatorAdd(id, DealManagementProposal(prop).target());
+            IDealManagerAdapter(manager).permitEvaluatorAdd(id, DealManagementProposal(prop).data());
         }
 
         else {

@@ -48,6 +48,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.CAPITAL_CALL ||
             proposalParams.typ == DACManagementProposalType.APPROVE_DEAL ||
             proposalParams.typ == DACManagementProposalType.APPROVE_TRANCHE ||
+            proposalParams.typ == DACManagementProposalType.ADD_EVALUATOR ||
             proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS
         ) {
             blockingQuorum = totalVotingSupply * votingConfig.blockingPercent / 100;

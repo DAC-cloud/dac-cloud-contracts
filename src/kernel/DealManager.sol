@@ -3,9 +3,10 @@ pragma solidity ^0.8.20;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {DealParams, VotingConfig} from "../interfaces/Structs.sol";
+import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
+import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {DealState} from "./interfaces/Structs.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
@@ -15,6 +16,7 @@ import {MainToken} from "./tokens/MainToken.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
+import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
@@ -40,6 +42,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     mapping(uint256 => address) public deals;                   // id => Deal cell address
     
     mapping(address => DealState) public dealState;             // dealCell => Deal state
+
+    mapping(bytes32 => bool) public evaluatorWhitelist;        // keccak256((dealCell,keccak256(evaluator_config))) => true
 
     // Main token flow tracking
     uint256 public mainTokenObligations;
@@ -176,9 +180,31 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function executeProp(address msgSender, DACManagementProposal prop) external onlyDACCell {
-        if (prop.typ() == DACManagementProposalType.RECOVER_DEAL) { // ADD EVALUATOR
-            //todo: add governance proposal to the deal
-            //todo: whitelist evaluator
+        if (prop.typ() == DACManagementProposalType.ADD_EVALUATOR) {
+            (uint256 dealId, bytes memory evaluatorConfig) = abi.decode(
+                DACManagementProposal(prop).data(),
+                (uint256, bytes)
+            );
+
+            ProposalParams memory addEvaluatorParams = ProposalParams({
+                typ: AbstractDealManagementType.PERMIT_EVALUATOR_ADD,
+                target: address(0),
+                i: 0,
+                data: evaluatorConfig
+            });
+
+            require(deals[dealId] != address(0), DACErrorsLib.NotFound());
+            IDeal(dealState[deals[dealId]].deal).createStakedAgentProposal(addEvaluatorParams);
+
+            bytes32 propHash = keccak256(
+                abi.encode(
+                    deals[dealId],
+                    keccak256(evaluatorConfig)
+                )
+            );
+
+            require(!evaluatorWhitelist[propHash], DACErrorsLib.NotAllowed());
+            evaluatorWhitelist[propHash] = true;
         }
         
         else if (prop.typ() == DACManagementProposalType.RECOVER_DEAL) {
@@ -241,15 +267,20 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             //  whatever is left locked need to free, the difference between 
             //  unlocked and paid still will be accounted as obligations
             mainTokenObligations -= (dealState[deals[id]].rewardsLimit - dealState[deals[id]].rewardsUnlocked);
+
+            dealState[deals[id]].active = false;
         }
     }
 
-    function permitEvaluatorAdd(uint256 dealId, address evaluator) external onlyDealCell {
-        require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
-
-        //todo check that evaluator was whitelisted first
-
-        dealState[deals[dealId]].evaluators.push(evaluator);
+    function permitEvaluatorAdd(uint256 dealId, bytes memory evaluatorConfig) external onlyDealCell {
+        DACCellGovernanceLib.permitEvaluatorAdd(
+            dealId,
+            evaluatorConfig,
+            dacCell,
+            evaluatorWhitelist,
+            deals,
+            dealState
+        );
     }
 
     function registerControlledAddress(address controlled) external onlyDealCell {

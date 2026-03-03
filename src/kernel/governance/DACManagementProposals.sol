@@ -29,6 +29,8 @@ interface IDACManagementProposals {
     function passDealMessage() external pure returns (bytes4);
     function castVetoForDealProposal() external pure returns (bytes4);
 
+    function addDealEvaluator() external pure returns (bytes4);
+
     function delegateVotingPower() external pure returns (bytes4);
 }
 
@@ -75,6 +77,8 @@ library DACManagementProposalType {
     
     bytes4 public constant DEAL_MESSAGE     = IDACManagementProposals.passDealMessage.selector;                 // Default quorum
     bytes4 public constant CAST_VETO_DEAL   = IDACManagementProposals.castVetoForDealProposal.selector;         // Default quorum
+
+    bytes4 public constant ADD_EVALUATOR    = IDACManagementProposals.addDealEvaluator.selector;                // Default quorum, blocking allowed
 
     // Modules control
     bytes4 public constant ADD_MODULE       = IDACManagementProposals.addModuleFactory.selector;                // High quorum
