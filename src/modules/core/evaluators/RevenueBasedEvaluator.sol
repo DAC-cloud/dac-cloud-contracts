@@ -7,6 +7,9 @@ import {EvaluationResult} from "../../../interfaces/Structs.sol";
 import {MathLib} from "../../../kernel/libraries/MathLib.sol";
 
 contract RevenueBasedEvaluator is IEvaluator {
+
+    error RevenueBaseMisconfigured();
+
     /*//////////////////////////////////////////////////////////////
                           STATE & IMMUTABLES
     //////////////////////////////////////////////////////////////*/
@@ -16,19 +19,21 @@ contract RevenueBasedEvaluator is IEvaluator {
     address public immutable cell;
 
     // Configurable parameters (set once at deployment)
-    struct Config {
-        address token;                  // revenue accounting token
-        uint256 duration;               // period length (e.g. 30 days)
-        uint256 baseExpected;           // base expected revenue per period
-        int256[] curveCoeffs;           // polynomial coeffs (a + b*x + c*x² + d*x³)
-        uint256 maxCycleUnlockPercent;  // minimum unlock even if below target (forgiving)
-        uint256 minCycleRevenuePercent; // minimal revenue percent before counting as miss
-        uint256 graceCycles;            // consecutive misses before slashing starts
-        uint256 penaltyPerMiss;         // small penalty % per missed cycle
-        uint256 evaluationStart;        // timestamp for starting evaluation, if 0 - starting at deal start
+    struct RevenueSchedule {
+        address token;                      // revenue accounting token
+        uint256 duration;                   // period length (e.g. 30 days)
+        uint8 revenueProjectionMode;        // 0 - fixed expected revenue, 1 - number of cycles to return investments
+        uint256 revenueProjection;          // revenue projection
+        int256[] curveCoeffs;               // reward curve, polynomial coeffs (a + b*x + c*x² + d*x³)
+        int256[] requirementCurveCoeffs;    // growing target curve (cycle → expected revenue)
+        uint256 maxCycleUnlockPercent;      // minimum unlock even if below target (forgiving)
+        uint256 minCycleRevenuePercent;     // minimal revenue percent before counting as miss
+        uint256 graceCycles;                // consecutive misses before slashing starts
+        uint256 penaltyPerMiss;             // small penalty % per missed cycle
+        uint256 evaluationStart;            // timestamp for starting evaluation, if 0 - starting at deal start
     }
 
-    Config public config;
+    RevenueSchedule public config;
 
     // Stateful tracking
     uint256 public lastChecked;
@@ -47,9 +52,11 @@ contract RevenueBasedEvaluator is IEvaluator {
         dealId = _dealId;
         cell = _cell;
 
-        config = abi.decode(_configData, (Config));
+        config = abi.decode(_configData, (RevenueSchedule));
 
-        lastChecked = block.timestamp;
+        uint256 start = config.evaluationStart == 0 ? block.timestamp : config.evaluationStart;
+        lastChecked = start;
+
         updatedDeadline = IDealCell(_cell).dealDeadline();
     }
 
@@ -78,13 +85,25 @@ contract RevenueBasedEvaluator is IEvaluator {
         uint256 returned = totalCapitalReturned - returnsSnapshot;
         returnsSnapshot = totalCapitalReturned;
 
-        //todo: periods should start at deal or specified timestamp (evaluatonStart)
-        //todo: periods should be "exact", and not depending on when in the middle of period the contract was called
+        // Align to exact period boundaries (no lost partial cycles)
+        uint256 nextCycleStart = lastChecked + config.duration;
+        if (current < nextCycleStart) {
+            return new EvaluationResult[](0);
+        }
 
         // How many full periods passed
         uint256 cycles = (current - lastChecked) / config.duration;
         if (cycles == 0) {
             return new EvaluationResult[](0); // nothing to evaluate yet
+        }
+
+        // Calculating revenue target
+        uint256 baseExpectedRevenue = config.revenueProjection;
+        if (config.revenueProjectionMode != 0) {
+            uint256 investedCapital = IDealCell(cell).getInvestedCapital(config.token);
+            require(investedCapital > 0, RevenueBaseMisconfigured());
+
+            baseExpectedRevenue = investedCapital / config.revenueProjection;
         }
 
         uint256 rewardPercent = 0;
@@ -94,8 +113,10 @@ contract RevenueBasedEvaluator is IEvaluator {
             // Cycle revenue (cumulative returned divided by a number of cycles for simplicity)
             uint256 cycleRevenue = returned / cycles;
 
+            uint256 expected = _evaluateRequirement(c, baseExpectedRevenue);
+
             // x = progress (0 to 1+)
-            uint256 progressScaled = MathLib.div(cycleRevenue, config.baseExpected);
+            uint256 progressScaled = MathLib.div(cycleRevenue, expected);
 
             // Evaluate polynomial curve: y = reward % (0 to 1)
             int256 x = int256(progressScaled);
@@ -119,9 +140,8 @@ contract RevenueBasedEvaluator is IEvaluator {
             }
         }
 
-        //todo: not to current time, but at the "end" of the current cycle
-        // so when called next time we will start loop at that timestamp...
-        lastChecked = current;
+        // Next evaluation starts at the end of the last completed cycle
+        lastChecked = lastChecked + cycles * config.duration;
 
         EvaluationResult[] memory results = new EvaluationResult[](3); // producing max 3 results
         uint256 resultIndex = 0;
@@ -161,16 +181,23 @@ contract RevenueBasedEvaluator is IEvaluator {
         y = coeffs[coeffs.length - 1];
 
         for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
-            if (y < 0) {
-                y = - int256(MathLib.mulDiv(uint256(y), uint256(x), MathLib.SCALE)) + coeffs[uint256(i)];
-            }
-            else {
-                y = int256(MathLib.mulDiv(uint256(y), uint256(x), MathLib.SCALE)) + coeffs[uint256(i)];
-            }
+            y = MathLib.mulDivSigned(y, x, MathLib.SCALE) + coeffs[uint256(i)];
         }
 
         // Cap at 100%
         if (y > int256(MathLib.SCALE)) y = int256(MathLib.SCALE);
         if (y < 0) y = 0;
+    }
+
+    /// @dev Requirement curve (cycle number → expected revenue)
+    function _evaluateRequirement(uint256 cycle, uint256 baseCycleRevenue) internal view returns (uint256) {
+        int256 x = int256(cycle);
+        int256[] memory coeffs = config.requirementCurveCoeffs;
+        int256 y = coeffs[coeffs.length - 1];
+        for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
+            y = MathLib.mulDivSigned(y, x, MathLib.SCALE) + coeffs[uint256(i)];
+        }
+        if (y < 0) y = 0;
+        return MathLib.mul(uint256(y), baseCycleRevenue); // always at least base
     }
 }

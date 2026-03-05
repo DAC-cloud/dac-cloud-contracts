@@ -40,6 +40,14 @@ library MathLib {
         }
     }
 
+    /// @dev Safe signed fixed-point multiply-divide (handles negative coeffs)
+    function mulDivSigned(int256 x, int256 y, uint256 scale) internal pure returns (int256) {
+        uint256 ux = x < 0 ? uint256(-x) : uint256(x);
+        uint256 uy = y < 0 ? uint256(-y) : uint256(y);
+        uint256 res = mulDiv(ux, uy, scale);
+        return (x ^ y) < 0 ? -int256(res) : int256(res);
+    }
+
     /*//////////////////////////////////////////////////////////////
                           SCALED PERCENTAGE OPERATIONS
     //////////////////////////////////////////////////////////////*/

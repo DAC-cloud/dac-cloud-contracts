@@ -69,7 +69,7 @@ contract RevenueBasedEvaluatorTest is Test {
                           HELPER: DEPLOY EVALUATOR
     //////////////////////////////////////////////////////////////*/
 
-    function deployEvaluator(RevenueBasedEvaluator.Config memory cfg) internal {
+    function deployEvaluator(RevenueBasedEvaluator.RevenueSchedule memory cfg) internal {
         bytes memory configData = abi.encode(cfg);
         evaluator = new RevenueBasedEvaluator(DAC, DEAL_ID, address(mockDealCell), configData);
     }
@@ -79,10 +79,12 @@ contract RevenueBasedEvaluatorTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function test_firstCycle_meetsTarget_unlocks() public {
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -94,6 +96,9 @@ contract RevenueBasedEvaluatorTest is Test {
         cfg.curveCoeffs[1] = 0;
         cfg.curveCoeffs[2] = 0;
         cfg.curveCoeffs[3] = 1e18; // y = x^3
+
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); 
+        cfg.requirementCurveCoeffs[1] = 0; // flat line at 100% of base
 
         deployEvaluator(cfg);
 
@@ -115,10 +120,12 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_belowTarget_butAboveMinUnlock_smallUnlock() public {
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -127,6 +134,7 @@ contract RevenueBasedEvaluatorTest is Test {
             evaluationStart: 0
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
 
@@ -148,10 +156,12 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_multipleMisses_triggersPenalty() public {
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(80), // miss if < 80%
@@ -160,6 +170,7 @@ contract RevenueBasedEvaluatorTest is Test {
             evaluationStart: 0
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
 
@@ -180,10 +191,12 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_fullUnlock_triggersClose() public {
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(100),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -192,6 +205,7 @@ contract RevenueBasedEvaluatorTest is Test {
             evaluationStart: 0
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
 
@@ -210,6 +224,68 @@ contract RevenueBasedEvaluatorTest is Test {
         assertEq(results[results.length - 1].action, 3); // close
     }
 
+    function test_cycleAlignment_noLostPartialPeriods() public {
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
+            curveCoeffs: new int256[](4),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(25),
+            graceCycles: 3,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0
+        });
+        cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
+
+        deployEvaluator(cfg);
+        mockDealCell.setReturnedCapital(10_000e6);
+
+        // Evaluate at 70% of first cycle → should do NOTHING
+        vm.warp(block.timestamp + 21 days);
+        EvaluationResult[] memory r1 = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(r1.length, 0);
+
+        // Now at 100% + 10% of next cycle → only ONE cycle evaluated, lastChecked moved correctly
+        vm.warp(block.timestamp + 12 days);
+        EvaluationResult[] memory r2 = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(r2.length, 1);
+        assertEq(r2[0].action, 1);
+    }
+
+    function test_negativeCoeff_sCurve() public {
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
+            curveCoeffs: new int256[](3),
+            maxCycleUnlockPercent: MathLib.atScale(100),
+            minCycleRevenuePercent: MathLib.atScale(0),
+            graceCycles: 0,
+            penaltyPerMiss: 0,
+            evaluationStart: 0
+        });
+        cfg.curveCoeffs[0] = int256(MathLib.atScale(10));  // a
+        cfg.curveCoeffs[1] = int256(MathLib.atScale(20));  // b
+        cfg.curveCoeffs[2] = -int256(MathLib.atScale(5));  // c (negative)
+
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); 
+        cfg.requirementCurveCoeffs[1] = 1e15;
+
+        deployEvaluator(cfg);
+        mockDealCell.setReturnedCapital(5_000e6);
+
+        vm.warp(block.timestamp + 30 days);
+
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertGt(results[0].percent, 0); // negative coeff still works safely
+    }
+
     /*//////////////////////////////////////////////////////////////
                           FUZZ TESTS
     //////////////////////////////////////////////////////////////*/
@@ -218,10 +294,12 @@ contract RevenueBasedEvaluatorTest is Test {
         vm.assume(revenue <= 100_000e6);
         vm.assume(cycles >= 1 && cycles <= 10);
 
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -233,6 +311,9 @@ contract RevenueBasedEvaluatorTest is Test {
         cfg.curveCoeffs[1] = 0;
         cfg.curveCoeffs[2] = 0;
         cfg.curveCoeffs[3] = 1e18; // x^3
+
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); 
+        cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
 
@@ -254,10 +335,12 @@ contract RevenueBasedEvaluatorTest is Test {
     function testFuzz_minUnlockAlwaysApplied(uint256 revenue) public {
         vm.assume(revenue < 1_000e6); // below curve
 
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -266,6 +349,7 @@ contract RevenueBasedEvaluatorTest is Test {
             evaluationStart: 0
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
         mockDealCell.setReturnedCapital(revenue);
@@ -286,10 +370,12 @@ contract RevenueBasedEvaluatorTest is Test {
     function testFuzz_linearCurveUnlockApplied(uint256 revenue) public {
         vm.assume(revenue < 1_000e6); // below curve
 
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -298,6 +384,7 @@ contract RevenueBasedEvaluatorTest is Test {
             evaluationStart: 0
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 1e18; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 0;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
         mockDealCell.setReturnedCapital(revenue);
@@ -318,10 +405,12 @@ contract RevenueBasedEvaluatorTest is Test {
     function testFuzz_zeroUnlockCurveBelowZero(uint256 revenue) public {
         vm.assume(revenue < 5_000e6); // below curve
 
-        RevenueBasedEvaluator.Config memory cfg = RevenueBasedEvaluator.Config({
+        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
-            baseExpected: 10_000e6,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2), // linear a + b*x
             curveCoeffs: new int256[](4), // cubic: x^3
             maxCycleUnlockPercent: MathLib.atScale(10),
             minCycleRevenuePercent: MathLib.atScale(25), // miss if < 25%
@@ -330,6 +419,7 @@ contract RevenueBasedEvaluatorTest is Test {
             evaluationStart: 0
         });
         cfg.curveCoeffs[0] = -1 * int256(MathLib.atScale(50)); cfg.curveCoeffs[1] = 1e18; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 0;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
 
         deployEvaluator(cfg);
         mockDealCell.setReturnedCapital(revenue);
