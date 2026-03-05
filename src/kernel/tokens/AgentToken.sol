@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {AccessControlUpgradeable} from"@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IAgentToken} from "../../interfaces/IAgentToken.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";

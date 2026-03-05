@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
 import {IVotes} from "../lib/IVotes.sol";
@@ -302,6 +301,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             );
 
             IVotes(token).delegate(delegatee);
+
+            emit DACEventsLib.VotesDelegated(token, delegatee);
         }
 
         else {

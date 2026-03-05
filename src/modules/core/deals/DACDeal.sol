@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall, Tranche} from "../../../interfaces/Structs.sol";
+import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
 import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
@@ -15,7 +15,6 @@ import {Deal} from "../../../kernel/Deal.sol";
 import {DACDealConfig} from "../interfaces/Structs.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
 import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
-import {DACEventsLib} from "../../../interfaces/DACEventsLib.sol";
 
 contract DACDeal is Deal {
 
@@ -30,8 +29,8 @@ contract DACDeal is Deal {
     DACCellDNA public dacCellDNA;
     
     // Events
-    event ChildLPVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
-    event ChildLPVoteCasted(uint256 indexed childProposalId, bool support);
+    event ChildVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
+    event ChildVoteCasted(uint256 indexed childProposalId, bool support);
 
     function initialize(
         uint256 _id,
@@ -217,7 +216,7 @@ contract DACDeal is Deal {
 
             uint256 proposalId = this.createStakedAgentProposal(dealProposalParams);
 
-            emit ChildLPVoteCreated(childProposalId, proposalId);
+            emit ChildVoteCreated(childProposalId, proposalId);
         }
 
         else if (typ == CoreDealManagementType.VOTE_DAC_PROPOSAL) {
@@ -230,7 +229,7 @@ contract DACDeal is Deal {
             address childVoting = IDACCell(managedEntity).getProposalVoting(childProposalId);
             IVoting(childVoting).vote(support);
 
-            emit ChildLPVoteCasted(childProposalId, support);
+            emit ChildVoteCasted(childProposalId, support);
         }
         
         else if (typ == CoreDealManagementType.REINVEST_PROFITS) {

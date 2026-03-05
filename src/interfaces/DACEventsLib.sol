@@ -95,4 +95,5 @@ library DACEventsLib {
 
     event DealManagementProposalCreated(address indexed cell, uint256 indexed id, bytes4 indexed typ, address target, bytes32 data1, bytes data2);
 
+    event VotesDelegated(address indexed treasuryToken, address delegatee);
 }

@@ -105,13 +105,17 @@ contract RevenueBasedEvaluator is IEvaluator {
             uint256 progressScaled = MathLib.div(cycleRevenue, expected);
 
             // Evaluate polynomial curve: y = reward % (0 to 1)
+            // forge-lint: disable-next-line(unsafe-typecast)
             int256 x = int256(progressScaled);
             int256 curveResult = _evaluatePolynomial(x);
 
             // Reward percent capped by `config.maxCycleUnlockPercent` and deployed
             // proportional to revenue results with curve applied
+
             rewardPercent += MathLib.mul(
-                config.maxCycleUnlockPercent, 
+                config.maxCycleUnlockPercent,
+                // casting `curveResult` to 'uint256' is safe because `curveResult` is always in [0..1] range
+                // forge-lint: disable-next-line(unsafe-typecast)
                 MathLib.capAt100(uint256(curveResult))
             );
 
@@ -167,6 +171,8 @@ contract RevenueBasedEvaluator is IEvaluator {
         y = coeffs[coeffs.length - 1];
 
         for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
+            // casting `i` to 'uint256' is safe because if `coeffs.lengths <= 1` we're not entering the cycle
+            // forge-lint: disable-next-line(unsafe-typecast)
             y = MathLib.mulDivSigned(y, x, MathLib.SCALE) + coeffs[uint256(i)];
         }
 
@@ -177,13 +183,18 @@ contract RevenueBasedEvaluator is IEvaluator {
 
     /// @dev Requirement curve (cycle number → expected revenue)
     function _evaluateRequirement(uint256 cycle, uint256 baseCycleRevenue) internal view returns (uint256) {
+        // forge-lint: disable-next-line(unsafe-typecast)
         int256 x = int256(cycle);
         int256[] memory coeffs = config.requirementCurveCoeffs;
         int256 y = coeffs[coeffs.length - 1];
         for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
+            // casting `i` to 'uint256' is safe because if `coeffs.lengths <= 1` we're not entering the cycle
+            // forge-lint: disable-next-line(unsafe-typecast)
             y = MathLib.mulDivSigned(y, x, MathLib.SCALE) + coeffs[uint256(i)];
         }
         if (y < 0) y = 0;
+        // casting to 'uint256' is safe because y > 0
+        // forge-lint: disable-next-line(unsafe-typecast)
         return MathLib.mul(uint256(y), baseCycleRevenue); // always at least base
     }
 }

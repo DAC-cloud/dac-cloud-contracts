@@ -6,7 +6,6 @@ import {IVotes} from "../../../lib/IVotes.sol";
 import {ProposalParams, DealParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {Deal} from "../../../kernel/Deal.sol";
 import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
-import {IDealManagerAdapter} from "../../../kernel/interfaces/IDealManagerAdapter.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
@@ -23,7 +22,6 @@ contract TreasuryDeal is Deal {
     event AgentAssigned(address indexed treasuryToken, address indexed agent, uint160 amount);
     event AgentAllowed(address indexed treasuryToken, address indexed agent, uint160 amount, uint160 dealSize);
     event ProfitsRecovered(address indexed token, uint160 amount);
-    event VotesDelegated(address indexed treasuryToken, address delegatee);
     
     function initialize(
         uint256 _id,
@@ -167,7 +165,7 @@ contract TreasuryDeal is Deal {
 
             IVotes(token).delegate(delegatee);
 
-            emit VotesDelegated(token, delegatee);
+            emit DACEventsLib.VotesDelegated(token, delegatee);
         }
 
         else {

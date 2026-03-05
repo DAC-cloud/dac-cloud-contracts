@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ProposalParams, VotingConfig, DealParams, CapitalCall, EvaluationResult, Tranche} from "../../interfaces/Structs.sol";
+import {ProposalParams, VotingConfig, DealParams, EvaluationResult, Tranche} from "../../interfaces/Structs.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
 import {IEvaluator} from "../../interfaces/IEvaluator.sol";
 import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
@@ -11,7 +10,7 @@ import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
-import {DealState, CapitalCallState} from "../interfaces/Structs.sol";
+import {DealState} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {AgentToken} from "../tokens/AgentToken.sol";
