@@ -160,7 +160,10 @@ library DACCellGovernanceLib {
         address dealCell = dealManager.deals(dealId);
         require(dealCell != address(0), DACErrorsLib.InvalidDealId(dealId));
 
-        require(IDealCell(dealCell).getStakedAgentTotal() > 0, DACErrorsLib.NoStake());
+        require(
+            IERC20(IDealCell(dealCell).stakeToken()).totalSupply() > 0, 
+            DACErrorsLib.NoStake()
+        );
 
         Tranche memory fundingTranche = IDealCell(dealCell).fundingTranche(trancheId);
 
@@ -339,7 +342,7 @@ library DACCellGovernanceLib {
     ) internal {
         address dealCell = deals[id];
         
-        uint256 slashedTokens = IDealCell(dealCell).getStakedAgentTotal() * slashPercent / 100;
+        uint256 slashedTokens = IERC20(IDealCell(dealCell).stakeToken()).totalSupply() * slashPercent / 100;
         AgentToken(agentToken).burnFrom(dealCell, slashedTokens);
         
         IDealCellAdapter(dealCell).markAsFailed(slashPercent);

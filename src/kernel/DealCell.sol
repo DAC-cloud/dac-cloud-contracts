@@ -434,17 +434,15 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             // if the deal is not approved adding stakes not allowed
             require(approved, DACErrorsLib.DealIsNotApproved());
 
-            address staker = DealManagementProposal(prop).target();
-            uint256 amount = uint256(DealManagementProposal(prop).i());
-
-            require(
-                IERC20(agentTokenAddr).transferFrom(
-                    staker, address(this), amount
-                ),
-                DACErrorsLib.TransferFailed()
+            DealCellGovernanceLib.addStake(
+                dacCell,
+                DealManagementProposal(prop).target(),
+                uint256(DealManagementProposal(prop).i()),
+                id,
+                deal,
+                token,
+                holders
             );
-
-            stake(staker, amount);
         }
 
         else if (typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS) {
@@ -504,7 +502,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function approveDeadline() external view returns (uint256) { return _approveDeadline; }
     function dealDeadline() external view returns (uint256) { return _dealDeadline; }
     function stakeToken() external view returns (address) { return address(token); }
-    function getStakedAgentTotal() external view returns (uint256) { return token.totalSupply(); }
+    
     function getReturnedCapital(address _fundingToken) external view returns (uint256) { return returnedCapital[_fundingToken]; }
     function getInvestedCapital(address _fundingToken) external view returns (uint256) { return investedCapital[_fundingToken]; }
     function getMainRewardsLimit() external view returns (uint256) { return _tokenRewardsLimit; }

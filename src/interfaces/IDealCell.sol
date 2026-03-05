@@ -21,11 +21,9 @@ interface IDealCell {
     function fundingTranche(uint256 trancheId) external view returns (Tranche memory tranche);
     function fundingTokens() external view returns (address[] memory);
 
-    function getStakedAgentTotal() external view returns (uint256);
-    function getMainRewardsLimit() external view returns (uint256);
-    
     function getReturnedCapital(address token) external view returns (uint256);
     function getInvestedCapital(address token) external view returns (uint256);
+    function getMainRewardsLimit() external view returns (uint256);
     
     function allowEarlyReturns() external view returns (bool);
     function allowDACVeto() external view returns (bool);

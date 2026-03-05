@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.sol";
@@ -43,7 +44,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     
     mapping(address => DealState) public dealState;             // dealCell => Deal state
 
-    mapping(bytes32 => bool) public evaluatorWhitelist;        // keccak256((dealCell,keccak256(evaluator_config))) => true
+    mapping(bytes32 => bool) public evaluatorWhitelist;         // keccak256((dealCell,keccak256(evaluator_config))) => true
 
     // Main token flow tracking
     uint256 public mainTokenObligations;
@@ -153,7 +154,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         );
 
         require(
-            IDealCell(deal).getStakedAgentTotal() == 0,
+            IERC20(IDealCell(deal).stakeToken()).totalSupply() == 0,
             DACErrorsLib.InvalidDealState(deal)
         );
 

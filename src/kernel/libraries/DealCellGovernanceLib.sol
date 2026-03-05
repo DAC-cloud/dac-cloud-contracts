@@ -55,6 +55,35 @@ library DealCellGovernanceLib {
         deal.afterEveryStake(staker, amount);
     }
 
+    function addStake(
+        address dacCell,
+        address staker,
+        uint256 amount,
+        uint256 id,
+        IDeal deal,
+        StakedAgent token,
+        address[] storage holders
+    ) public {
+        require(
+            token.transferFrom(
+                staker, address(this), amount
+            ),
+            DACErrorsLib.TransferFailed()
+        );
+
+        deal.beforeEveryStake(staker, amount);
+
+        if (token.balanceOf(staker) == 0) {
+            holders.push(staker);
+        }
+        
+        token.mint(staker, amount);
+        
+        emit DACEventsLib.AgentTokensStaked(dacCell, id, staker, amount);
+
+        deal.afterEveryStake(staker, amount);
+    }
+
     function unstake(
         address dacCell,
         uint256 id,

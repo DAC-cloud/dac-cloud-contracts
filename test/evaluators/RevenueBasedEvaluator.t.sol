@@ -39,7 +39,6 @@ contract MockDealCell is IDealCell {
     function unstake() external {}
     function fundingTranche(uint256) external pure returns (Tranche memory tranche) { }
     function fundingTokens() external pure returns (address[] memory) { return new address[](0); }
-    function getStakedAgentTotal() external pure returns (uint256) { return 0; }
     function getMainRewardsLimit() external pure returns (uint256) { return 0; }
     function getInvestedCapital(address) external pure returns (uint256) { return 0; }
     function allowEarlyReturns() external pure returns (bool) { return false; }
