@@ -15,22 +15,23 @@ struct TreasurySpendAllowance {
 }
 
 struct Milestone {
-    bytes32 milestoneType;          // opaque bytes for milestone type, and byte-masked functionality encoding
     address token;                  // token for accounting purposes
     uint256 timestamp;              // hard deadline for the milestone
-    uint256 duration;               // if zero, milestone is fixed in time, if > 0, milestone is repeating (until triggered by returns)
     uint256 expectedReturnPercent;  // cumulative % or amount of funding expected back
     uint256 rewardPercentage;       // unlock % (calculated always of the total remaining rewards)
     uint256 penalty;                // slash % applied
-    bool penaltyProRata;            // if false - slash full penalty
 }
 
-struct RevenueStreamConfig {
-    address token;
-    uint256 duration;               // e.g., weekly = 7 days
-    uint256 expectedMinAmount;      // minimum recurring amount
-    uint256 rewardPercentage;       // small unlock per cycle (1–3%)
-    uint256 penaltyPercentage;      // per missed cycle
-    uint256 tolerancePercentage;    // e.g., 90% = near miss
-    bytes curveData;                // encoded polynomial for non-linear rewards
+struct RevenueSchedule {
+    address token;                      // revenue accounting token
+    uint256 duration;                   // period length (e.g. 30 days)
+    uint8 revenueProjectionMode;        // 0 - fixed expected revenue, 1 - number of cycles to return investments
+    uint256 revenueProjection;          // revenue projection
+    int256[] curveCoeffs;               // reward curve, polynomial coeffs (a + b*x + c*x² + d*x³)
+    int256[] requirementCurveCoeffs;    // growing target curve (cycle → expected revenue)
+    uint256 maxCycleUnlockPercent;      // minimum unlock even if below target (forgiving)
+    uint256 minCycleRevenuePercent;     // minimal revenue percent before counting as miss
+    uint256 graceCycles;                // consecutive misses before slashing starts
+    uint256 penaltyPerMiss;             // small penalty % per missed cycle
+    uint256 evaluationStart;            // timestamp for starting evaluation, if 0 - starting at deal start
 }

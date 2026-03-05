@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../../src/modules/core/evaluators/RevenueBasedEvaluator.sol";
 import "../../src/interfaces/IDealCell.sol";
 import "../../src/kernel/libraries/MathLib.sol";
+import "../../src/modules/core/interfaces/Structs.sol";
 
 contract MockDealCell is IDealCell {
     uint256 public returnedCapital;
@@ -69,7 +70,7 @@ contract RevenueBasedEvaluatorTest is Test {
                           HELPER: DEPLOY EVALUATOR
     //////////////////////////////////////////////////////////////*/
 
-    function deployEvaluator(RevenueBasedEvaluator.RevenueSchedule memory cfg) internal {
+    function deployEvaluator(RevenueSchedule memory cfg) internal {
         bytes memory configData = abi.encode(cfg);
         evaluator = new RevenueBasedEvaluator(DAC, DEAL_ID, address(mockDealCell), configData);
     }
@@ -79,7 +80,7 @@ contract RevenueBasedEvaluatorTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function test_firstCycle_meetsTarget_unlocks() public {
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -120,7 +121,7 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_belowTarget_butAboveMinUnlock_smallUnlock() public {
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -156,7 +157,7 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_multipleMisses_triggersPenalty() public {
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -191,7 +192,7 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_fullUnlock_triggersClose() public {
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -225,7 +226,7 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_cycleAlignment_noLostPartialPeriods() public {
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -257,7 +258,7 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function test_negativeCoeff_sCurve() public {
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -294,7 +295,7 @@ contract RevenueBasedEvaluatorTest is Test {
         vm.assume(revenue <= 100_000e6);
         vm.assume(cycles >= 1 && cycles <= 10);
 
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -335,7 +336,7 @@ contract RevenueBasedEvaluatorTest is Test {
     function testFuzz_minUnlockAlwaysApplied(uint256 revenue) public {
         vm.assume(revenue < 1_000e6); // below curve
 
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -370,7 +371,7 @@ contract RevenueBasedEvaluatorTest is Test {
     function testFuzz_linearCurveUnlockApplied(uint256 revenue) public {
         vm.assume(revenue < 1_000e6); // below curve
 
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
@@ -405,7 +406,7 @@ contract RevenueBasedEvaluatorTest is Test {
     function testFuzz_zeroUnlockCurveBelowZero(uint256 revenue) public {
         vm.assume(revenue < 5_000e6); // below curve
 
-        RevenueBasedEvaluator.RevenueSchedule memory cfg = RevenueBasedEvaluator.RevenueSchedule({
+        RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
             revenueProjectionMode: 0,
