@@ -11,6 +11,8 @@ interface IDealCell {
     function deal() external view returns (IDeal);
     function manager() external view returns (address);
 
+    function startTime() external view returns (uint256);
+
     function stakeToken() external view returns (address);
 
     function claimMainToken(uint256 evaluatorId) external;

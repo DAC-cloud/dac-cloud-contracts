@@ -46,7 +46,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     
     uint256 internal _tokenRewardsLimit;
     
-    uint256 internal startTime;
+    uint256 public startTime;
     uint256 internal _approveDeadline;
     uint256 internal _dealDeadline;
 

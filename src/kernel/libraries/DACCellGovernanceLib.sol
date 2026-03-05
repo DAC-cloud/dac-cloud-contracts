@@ -373,7 +373,7 @@ library DACCellGovernanceLib {
             } else if (evaluations[i].action == 1) {    // convert
                 _performTransformation(id, evaluations[i].percent, deals, dealState);
             } else if (evaluations[i].action == 2) {    // extend
-                IDealCellAdapter(dealCell).extendDeadline(evaluations[i].newDeadline);
+                IDealCellAdapter(dealCell).extendDeadline(evaluations[i].extendTo);
             } else if (evaluations[i].action == 3) {    // close
                 IDealCellAdapter(dealCell).closeDeal();
                 closed = true;

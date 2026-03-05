@@ -70,7 +70,7 @@ struct DealParams {
 struct EvaluationResult {
     uint8 action;                   // 0=slash, 1=convert, 2=extend, 3=close
     uint256 percent;                // % to slash/convert
-    uint256 newDeadline;            // only for extend
+    uint256 extendTo;               // only for extend
 }
 
 struct Tranche {

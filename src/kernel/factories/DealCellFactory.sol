@@ -15,10 +15,10 @@ contract DealCellFactory {
         uint256 id,
         address dac,
         address _dealManager,
-        address governanceFactory,
+        address _governanceFactory,
         address agentToken,
         address mainToken,
-        address proposer
+        address _proposer
     ) public returns (address cellAddr) {
         bytes memory initData = abi.encodeWithSelector(
             DealCell.initialize.selector,
@@ -27,10 +27,10 @@ contract DealCellFactory {
                 _deployer: msg.sender,
                 _dac: dac,
                 _dealManager: _dealManager,
-                _governanceFactory: governanceFactory,
+                _governanceFactory: _governanceFactory,
                 _agentToken: agentToken,
                 _mainToken: mainToken,
-                _proposer: proposer
+                _proposer: _proposer
             })
         );
 
