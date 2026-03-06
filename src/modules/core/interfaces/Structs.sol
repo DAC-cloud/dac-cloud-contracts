@@ -15,11 +15,18 @@ struct TreasurySpendAllowance {
 }
 
 struct Milestone {
-    address token;                  // token for accounting purposes
-    uint256 timestamp;              // hard deadline for the milestone
-    uint256 expectedReturnPercent;  // cumulative % or amount of funding expected back
-    uint256 rewardPercentage;       // unlock % (calculated always of the total remaining rewards)
-    uint256 penalty;                // slash % applied
+    uint8 milestoneType;                // 0 - regular, 1 - close
+    address token;                      // token for accounting purposes (holdings will be evaluated by an oracle)
+    address oracle;                     // oracle for getting normalized returns (to compare)
+    uint8 valuationMode;                // 0 - holdings, 1 - FDV, 2 - growth
+    address fundingToken;               // if not zero - expected will be cumulative % of funding
+    uint256 expectedReturn;             // cumulative % or amount of funding expected back
+    uint256 timestamp;                  // hard deadline for the milestone
+    uint256 rewardPercentage;           // unlock % (calculated always of the total remaining rewards)
+    int256[] rewardCurve;               // array of polynomial coeff arrays
+    int256[] penaltyCurve;
+    uint256 minPercentGrace;            // return % allowing to extend deadline (only for `close` milestones)
+    uint256 extension;                  // duration to extend deadline
 }
 
 struct RevenueSchedule {

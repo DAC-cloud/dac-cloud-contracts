@@ -158,12 +158,21 @@ contract DACCellDealTest is Test {
 
         Milestone[] memory milestones = new Milestone[](1);
         milestones[0] = Milestone({
+            milestoneType: 0,
             token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
             timestamp: block.timestamp + 1 days,
-            expectedReturnPercent: 100,
-            rewardPercentage: 100,
-            penalty: 0
+            rewardPercentage: 1e18,
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
         });
+        milestones[0].rewardCurve[0] = 1e18;
+        milestones[0].penaltyCurve[0] = 1e18;
 
         DealParams memory params = DealParams({
             dealKind: CoreDealType.PERMIT2_TREASURY,
@@ -204,12 +213,21 @@ contract DACCellDealTest is Test {
 
         Milestone[] memory milestones = new Milestone[](1);
         milestones[0] = Milestone({
+            milestoneType: 0,
             token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
             timestamp: block.timestamp + 1 days,
-            expectedReturnPercent: 100,
-            rewardPercentage: 100,
-            penalty: 0
+            rewardPercentage: 1e18,
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
         });
+        milestones[0].rewardCurve[0] = 1e18;
+        milestones[0].penaltyCurve[0] = 1e18;
 
         DACConfig memory childDACConfig = DACConfig({
             symbol: "DAC-L2",
@@ -269,12 +287,21 @@ contract DACCellDealTest is Test {
 
         Milestone[] memory milestones = new Milestone[](1);
         milestones[0] = Milestone({
+            milestoneType: 0,
             token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
             timestamp: block.timestamp + 1 days,
-            expectedReturnPercent: 100,
-            rewardPercentage: 100,
-            penalty: 0
+            rewardPercentage: 1e18,
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
         });
+        milestones[0].rewardCurve[0] = 1e18;
+        milestones[0].penaltyCurve[0] = 1e18;
 
         DACConfig memory childDACConfig = DACConfig({
             symbol: "DAC-L2",
