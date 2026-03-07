@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/kernel/libraries/DACCellGovernanceLib.sol";
+import "../src/kernel/libraries/MathLib.sol";
 import "../src/interfaces/Structs.sol";
 import "../src/interfaces/IModuleFactory.sol";
 
@@ -53,9 +54,9 @@ contract DACCellGovernanceLibTest is Test {
         });
 
         VotingConfig memory votingConfig = VotingConfig({
-            quorumPercent: 50,
-            blockingPercent: 25,
-            highQuorumPercent: 80,
+            quorumPercent: MathLib.atScale(50),
+            blockingPercent: MathLib.atScale(25),
+            highQuorumPercent: MathLib.atScale(80),
             duration: 1 days,
             qualification: 1e6
         });

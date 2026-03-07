@@ -18,6 +18,7 @@ import {DACManagementProposal} from "../governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "../governance/DACManagementProposals.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
+import {MathLib} from "./MathLib.sol";
 
 interface IDACGovernanceAdapter {
     function createManagementProposal(ProposalParams calldata params)
@@ -341,7 +342,7 @@ library DACCellGovernanceLib {
     ) internal {
         address dealCell = deals[id];
         
-        uint256 slashedTokens = IERC20(IDealCell(dealCell).stakeToken()).totalSupply() * slashPercent / 100;
+        uint256 slashedTokens = MathLib.mul(IERC20(IDealCell(dealCell).stakeToken()).totalSupply(), slashPercent);
         AgentToken(agentToken).burnFrom(dealCell, slashedTokens);
         
         IDealCellAdapter(dealCell).markAsFailed(slashPercent);

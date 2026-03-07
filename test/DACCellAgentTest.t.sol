@@ -12,6 +12,7 @@ import "../src/kernel/factories/DACCellFactory.sol";
 import "../src/kernel/factories/DealCellFactory.sol";
 import "../src/kernel/factories/DealManagerFactory.sol";
 import "../src/kernel/DACFactory.sol";
+import "../src/kernel/libraries/MathLib.sol";
 import "../src/interfaces/IDACFactory.sol";
 import "../src/interfaces/Structs.sol";
 import "../src/modules/core/CoreModuleFactory.sol";
@@ -82,7 +83,7 @@ contract DACCellAgentTest is Test {
             name: "DAC exchange",
             description: "future of finance",
             mainTokenMaxSupply: 1_000_000_000e18,
-            defaultQuorum: 50,
+            defaultQuorum: MathLib.atScale(50),
             founder: founder,
             founderAllocation: 200_000_000e18,
             treasuryToken: address(usdc),

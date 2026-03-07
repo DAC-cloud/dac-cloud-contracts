@@ -14,6 +14,7 @@ import {StakedAgent} from "../tokens/StakedAgent.sol";
 import {AbstractDealManagementType} from "../governance/AbstractDealManagementProposals.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
+import {MathLib} from "./MathLib.sol";
 
 interface IDealCellGovernanceAdapter {
     function closeDeal() external;
@@ -383,24 +384,24 @@ library DealCellGovernanceLib {
     ) public returns (uint256 rewardsConvertedPct, uint256 reward) {
         rewardsConvertedPct = rewardsConverted;
         
-        require(rewardsConvertedPct + rewardPercent <= 100, DACErrorsLib.InsufficientRewards());
+        require(rewardsConvertedPct + rewardPercent <= MathLib.SCALE, DACErrorsLib.InsufficientRewards());
 
         deal.onMarkAsSuccess(rewardPercent);
 
-        reward = (_tokenRewardsLimit * rewardPercent) / 100;
+        reward = MathLib.mul(_tokenRewardsLimit, rewardPercent);
 
         uint256 transformAmount = reward; // for event
 
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
-            uint256 holderShare = (token.balanceOf(h) * reward) / token.totalSupply();  // pro-rata on original stake
+            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), reward, token.totalSupply());  // pro-rata on original stake
             claimableRewards[h] = holderShare;
         }
 
         rewardsConvertedPct += rewardPercent;
 
         // if all rewards were paid out, marking the deal as closed so MP tokens can withdraw stakes
-        if (rewardsConvertedPct == 100) {
+        if (rewardsConvertedPct == MathLib.SCALE) {
             IDealCellGovernanceAdapter(self).closeDeal();
         }
 
@@ -415,10 +416,10 @@ library DealCellGovernanceLib {
         IDeal deal,
         address[] storage holders
     ) public {
-        uint256 slashAmount = (token.totalSupply() * slashPercent) / 100;
+        uint256 slashAmount = MathLib.mul(token.totalSupply(), slashPercent);
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
-            uint256 holderSlash = (token.balanceOf(h) * slashPercent) / 100;
+            uint256 holderSlash = MathLib.mul(token.balanceOf(h), slashPercent);
             token.burn(h, holderSlash);
         }
         

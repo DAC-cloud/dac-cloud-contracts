@@ -6,6 +6,7 @@ import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
 import {IDACManagementFactory} from "../../interfaces/IDACManagementFactory.sol";
 import {DACManagementProposalType} from "../DACManagementProposals.sol";
 import {DACManagementProposal} from "../DACManagementProposal.sol";
+import {MathLib} from "../../libraries/MathLib.sol";
 
 contract DACManagementProposalFactory is IDACManagementFactory {
 
@@ -35,10 +36,10 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.REMOVE_MODULE ||
             proposalParams.typ == DACManagementProposalType.TOGGLE_DIVIDENDS
         ) {
-            quorum = totalVotingSupply * votingConfig.highQuorumPercent / 100;
+            quorum = MathLib.mul(totalVotingSupply, votingConfig.highQuorumPercent);
         }
         else {
-            quorum = totalVotingSupply * votingConfig.quorumPercent / 100;
+            quorum = MathLib.mul(totalVotingSupply, votingConfig.quorumPercent);
         }
 
         if (
@@ -50,7 +51,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.ADD_EVALUATOR ||
             proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS
         ) {
-            blockingQuorum = totalVotingSupply * votingConfig.blockingPercent / 100;
+            blockingQuorum = MathLib.mul(totalVotingSupply, votingConfig.blockingPercent);
         }
 
         bytes memory initData = abi.encodeWithSelector(

@@ -11,6 +11,7 @@ import "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import "../src/kernel/factories/DealManagerFactory.sol";
 import "../src/kernel/factories/DealCellFactory.sol";
 import "../src/kernel/DACFactory.sol";
+import "../src/kernel/libraries/MathLib.sol";
 import "../src/interfaces/IDACFactory.sol";
 import "../src/interfaces/Structs.sol";
 import "../src/modules/core/CoreModuleFactory.sol";
@@ -64,7 +65,7 @@ contract DACDeployTest is Test {
             name: "DAC exchange",
             description: "future of finance",
             mainTokenMaxSupply: 1_000_000_000e18,
-            defaultQuorum: 50,
+            defaultQuorum: MathLib.atScale(50),
             founder: user,
             founderAllocation: 200_000_000e18,
             treasuryToken: address(0),

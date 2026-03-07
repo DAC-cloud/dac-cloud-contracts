@@ -7,6 +7,7 @@ import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
 import {IDealManagementProposalFactory} from "../../interfaces/IDealManagementProposalFactory.sol";
 import {AbstractDealManagementType} from "../AbstractDealManagementProposals.sol";
 import {DealManagementProposal} from "../DealManagementProposal.sol";
+import {MathLib} from "../../libraries/MathLib.sol";
 
 abstract contract DealManagementProposalFactory is IDealManagementProposalFactory {
     error ProposalNotSupported();
@@ -55,20 +56,20 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
             ) {
-                quorum = totalSupply * votingConfig.highQuorumPercent / 100;
+                quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
 
                 if (vetoEnabled) {
                     vetoRightOwner = dac;
                 }
             }
             else {
-                quorum = totalSupply * votingConfig.quorumPercent / 100;
+                quorum = MathLib.mul(totalSupply, votingConfig.quorumPercent);
             }
 
             if (
                 params.typ == AbstractDealManagementType.REQUEST_TRANCHE
             ) {
-                blockingQuorum = totalSupply * votingConfig.blockingPercent / 100;
+                blockingQuorum = MathLib.mul(totalSupply, votingConfig.blockingPercent);
 
                 if (vetoEnabled) {
                     vetoRightOwner = dac;
@@ -95,14 +96,14 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             require(!quorumConfig.allowed, ProposalNotSupported());
 
             if (quorumConfig.high) {
-                quorum = totalSupply * votingConfig.highQuorumPercent / 100;
+                quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
             }
             else {
-                quorum = totalSupply * votingConfig.quorumPercent / 100;
+                quorum = MathLib.mul(totalSupply, votingConfig.quorumPercent);
             }
 
             if (quorumConfig.blocking) {
-                blockingQuorum = totalSupply * votingConfig.blockingPercent / 100;
+                blockingQuorum = MathLib.mul(totalSupply, votingConfig.blockingPercent);
             }
             
             if (vetoEnabled) {

@@ -18,6 +18,7 @@ import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 import {DACCellCapitalLib} from "./libraries/DACCellCapitalLib.sol";
+import {MathLib} from "./libraries/MathLib.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
@@ -90,7 +91,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         address managerFactory,
         address coreModule,
         bool _dividendsEnabled,
-        uint256 _quorum
+        uint256 _quorum // 1e18 == MathLib.SCALE == 100%
     ) external {
         require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
         require(!cellStarted, DACErrorsLib.AlreadyInitialized());
@@ -103,8 +104,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
         votingConfig = VotingConfig({   // DEFAULTS — changed via governance later
             quorumPercent: _quorum,
-            highQuorumPercent: (100 + _quorum) / 2,
-            blockingPercent: (100 - _quorum) / 2,
+            highQuorumPercent: (MathLib.SCALE + _quorum) / 2,
+            blockingPercent: (MathLib.SCALE - _quorum) / 2,
             duration: 7 days,
             qualification: 0
         });
