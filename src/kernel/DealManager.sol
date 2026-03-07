@@ -255,6 +255,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder {
         if (
+            //todo: allow maintoken holder to evaluate only after approved deadline
+            //todo: allow only bonded agent to evaluate, not every agent, at any time
             DACCellGovernanceLib.evaluateDeal(
                 dacCell,
                 id,

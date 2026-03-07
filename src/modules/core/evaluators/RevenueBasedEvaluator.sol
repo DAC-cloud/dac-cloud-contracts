@@ -19,14 +19,18 @@ contract RevenueBasedEvaluator is IEvaluator {
     uint256 public immutable dealId;
     address public immutable cell;
 
-    RevenueSchedule public config;
+    struct Config {
+        uint256 rewardShare;            // e.g. MathLib.atScale(70) (70% of total rewards)
+        RevenueSchedule schedule;
+    }
+
+    Config public config;
 
     // Stateful tracking
     uint256 public lastChecked;
     uint256 public unlockedRewards;     // total % unlocked so far (scaled)
     uint256 public returnsSnapshot;
     uint256 public missedCycles;
-    uint256 public updatedDeadline;
 
     constructor(
         address _dac,
@@ -38,12 +42,10 @@ contract RevenueBasedEvaluator is IEvaluator {
         dealId = _dealId;
         cell = _cell;
 
-        config = abi.decode(_configData, (RevenueSchedule));
+        config = abi.decode(_configData, (Config));
 
-        uint256 start = config.evaluationStart == 0 ? block.timestamp : config.evaluationStart;
+        uint256 start = config.schedule.evaluationStart == 0 ? block.timestamp : config.schedule.evaluationStart;
         lastChecked = start;
-
-        updatedDeadline = IDealCell(_cell).dealDeadline();
     }
 
     function permitMint(address, address, uint256) external pure returns (bool permit) {
@@ -67,29 +69,30 @@ contract RevenueBasedEvaluator is IEvaluator {
     function evaluateDeal(uint256, address, address, address) external override returns (EvaluationResult[] memory) {
         uint256 current = block.timestamp;
 
-        uint256 totalCapitalReturned = IDealCell(cell).getReturnedCapital(config.token);
-        uint256 returned = totalCapitalReturned - returnsSnapshot;
-        returnsSnapshot = totalCapitalReturned;
-
         // Align to exact period boundaries (no lost partial cycles)
-        uint256 nextCycleStart = lastChecked + config.duration;
+        uint256 nextCycleStart = lastChecked + config.schedule.duration;
         if (current < nextCycleStart) {
             return new EvaluationResult[](0);
         }
 
         // How many full periods passed
-        uint256 cycles = (current - lastChecked) / config.duration;
+        uint256 cycles = (current - lastChecked) / config.schedule.duration;
         if (cycles == 0) {
             return new EvaluationResult[](0); // nothing to evaluate yet
         }
 
+        // Taking revenue snapshot
+        uint256 totalCapitalReturned = IDealCell(cell).getReturnedCapital(config.schedule.token);
+        uint256 returned = totalCapitalReturned - returnsSnapshot;
+        returnsSnapshot = totalCapitalReturned;
+
         // Calculating revenue target
-        uint256 baseExpectedRevenue = config.revenueProjection;
-        if (config.revenueProjectionMode != 0) {
-            uint256 investedCapital = IDealCell(cell).getInvestedCapital(config.token);
+        uint256 baseExpectedRevenue = config.schedule.revenueProjection;
+        if (config.schedule.revenueProjectionMode != 0) {
+            uint256 investedCapital = IDealCell(cell).getInvestedCapital(config.schedule.token);
             require(investedCapital > 0, RevenueBaseMisconfigured());
 
-            baseExpectedRevenue = investedCapital / config.revenueProjection;
+            baseExpectedRevenue = investedCapital / config.schedule.revenueProjection;
         }
 
         uint256 rewardPercent = 0;
@@ -97,6 +100,11 @@ contract RevenueBasedEvaluator is IEvaluator {
 
         for (uint256 c = 0; c < cycles; c++) {
             // Cycle revenue (cumulative returned divided by a number of cycles for simplicity)
+            //  If multiple cycles passed, we have no reasonable way to retrieve proper figures
+            //  per cycle, even if the targets per cycle are different by curve. So agents are
+            //  advised to evaluate deals each cycle (or try to delay evaluation if there is a
+            //  miss in revenue, therefore it can be in future covered by future cycles).
+            //  DAC main token holders only receives the right to evaluate after deal deadline.
             uint256 cycleRevenue = returned / cycles;
 
             uint256 expected = _evaluateRequirement(c, baseExpectedRevenue);
@@ -110,19 +118,19 @@ contract RevenueBasedEvaluator is IEvaluator {
             int256 curveResult = _evaluatePolynomial(x);
 
             // Reward percent capped by `config.maxCycleUnlockPercent` and deployed
-            // proportional to revenue results with curve applied
+            //  proportional to revenue results with curve applied
 
             rewardPercent += MathLib.mul(
-                config.maxCycleUnlockPercent,
+                config.schedule.maxCycleUnlockPercent,
                 // casting `curveResult` to 'uint256' is safe because `curveResult` is always in [0..1] range
                 // forge-lint: disable-next-line(unsafe-typecast)
-                MathLib.capAt100(uint256(curveResult))
+                uint256(curveResult)
             );
 
             // Check for miss
-            if (progressScaled < MathLib.mul(config.minCycleRevenuePercent, MathLib.SCALE)) {
+            if (progressScaled < MathLib.mul(config.schedule.minCycleRevenuePercent, MathLib.SCALE)) {
                 missedCycles++;
-                if (missedCycles > config.graceCycles) {
+                if (missedCycles > config.schedule.graceCycles) {
                     penalties++; // todo: let's calculate miss also pro-rata, linearly without curve with minCycleRevenuePercent as base
                 }
             } else {
@@ -131,26 +139,30 @@ contract RevenueBasedEvaluator is IEvaluator {
         }
 
         // Next evaluation starts at the end of the last completed cycle
-        lastChecked = lastChecked + cycles * config.duration;
+        lastChecked = lastChecked + cycles * config.schedule.duration;
 
         EvaluationResult[] memory results = new EvaluationResult[](3); // producing max 3 results
         uint256 resultIndex = 0;
 
         // Unlock
-        if (MathLib.capAt100(unlockedRewards + rewardPercent) < unlockedRewards + rewardPercent) {
-            rewardPercent = MathLib.SCALE - unlockedRewards;
-        }
+        if (rewardPercent > 0) {
+            if (unlockedRewards + rewardPercent > config.rewardShare) {
+                rewardPercent = config.rewardShare - unlockedRewards;
+            }
 
-        results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
-        unlockedRewards += rewardPercent;
+            if (rewardPercent > 0) {
+                results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
+                unlockedRewards += rewardPercent;
+            }
+        }
 
         // Slashing
         if (penalties > 0) {
-            results[resultIndex++] = EvaluationResult(0, MathLib.capAt100(config.penaltyPerMiss * penalties), 0);
+            results[resultIndex++] = EvaluationResult(0, MathLib.capAt100(config.schedule.penaltyPerMiss * penalties), 0);
         }
 
         // Auto-close if fully unlocked
-        if (unlockedRewards >= MathLib.SCALE) {
+        if (config.schedule.autoClose && unlockedRewards >= config.rewardShare) {
             results[resultIndex++] = EvaluationResult(3, 0, 0); // close
         }
         
@@ -167,7 +179,7 @@ contract RevenueBasedEvaluator is IEvaluator {
     //////////////////////////////////////////////////////////////*/
 
     function _evaluatePolynomial(int256 x) internal view returns (int256 y) {
-        int256[] memory coeffs = config.curveCoeffs;
+        int256[] memory coeffs = config.schedule.curveCoeffs;
         y = coeffs[coeffs.length - 1];
 
         for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
@@ -185,7 +197,7 @@ contract RevenueBasedEvaluator is IEvaluator {
     function _evaluateRequirement(uint256 cycle, uint256 baseCycleRevenue) internal view returns (uint256) {
         // forge-lint: disable-next-line(unsafe-typecast)
         int256 x = int256(cycle);
-        int256[] memory coeffs = config.requirementCurveCoeffs;
+        int256[] memory coeffs = config.schedule.requirementCurveCoeffs;
         int256 y = coeffs[coeffs.length - 1];
         for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
             // casting `i` to 'uint256' is safe because if `coeffs.lengths <= 1` we're not entering the cycle

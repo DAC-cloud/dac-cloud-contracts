@@ -25,6 +25,9 @@ contract MilestoneBasedEvaluator is IEvaluator {
 
     Config public config;
 
+    // Stateful tracking
+    uint256 public unlockedRewards;
+
     // Per-milestone state
     mapping(uint256 => bool) public evaluated;
     mapping(address => uint256) public snapshotPrice;   // oracle snapshot at creation
@@ -105,8 +108,17 @@ contract MilestoneBasedEvaluator is IEvaluator {
             
             if (progress >= MathLib.SCALE) {
                 // Milestone goal fully reached
-                results[resultIndex++] = EvaluationResult(1, m.rewardPercentage, 0);
+                uint256 rewardPercent = m.rewardPercentage;
 
+                // Rewards still limited by `rewardShare`
+                if (unlockedRewards + rewardPercent > config.rewardShare) {
+                    rewardPercent = config.rewardShare - unlockedRewards;
+                }
+
+                if (rewardPercent > 0) {
+                    results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
+                }
+                
                 if (m.milestoneType == 1) {
                     results[resultIndex++] = EvaluationResult(3, 0, 0);
                 }
@@ -127,6 +139,11 @@ contract MilestoneBasedEvaluator is IEvaluator {
                     // Unlocking partial reward, calculated by the curve
                     //  can be configured to be very low (or even zero)
                     uint256 rewardPercent = evaluateCurve(m.rewardCurve, progress);
+                    if (unlockedRewards + rewardPercent > config.rewardShare) {
+                        // Rewards limited by `rewardShare`
+                        rewardPercent = config.rewardShare - unlockedRewards;
+                    }
+
                     if (rewardPercent > 0) {
                         rewardPercent = MathLib.mul(rewardPercent, m.rewardPercentage);
                         results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);

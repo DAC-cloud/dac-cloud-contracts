@@ -41,4 +41,5 @@ struct RevenueSchedule {
     uint256 graceCycles;                // consecutive misses before slashing starts
     uint256 penaltyPerMiss;             // small penalty % per missed cycle
     uint256 evaluationStart;            // timestamp for starting evaluation, if 0 - starting at deal start
+    bool autoClose;                     // close the deal after full evaluator goal reached
 }
