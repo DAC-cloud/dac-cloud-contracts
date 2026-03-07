@@ -169,7 +169,7 @@ contract TreasuryDeal is Deal {
         }
 
         else {
-            require(false, DACErrorsLib.CapitalWithdrawNotSupported());
+            revert DACErrorsLib.CapitalWithdrawNotSupported();
         }
     }
 

@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IEvaluator} from "../../../interfaces/IEvaluator.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {EvaluationResult} from "../../../interfaces/Structs.sol";
 import {MathLib} from "../../../kernel/libraries/MathLib.sol";
 import {RevenueSchedule} from "../interfaces/Structs.sol";
 
-contract RevenueBasedEvaluator is IEvaluator {
+contract RevenueBasedEvaluator is IEvaluator, Initializable {
 
+    error NotInitialized();
     error RevenueBaseMisconfigured();
 
-    /*//////////////////////////////////////////////////////////////
-                          STATE & IMMUTABLES
-    //////////////////////////////////////////////////////////////*/
+    bool private initialized;
 
-    address public immutable dac;
-    uint256 public immutable dealId;
-    address public immutable cell;
+    address public dac;
+    uint256 public dealId;
+    address public cell;
 
     struct Config {
         uint256 rewardShare;            // e.g. MathLib.atScale(70) (70% of total rewards)
@@ -32,12 +32,18 @@ contract RevenueBasedEvaluator is IEvaluator {
     uint256 public returnsSnapshot;
     uint256 public missedCycles;
 
-    constructor(
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
         address _dac,
         uint256 _dealId,
         address _cell,
         bytes memory _configData
-    ) {
+    ) external initializer {
+        initialized = true;
+
         dac = _dac;
         dealId = _dealId;
         cell = _cell;
@@ -48,7 +54,9 @@ contract RevenueBasedEvaluator is IEvaluator {
         lastChecked = start;
     }
 
-    function permitMint(address, address, uint256) external pure returns (bool permit) {
+    function permitMint(address, address, uint256) external view override returns (bool permit) {
+        require(initialized, NotInitialized());
+
         // Basic evaluator will not do any additional authorization for unlocking LP rewards.
         // However it would be a good practice for external modules to allow such a protection.
 
@@ -67,6 +75,8 @@ contract RevenueBasedEvaluator is IEvaluator {
     //////////////////////////////////////////////////////////////*/
 
     function evaluateDeal(uint256, address, address, address) external override returns (EvaluationResult[] memory) {
+        require(initialized, NotInitialized());
+
         uint256 current = block.timestamp;
 
         // Align to exact period boundaries (no lost partial cycles)

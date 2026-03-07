@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../src/kernel/libraries/MathLib.sol";
 import "../src/kernel/DACCell.sol";
 import "../src/kernel/tokens/MainToken.sol";
 import "../src/kernel/tokens/AgentToken.sol";
@@ -15,9 +16,11 @@ import "../src/kernel/Deal.sol";
 import "../src/interfaces/IDACFactory.sol";
 import "../src/interfaces/Structs.sol";
 import "../src/modules/core/CoreModuleFactory.sol";
-import "../src/modules/core/factories/DACDealFactory.sol";
-import "../src/modules/core/factories/TreasuryDealFactory.sol";
-import "../src/modules/core/factories/BasicEvaluatorFactory.sol";
+import "../src/modules/core/deals/factories/DACDealFactory.sol";
+import "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
+import "../src/modules/core/evaluators/MilestoneBasedEvaluator.sol";
+import "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
+import "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 import "../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
 import "../src/modules/core/interfaces/Structs.sol";
 import "../src/modules/core/deals/DACDeal.sol";
@@ -65,7 +68,8 @@ contract DACCellDealTest is Test {
             address(new DACDealFactory()),
             address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
-            address(new BasicEvaluatorFactory())
+            address(new MilestoneEvaluatorFactory()),
+            address(new RevenueEvaluatorFactory())
         );
         
         governanceFactory = new DACManagementProposalFactory();
@@ -174,6 +178,8 @@ contract DACCellDealTest is Test {
         milestones[0].rewardCurve[0] = 1e18;
         milestones[0].penaltyCurve[0] = 1e18;
 
+        MilestoneBasedEvaluator.Config memory evaluatorCfg = MilestoneBasedEvaluator.Config(MathLib.atScale(100), milestones);
+
         DealParams memory params = DealParams({
             dealKind: CoreDealType.PERMIT2_TREASURY,
             name: "Test Treasury Deal",
@@ -189,9 +195,9 @@ contract DACCellDealTest is Test {
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
             dealDeadline: block.timestamp + 30 days,
-            evaluatorSelector: CoreEvaluatorType.BASIC_REVENUE_MILESTONES,
+            evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode("deal config"),
-            evaluatorConfig: abi.encode(milestones)
+            evaluatorConfig: abi.encode(evaluatorCfg)
         });
 
         (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);
@@ -204,7 +210,6 @@ contract DACCellDealTest is Test {
 
         // dac.executeDACProposal(propId);
 
-        
         // assertEq(agentToken.balanceOf(agent), 50_000, "Incorrect agent token balance after revoke");
     }
 
@@ -228,6 +233,8 @@ contract DACCellDealTest is Test {
         });
         milestones[0].rewardCurve[0] = 1e18;
         milestones[0].penaltyCurve[0] = 1e18;
+
+        MilestoneBasedEvaluator.Config memory evaluatorCfg = MilestoneBasedEvaluator.Config(MathLib.atScale(100), milestones);
 
         DACConfig memory childDACConfig = DACConfig({
             symbol: "DAC-L2",
@@ -265,9 +272,9 @@ contract DACCellDealTest is Test {
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
             dealDeadline: block.timestamp + 30 days,
-            evaluatorSelector: CoreEvaluatorType.BASIC_REVENUE_MILESTONES,
+            evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode(dacDealConfig),
-            evaluatorConfig: abi.encode(milestones)
+            evaluatorConfig: abi.encode(evaluatorCfg)
         });
 
         (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);
@@ -302,6 +309,8 @@ contract DACCellDealTest is Test {
         });
         milestones[0].rewardCurve[0] = 1e18;
         milestones[0].penaltyCurve[0] = 1e18;
+
+        MilestoneBasedEvaluator.Config memory evaluatorCfg = MilestoneBasedEvaluator.Config(MathLib.atScale(100), milestones);
 
         DACConfig memory childDACConfig = DACConfig({
             symbol: "DAC-L2",
@@ -339,9 +348,9 @@ contract DACCellDealTest is Test {
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
             dealDeadline: block.timestamp + 30 days,
-            evaluatorSelector: CoreEvaluatorType.BASIC_REVENUE_MILESTONES,
+            evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode(dacDealConfig),
-            evaluatorConfig: abi.encode(milestones)
+            evaluatorConfig: abi.encode(evaluatorCfg)
         });
 
         (uint256 dealId, address dealCell, address deal, address evaluator) = IDealManager(dac.getDealManager()).createDealProposal(params);

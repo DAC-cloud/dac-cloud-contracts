@@ -13,7 +13,8 @@ contract CoreModuleFactory is ModuleFactory {
     address public treasuryDealFactory;
 
     // Evaluators
-    address public basicEvaluatorFactory;
+    address public milestoneEvaluatorFactory;
+    address public revenueEvaluatorFactory;
 
     error DealKindNotSupported(bytes4 dealKind);
     error EvaluatorKindNotSupported(bytes4 dealKind);
@@ -23,11 +24,13 @@ contract CoreModuleFactory is ModuleFactory {
         address _dacDealFactory,
         address _stakedAgentTokenFactory,
         address _treasuryDealFactory,
-        address _basicEvaluatorFactory
+        address _milestoneEvaluatorFactory,
+        address _revenueEvaluatorFactory
     ) ModuleFactory(_dealCellFactory, _stakedAgentTokenFactory) {
         dacDealFactory = _dacDealFactory;
         treasuryDealFactory = _treasuryDealFactory;
-        basicEvaluatorFactory = _basicEvaluatorFactory;
+        milestoneEvaluatorFactory = _milestoneEvaluatorFactory;
+        revenueEvaluatorFactory = _revenueEvaluatorFactory;
     }
 
     function isActive() external pure returns (bool) { return true; }
@@ -43,17 +46,21 @@ contract CoreModuleFactory is ModuleFactory {
         }
 
         else {
-            require(false, DealKindNotSupported(dealKind));
+            revert DealKindNotSupported(dealKind);
         }
     }
 
     function getEvaluatorFactory(bytes4, bytes4 evaluatorSelector) internal view override returns (IEvaluatorFactory factory) {
-        if (evaluatorSelector == CoreEvaluatorType.BASIC_REVENUE_MILESTONES) {
-            factory = IEvaluatorFactory(basicEvaluatorFactory);
+        if (evaluatorSelector == CoreEvaluatorType.MILESTONES_EVALUATOR) {
+            factory = IEvaluatorFactory(milestoneEvaluatorFactory);
         }
         
+        else if (evaluatorSelector == CoreEvaluatorType.REVENUE_EVALUATOR) {
+            factory = IEvaluatorFactory(revenueEvaluatorFactory);
+        }
+
         else {
-            require(false, EvaluatorKindNotSupported(evaluatorSelector));
+            revert EvaluatorKindNotSupported(evaluatorSelector);
         }
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IEvaluator} from "../../../interfaces/IEvaluator.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
@@ -9,14 +10,17 @@ import {MathLib} from "../../../kernel/libraries/MathLib.sol";
 import {Milestone} from "../interfaces/Structs.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 
-contract MilestoneBasedEvaluator is IEvaluator {
+contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
+    error NotInitialized();
     error OracleNotSet();
     error InvalidValuationMode();
 
-    address public immutable dac;
-    uint256 public immutable dealId;
-    address public immutable cell;
+    bool private initialized;
+
+    address public dac;
+    uint256 public dealId;
+    address public cell;
 
     struct Config {
         uint256 rewardShare;                            // e.g. MathLib.atScale(70) (70% of total rewards)
@@ -32,12 +36,18 @@ contract MilestoneBasedEvaluator is IEvaluator {
     mapping(uint256 => bool) public evaluated;
     mapping(address => uint256) public snapshotPrice;   // oracle snapshot at creation
 
-    constructor(
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
         address _dac,
         uint256 _dealId,
         address _cell,
         bytes memory _configData
-    ) {
+    ) external initializer {
+        initialized = true;
+
         dac = _dac;
         dealId = _dealId;
         cell = _cell;
@@ -75,7 +85,9 @@ contract MilestoneBasedEvaluator is IEvaluator {
         }
     }
 
-    function permitMint(address, address, uint256) external pure returns (bool permit) {
+    function permitMint(address, address, uint256) external view override returns (bool permit) {
+        require(initialized, NotInitialized());
+
         // Basic evaluator will not do any additional authorization for unlocking LP rewards.
         // However it would be a good practice for external modules to allow such a protection.
 
@@ -94,6 +106,8 @@ contract MilestoneBasedEvaluator is IEvaluator {
     //////////////////////////////////////////////////////////////*/
 
     function evaluateDeal(uint256, address, address, address) external override returns (EvaluationResult[] memory) {
+        require(initialized, NotInitialized());
+
         EvaluationResult[] memory results = new EvaluationResult[](config.milestones.length * 3 + 1);
         uint256 resultIndex = 0;
 

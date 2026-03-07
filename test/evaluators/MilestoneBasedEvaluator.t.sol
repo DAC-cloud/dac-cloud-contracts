@@ -3,7 +3,9 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../../src/modules/core/CoreModuleDeals.sol";
 import "../../src/modules/core/evaluators/MilestoneBasedEvaluator.sol";
+import "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import "../../src/interfaces/IDealCell.sol";
 import "../../src/kernel/libraries/MathLib.sol";
 import "../../src/modules/core/interfaces/Structs.sol";
@@ -71,8 +73,32 @@ contract MilestoneBasedEvaluatorTest is Test {
     }
 
     function deployEvaluator(MilestoneBasedEvaluator.Config memory cfg) internal {
+        MilestoneEvaluatorFactory factory = new MilestoneEvaluatorFactory();
         bytes memory configData = abi.encode(cfg);
-        evaluator = new MilestoneBasedEvaluator(DAC, DEAL_ID, address(mockDealCell), configData);
+
+        DealParams memory dealParams = DealParams({
+            dealKind: CoreDealType.PERMIT2_TREASURY,
+            name: "Test Treasury Deal",
+            description: "Test Treasury Deal description",
+            linkHash: "0x00112233",
+            moduleFactory: address(0),
+            governanceFactory: address(0),
+            dealTarget: address(0),
+            proposer: address(0),
+            vetoEnabled: false,
+            fundingToken: address(usdc),
+            fundingAmount: 10_000,
+            rewardsLimit: 500e6,
+            approveDeadline: block.timestamp + 1 days,
+            dealDeadline: block.timestamp + 30 days,
+            evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
+            dealConfig: abi.encode("deal config"),
+            evaluatorConfig: configData
+        });
+
+        evaluator = MilestoneBasedEvaluator(
+            factory.deployEvaluator(DAC, DEAL_ID, address(mockDealCell), dealParams, configData)
+        );
     }
 
     /*//////////////////////////////////////////////////////////////

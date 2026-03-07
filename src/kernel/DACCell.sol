@@ -154,7 +154,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
     function recoverTreasury(address token) external nonReentrant onlyHolderOrManager {
         return DACCellCapitalLib.recoverTreasury(
-            token, treasuryBalances
+            token, 
+            votingConfig,
+            mainToken,
+            treasuryBalances
         );
     }
 

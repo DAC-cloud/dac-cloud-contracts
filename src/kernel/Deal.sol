@@ -267,7 +267,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
 
     function _executeModuleManagementProposal(DealManagementProposal) internal virtual {
         // Children override this to handle their specific proposals
-        require(false, DACErrorsLib.ProposalNotSupported());
+        revert DACErrorsLib.ProposalNotSupported();
     }
 
     function _onMessageDeal(bytes4, bytes calldata) internal virtual returns (bool) { return true; }

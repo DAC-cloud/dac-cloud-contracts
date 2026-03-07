@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {UUPSProxy} from "../../../kernel/proxies/UUPSProxy.sol";
-import {DealParams} from "../../../interfaces/Structs.sol";
-import {IDealFactory} from "../../../interfaces/modules/IDealFactory.sol";
-import {TreasuryDeal} from "../deals/TreasuryDeal.sol";
-import {Permit2TreasuryFactory} from "../deals/Permit2Treasury.sol";
+import {UUPSProxy} from "../../../../kernel/proxies/UUPSProxy.sol";
+import {DealParams} from "../../../../interfaces/Structs.sol";
+import {IDealFactory} from "../../../../interfaces/modules/IDealFactory.sol";
+import {TreasuryDeal} from "../TreasuryDeal.sol";
+import {Permit2TreasuryFactory} from "../Permit2Treasury.sol";
 
 contract TreasuryDealFactory is IDealFactory {
     address public immutable permit2VaultFactory;

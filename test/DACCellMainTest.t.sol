@@ -14,9 +14,10 @@ import "../src/kernel/DACFactory.sol";
 import "../src/interfaces/IDACFactory.sol";
 import "../src/interfaces/Structs.sol";
 import "../src/modules/core/CoreModuleFactory.sol";
-import "../src/modules/core/factories/DACDealFactory.sol";
-import "../src/modules/core/factories/TreasuryDealFactory.sol";
-import "../src/modules/core/factories/BasicEvaluatorFactory.sol";
+import "../src/modules/core/deals/factories/DACDealFactory.sol";
+import "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
+import "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
+import "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 
 contract MockUSDC is ERC20 {
     constructor() ERC20("Crypto Dollars", "USDC") {}
@@ -54,7 +55,8 @@ contract DACCellMainTest is Test {
             address(new DACDealFactory()),
             address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
-            address(new BasicEvaluatorFactory())
+            address(new MilestoneEvaluatorFactory()),
+            address(new RevenueEvaluatorFactory())
         );
         
         governanceFactory = new DACManagementProposalFactory();

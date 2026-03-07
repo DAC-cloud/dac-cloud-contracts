@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {CapitalCall, Tranche} from "../../interfaces/Structs.sol";
+import {CapitalCall, Tranche, VotingConfig} from "../../interfaces/Structs.sol";
 import {CapitalCallState} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "../tokens/MainToken.sol";
@@ -59,8 +59,15 @@ library DACCellCapitalLib {
 
     function recoverTreasury(
         address token,
+        VotingConfig storage votingConfig,
+        MainToken mainToken,
         mapping(address => uint256) storage treasuryBalances
     ) public {
+        require(
+            mainToken.balanceOf(msg.sender) > votingConfig.qualification,
+            DACErrorsLib.InsufficientBalance()
+        );
+
         if (IERC20(token).balanceOf(address(this)) > treasuryBalances[token]) {
             emit DACEventsLib.TreasuryDeposit(token, IERC20(token).balanceOf(address(this)) - treasuryBalances[token], msg.sender);
             treasuryBalances[token] = IERC20(token).balanceOf(address(this));

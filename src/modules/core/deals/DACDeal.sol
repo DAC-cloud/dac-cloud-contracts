@@ -253,7 +253,7 @@ contract DACDeal is Deal {
         }
 
         else {
-            require(false, DACErrorsLib.UnsupportedProposal());
+            revert DACErrorsLib.UnsupportedProposal();
         }
     }
 

@@ -3,12 +3,12 @@ pragma solidity ^0.8.20;
 
 interface ICoreDeals {
     function createDACDeal() external pure returns (bytes4);
-
     function createPermit2TreasuryDeal() external pure returns (bytes4);
 }
 
 interface ICoreEvaluators {
-    function createBasicEvaluator() external pure returns (bytes4);
+    function createMilestoneEvaluator() external pure returns (bytes4);
+    function createRevenueEvaluator() external pure returns (bytes4);
 }
 
 library CoreDealType {
@@ -17,5 +17,6 @@ library CoreDealType {
 }
 
 library CoreEvaluatorType {
-    bytes4 public constant BASIC_REVENUE_MILESTONES = ICoreEvaluators.createBasicEvaluator.selector;
+    bytes4 public constant MILESTONES_EVALUATOR = ICoreEvaluators.createMilestoneEvaluator.selector;
+    bytes4 public constant REVENUE_EVALUATOR    = ICoreEvaluators.createRevenueEvaluator.selector;
 }

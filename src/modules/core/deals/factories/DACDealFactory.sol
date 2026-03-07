@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {UUPSProxy} from "../../../kernel/proxies/UUPSProxy.sol";
-import {DealParams} from "../../../interfaces/Structs.sol";
-import {IDealFactory} from "../../../interfaces/modules/IDealFactory.sol";
-import {DACDeal} from "../deals/DACDeal.sol";
+import {UUPSProxy} from "../../../../kernel/proxies/UUPSProxy.sol";
+import {DealParams} from "../../../../interfaces/Structs.sol";
+import {IDealFactory} from "../../../../interfaces/modules/IDealFactory.sol";
+import {DACDeal} from "../DACDeal.sol";
 
 contract DACDealFactory is IDealFactory {
     
