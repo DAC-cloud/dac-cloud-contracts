@@ -6,6 +6,7 @@ import {IDACFactory} from "../interfaces/IDACFactory.sol";
 import {DACCellFactory} from "./factories/DACCellFactory.sol";
 import {DACCell} from "./DACCell.sol";
 import {DACDeployment} from "./libraries/DACDeployment.sol";
+import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 import {MainTokenFactory, AgentTokenFactory} from "./tokens/factories/TokenFactories.sol";
 
 contract DACFactory is IDACFactory {
@@ -22,8 +23,6 @@ contract DACFactory is IDACFactory {
     address public coreModuleFactory;
     
     mapping(bytes32 => bytes32) private sleepingCells;
-
-    event DACDeployed(address indexed dac, address mainToken, address agentToken, bool init);
 
     constructor(
         address _mainTokenFactory,
@@ -106,7 +105,7 @@ contract DACFactory is IDACFactory {
             sleepingCells[deferInitCell] = deferInitCalldata;
         }
 
-        emit DACDeployed(dacAddr, mainAddr, agentAddr, (deferBirthRole == address(0)));
+        emit DACEventsLib.DACDeployed(dacAddr, mainAddr, agentAddr, (deferBirthRole == address(0)));
     }
 
     function startDAC(

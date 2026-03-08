@@ -119,6 +119,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
         mainToken.dacInit(dealManager);
         agentToken.dacInit(dealManager);
+
+        emit DACEventsLib.DACStarted(
+            dealManager,
+            votingConfig,
+            dividendsEnabled,
+            coreModule
+        );
     }
 
     function initializeRootCapitalCall(

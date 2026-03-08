@@ -8,12 +8,18 @@ library DACErrorsLib {
     error NotInitialized();
     error AlreadyInitialized();
 
+    error NotFound();
+
+    error InvalidVotingConfig();
+
+    error NoVotingPower();
     error VoteNotPassed();
 
     error ProposalAlreadyExecuted();
-    error InvalidDeal(address deal);
-    error InvalidDealId(uint256 deal);
+
     error TransferFailed();
+    error InsufficientBalance();
+    error NotEnoughBalance();
 
     error InvalidCapitalCall();
     error AlreadyFulfilled();
@@ -21,36 +27,27 @@ library DACErrorsLib {
     error LegalWrapperNotSet();
     error LegalWrapperExecutionExpected();
 
+    error ModuleNotApproved();
+    error ModuleDisabled();
 
-    
-    error NoVotingPower();
+    error InvalidDeal(address deal);
+    error InvalidDealId(uint256 deal);
 
     error InvalidDealState(address deal);
     error InvalidTranche();
     error InsufficientTreasury();
-    
-    
-    error NotFound();
-
-    error InsufficientBalance();
-
-    
+        
     error NoStake();
 
     error InsufficientRewards();
 
     error MintBlockedByEvaluator();
 
-    error InvalidVotingConfig();
-
     error DividendsNotEnabled();
     error DividendAlreadyClaimed(uint256 id, address claimer);
     error InvalidMerkleProof();
 
     error DealNotRecoverable();
-
-    error ModuleNotApproved();
-    error ModuleDisabled();
 
     error DeadlineNotPassed();
     error DealAlreadyApproved();
@@ -61,9 +58,7 @@ library DACErrorsLib {
     error DealIsClosed();
     error DealIsNotClosed();
     error DealInLiquidation();
-    
-    error NotEnoughBalance();
-    
+        
     error ProposalNotSupported();
     error InvalidProposal();
     error AlreadyExecuted();

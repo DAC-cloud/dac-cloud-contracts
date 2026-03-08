@@ -172,6 +172,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         }
         
         DACCellGovernanceLib.executeTrancheApprove(
+            dacCell,
             id,
             trancheId,
             rewardsLimit,

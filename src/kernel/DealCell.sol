@@ -174,7 +174,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig
     ) external onlyDealManager {
-        emit DACEventsLib.DealInitialized(dacCell, id, params);
+        emit DACEventsLib.DealInitialized(dacCell, id, address(deal), params);
 
         deal.afterInitialize(params, defaultVotingConfig);
     }
@@ -225,7 +225,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         if (!approved) {
             approved = true;
         
-            emit DACEventsLib.DealActivated(dacCell, id, token.totalSupply());
+            emit DACEventsLib.DealActivated(dacCell, id, address(deal), token.totalSupply());
         }
 
         deal.afterApproveFunding(trancheId);
@@ -249,40 +249,14 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function unstake() external nonReentrant {
-        // allow to unstake if the deal is closed
-        if (!closed) {
-            if (!approved) {
-                // if deadline passed, allowing to unstake
-                require(block.timestamp > _approveDeadline, DACErrorsLib.DeadlineNotPassed());
-            }
-            else {
-                require(token.balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
-
-                require(token.totalSupply() > token.balanceOf(msg.sender), DACErrorsLib.NotAllowed());
-
-                // Deal is approved, creating a proposal so agents can agree on allowing
-                // agent to leave the deal
-
-                deal.createStakedAgentProposal(ProposalParams({
-                    typ: AbstractDealManagementType.PERMIT_UNSTAKE,
-                    target: msg.sender,
-                    i: bytes32(token.balanceOf(msg.sender)),
-                    data: abi.encode(0)
-                }));
-
-                return;
-            }
-        }
-        else {
-            // if the recovery is on, no more unstakes
-            require(!recovery, DACErrorsLib.DealInLiquidation());
-        }
-        
-        DealCellGovernanceLib.unstake(
+        DealCellGovernanceLib.unstakeAgent(
             dacCell,
             id,
             deal,
-            msg.sender,
+            closed,
+            approved,
+            recovery,
+            _approveDeadline,
             agentTokenAddr,
             token
         );
@@ -349,7 +323,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         _dealDeadline = newDeadline;
         
-        emit DACEventsLib.DeadlineExtended(dacCell, id, newDeadline);
+        emit DACEventsLib.DeadlineExtended(dacCell, id, address(deal), newDeadline);
     }
 
     function closeDeal() external {
@@ -360,7 +334,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         closed = true;
         
-        emit DACEventsLib.DealClosed(dacCell, id, token.totalSupply());
+        emit DACEventsLib.DealClosed(dacCell, id, address(deal), token.totalSupply());
     }
 
     function recoverDeal(address liquidator, uint256 liquidatorStake) external onlyDealManager {
@@ -372,7 +346,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         stake(liquidator, liquidatorStake);
         
-        emit DACEventsLib.DealRecovered(dacCell, id, liquidator);
+        emit DACEventsLib.DealRecovered(dacCell, id, address(deal), liquidator);
 
         deal.afterRecovery(liquidator, liquidatorStake);
     }

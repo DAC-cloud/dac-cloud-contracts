@@ -50,7 +50,7 @@ library DealCellGovernanceLib {
         
         token.mint(staker, amount);
         
-        emit DACEventsLib.AgentTokensStaked(dacCell, id, staker, amount);
+        emit DACEventsLib.AgentTokensStaked(dacCell, id, address(deal), staker, amount);
 
         deal.afterEveryStake(staker, amount);
     }
@@ -79,7 +79,7 @@ library DealCellGovernanceLib {
         
         token.mint(staker, amount);
         
-        emit DACEventsLib.AgentTokensStaked(dacCell, id, staker, amount);
+        emit DACEventsLib.AgentTokensStaked(dacCell, id, address(deal), staker, amount);
 
         deal.afterEveryStake(staker, amount);
     }
@@ -100,9 +100,59 @@ library DealCellGovernanceLib {
 
         require(AgentToken(agentTokenAddr).transfer(agent, agentStake), DACErrorsLib.TransferFailed());
 
-        emit DACEventsLib.AgentTokensReleased(dacCell, id, agent, agentStake);
+        emit DACEventsLib.AgentTokensReleased(dacCell, id, address(deal), agent, agentStake);
 
         deal.onUnstake(agent, agentStake);
+    }
+
+    function unstakeAgent(
+        address dacCell,
+        uint256 id,
+        IDeal deal,
+        bool closed,
+        bool approved,
+        bool recovery,
+        uint256 approveDeadline,
+        address agentTokenAddr,
+        StakedAgent token
+    ) public {
+        // allow to unstake if the deal is closed
+        if (!closed) {
+            if (!approved) {
+                // if deadline passed, allowing to unstake
+                require(block.timestamp > approveDeadline, DACErrorsLib.DeadlineNotPassed());
+            }
+            else {
+                require(token.balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
+
+                require(token.totalSupply() > token.balanceOf(msg.sender), DACErrorsLib.NotAllowed());
+
+                // Deal is approved, creating a proposal so agents can agree on allowing
+                // agent to leave the deal
+
+                deal.createStakedAgentProposal(ProposalParams({
+                    typ: AbstractDealManagementType.PERMIT_UNSTAKE,
+                    target: msg.sender,
+                    i: bytes32(token.balanceOf(msg.sender)),
+                    data: abi.encode(0)
+                }));
+
+                return;
+            }
+        }
+        else {
+            // if the recovery is on, no more unstakes
+            require(!recovery, DACErrorsLib.DealInLiquidation());
+        }
+        
+        unstake(
+            dacCell,
+            id,
+            deal,
+            msg.sender,
+            agentTokenAddr,
+            token
+        );
     }
 
     function checkStakedAgentProposal(
@@ -198,7 +248,7 @@ library DealCellGovernanceLib {
         proposals[id] = prop;
 
         emit DACEventsLib.DealManagementProposalCreated(
-            dealCell, id, params.typ, params.target, params.i, params.data
+            dealCell, prop, id, params.typ, params.target, params.i, params.data
         );
     }
 
@@ -276,7 +326,7 @@ library DealCellGovernanceLib {
             IDACCellAdapter(dacCell).getDealManager()
         ).mintMain(address(this), evaluatorId, msg.sender, amount);
         
-        emit DACEventsLib.RewardsClaimed(dacCell, msg.sender, amount);
+        emit DACEventsLib.RewardsClaimed(dacCell, msg.sender, address(deal), amount);
 
         deal.afterClaimMainToken(msg.sender, amount);
     }
@@ -298,6 +348,7 @@ library DealCellGovernanceLib {
 
     function transferCapital(
         uint256 id,
+        address deal,
         address _token,
         uint256 amount,
         address dacCell,
@@ -308,7 +359,7 @@ library DealCellGovernanceLib {
         IDACCellAdapter(dacCell).depositTreasury(_token, amount);
         returnedCapital[_token] += amount;
         
-        emit DACEventsLib.CapitalReturned(dacCell, id, _token, amount);
+        emit DACEventsLib.CapitalReturned(dacCell, id, address(deal), _token, amount);
     }
 
     function transferCapitalFromDeal(
@@ -324,7 +375,7 @@ library DealCellGovernanceLib {
             DACErrorsLib.TransferFailed()
         );
 
-        transferCapital(id, _token, amount, dacCell, returnedCapital);
+        transferCapital(id, deal, _token, amount, dacCell, returnedCapital);
     }
 
     function withdrawCapital(
@@ -364,7 +415,7 @@ library DealCellGovernanceLib {
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;
 
-            transferCapital(id, _fundingToken, balance, dacCell, returnedCapital);
+            transferCapital(id, address(deal), _fundingToken, balance, dacCell, returnedCapital);
         }
 
         deal.afterWithdrawCapital();
@@ -405,7 +456,7 @@ library DealCellGovernanceLib {
             IDealCellGovernanceAdapter(self).closeDeal();
         }
 
-        emit DACEventsLib.RewardsAllocated(dacCell, id, transformAmount);
+        emit DACEventsLib.RewardsAllocated(dacCell, id, address(deal), transformAmount);
     }
 
     function markAsFailed(
@@ -423,7 +474,7 @@ library DealCellGovernanceLib {
             token.burn(h, holderSlash);
         }
         
-        emit DACEventsLib.StakesSlashed(dacCell, id, slashAmount);
+        emit DACEventsLib.StakesSlashed(dacCell, id, address(deal), slashAmount);
 
         deal.onMarkAsFailed(slashPercent);
     }

@@ -118,10 +118,11 @@ library DACCellGovernanceLib {
 
         uint256 votingId = IDACGovernanceAdapter(dacCell).createManagementProposal(trancheProposal);
 
-        emit DACEventsLib.TrancheCreated(dealId, trancheId, votingId);
+        emit DACEventsLib.TrancheCreated(dacCell, dealId, trancheId, votingId);
     }
 
     function executeTrancheApprove(
+        address dacCell,
         uint256 dealId,
         uint256 trancheId,
         uint256 rewardsLimit,
@@ -144,7 +145,7 @@ library DACCellGovernanceLib {
 
         IDealCellAdapter(dealCell).approveFunding(trancheId);
         
-        emit DACEventsLib.FundingApproved(dealId, trancheId, rewardsLimit);
+        emit DACEventsLib.FundingApproved(dacCell, dealId, trancheId, rewardsLimit);
     }
 
     function approveFunding(
@@ -278,7 +279,7 @@ library DACCellGovernanceLib {
 
         proposals[id] = prop;
 
-        emit DACEventsLib.DACProposalCreated(id, params.typ, params.target, params.i, params.data);
+        emit DACEventsLib.DACProposalCreated(id, prop, params.typ, params.target, params.i, params.data);
 
         return id;
     }
