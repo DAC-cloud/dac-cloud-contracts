@@ -27,7 +27,7 @@ library DACEventsLib {
         bytes data2
     );
     
-    event DACProposalExecuted(uint256 indexed id, bytes4 indexed typ);
+    event DACProposalExecuted(address indexed prop, uint256 indexed id, bytes4 indexed typ);
 
     event TokenMinted(uint256 indexed id, uint256 amount);
     event TokenBurnt(uint256 indexed id, uint256 amount);
@@ -80,7 +80,8 @@ library DACEventsLib {
 
     event DealEvaluated(
         address indexed dac, 
-        uint256 indexed id, 
+        uint256 indexed id,
+        address evaluator,
         EvaluationResult[] evaluations
     );
 
@@ -89,8 +90,20 @@ library DACEventsLib {
 
     // Proposal events
 
+    event ProposalCreated(
+        address indexed token, 
+        uint256 totalPower, 
+        uint256 quorum, 
+        uint256 blockingQuorum, 
+        uint256 snapshotTime,
+        uint256 endTime,
+        bool vetoRight
+    );
+
     event Voted(address indexed voter, bool support, uint256 weight);
     event VetoCasted();
+
+    event ProposalResolved(uint256 yesVotes, uint256 noVotes, bool passed, bool vetoed);
 
     // Events emited by abstract Deal contract
     
@@ -144,7 +157,17 @@ library DACEventsLib {
 
     event TrancheRequested(
         address indexed dac, 
-        uint256 indexed id, 
+        uint256 indexed id,
+        address indexed deal,
+        uint256 tranche, 
+        address token, 
+        uint256 amount
+    );
+
+    event TrancheSettled(
+        address indexed dac, 
+        uint256 indexed id,
+        address indexed deal,
         uint256 tranche, 
         address token, 
         uint256 amount

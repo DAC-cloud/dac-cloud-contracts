@@ -320,7 +320,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             IDealManagerAdapter(dealManager).executeProp(msg.sender, prop);
         }
 
-        emit DACEventsLib.DACProposalExecuted(id, typ);
+        emit DACEventsLib.DACProposalExecuted(address(prop), id, typ);
     }
 
     function getVotingConfig() external view returns (VotingConfig memory config) {
@@ -426,7 +426,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         require(legalWrapper.wrapperAddr == msg.sender, DACErrorsLib.LegalWrapperExecutionExpected());
     }
 
-    function _onlyAfterVote(uint256 id, bool requiredOutcome) internal view {
+    function _onlyAfterVote(uint256 id, bool requiredOutcome) internal {
         require(
             IVoting(proposals[id]).isResolved() &&
             IVoting(proposals[id]).outcome() == requiredOutcome,

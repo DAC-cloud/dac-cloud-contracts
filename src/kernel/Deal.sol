@@ -312,7 +312,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
     }
     
-    function _onlyAfterStakedAgentVote(uint256 proposalId) internal view {
+    function _onlyAfterStakedAgentVote(uint256 proposalId) internal {
         require(
             IVoting(proposals[proposalId]).isResolved() &&
             IVoting(proposals[proposalId]).outcome(),

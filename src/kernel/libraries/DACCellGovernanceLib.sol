@@ -384,7 +384,7 @@ library DACCellGovernanceLib {
             }
         }
         
-        emit DACEventsLib.DealEvaluated(dacCell, id, evaluations);
+        emit DACEventsLib.DealEvaluated(dacCell, id, evaluatorAddr, evaluations);
     }
 
     function permitEvaluatorAdd(

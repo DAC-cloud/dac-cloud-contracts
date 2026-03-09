@@ -34,6 +34,9 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
     uint256 public noVotes;
     mapping(address => bool) public voted;
 
+    // Resolution state
+    bool private proposalResolved;
+    bool private resolvedOutcome;
     bool public vetoCasted;
 
     // Proposal
@@ -68,6 +71,16 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
             vetoRight = true;
             vetoRightOwner = _vetoRightOwner;
         }
+
+        emit DACEventsLib.ProposalCreated(
+            token,
+            totalVotingPower,
+            quorum,
+            blockingQuorum,
+            snapshotTime,
+            endTime,
+            vetoRight
+        );
     }
 
     // ERC-6372 Clock with timestamp mode
@@ -99,6 +112,8 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
         voted[msg.sender] = true;
         
         emit DACEventsLib.Voted(msg.sender, support, weight);
+
+        _checkAndEmitResolution();
     }
 
     function castVeto() external {
@@ -108,14 +123,19 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
         vetoCasted = true;
 
         emit DACEventsLib.VetoCasted();
+
+        _checkAndEmitResolution();
     }
 
-    function isResolved() external view returns (bool resolved) { 
+    function _checkAndEmitResolution() private {
+        if (proposalResolved) return;
+
         // if veto possible - then proposal only becomes resolved after the end date, and not early
 
         // if blocking quorum set - not resolved unless yes overtook blocking quorum already
 
-        resolved = (
+        bool nowResolved = (
+            (vetoCasted) ||
             (
                 (yesVotes >= quorum) && 
                 ((blockingQuorum == 0) || (yesVotes >= (totalVotingPower - blockingQuorum))) &&
@@ -124,9 +144,38 @@ abstract contract Proposal is IVoting, IClock, ReentrancyGuard, Initializable {
             ((blockingQuorum > 0) && (noVotes >= blockingQuorum)) ||
             (clock() > endTime)
         );
+
+        if (nowResolved) {
+            proposalResolved = true;
+
+            resolvedOutcome = _outcome();
+
+            emit DACEventsLib.ProposalResolved(
+                yesVotes,
+                noVotes,
+                resolvedOutcome,
+                vetoCasted
+            );
+        }
     }
 
-    function outcome() external view returns (bool) {
+    function isResolved() external returns (bool resolved) {
+        _checkAndEmitResolution();
+
+        resolved = proposalResolved;
+    }
+
+    function outcome() external returns (bool) {
+        _checkAndEmitResolution();
+
+        if (proposalResolved) {
+            return resolvedOutcome;
+        }
+
+        return _outcome();
+    }
+
+    function _outcome() private view returns (bool) {
         if (vetoCasted) return false;
 
         if (vetoRight) {

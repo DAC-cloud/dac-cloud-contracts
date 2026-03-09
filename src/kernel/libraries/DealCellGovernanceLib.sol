@@ -253,6 +253,8 @@ library DealCellGovernanceLib {
     }
 
     function approveFunding(
+        address dacCell,
+        uint256 dealId,
         uint256 trancheId,
         bool approved,
         uint256 _approveDeadline,
@@ -281,13 +283,24 @@ library DealCellGovernanceLib {
             );
 
             investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
+
+            emit DACEventsLib.TrancheSettled(
+                dacCell,
+                dealId,
+                address(deal),
+                trancheId,
+                _fundingTranches[trancheId].token,
+                _fundingTranches[trancheId].amount
+            );
         }
+
         _fundingTranches[trancheId].settled = true;
     }
 
     function requestTranche(
-        uint256 dealId,
         address dacCell,
+        uint256 dealId,
+        address dealAddr,
         DealManagementProposal prop,
         mapping(uint256 => Tranche) storage _fundingTranches,
         address[] storage _fundingTokens,
@@ -306,6 +319,15 @@ library DealCellGovernanceLib {
             amount: uint256(DealManagementProposal(prop).i()),
             settled: false
         });
+
+        emit DACEventsLib.TrancheRequested(
+            dacCell,
+            dealId,
+            dealAddr,
+            prop.id(),
+            _fundingTranches[prop.id()].token,
+            _fundingTranches[prop.id()].amount
+        );
 
         IDealManagerAdapter(IDACCellAdapter(dacCell).getDealManager()).createTrancheProposal(dealId, prop.id());
     }

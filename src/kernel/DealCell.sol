@@ -214,6 +214,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         deal.beforeApproveFunding(trancheId);
 
         DealCellGovernanceLib.approveFunding(
+            dacCell,
+            id,
             trancheId,
             approved,
             _approveDeadline,
@@ -392,8 +394,9 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
             DealCellGovernanceLib.requestTranche(
-                id,
                 dacCell,
+                id,
+                address(deal),
                 prop,
                 _fundingTranches,
                 _fundingTokens,

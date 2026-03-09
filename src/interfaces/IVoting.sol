@@ -4,6 +4,6 @@ pragma solidity ^0.8.20;
 interface IVoting {
     function castVeto() external;
     function vote(bool support) external;
-    function isResolved() external view returns (bool);
-    function outcome() external view returns (bool);
+    function isResolved() external returns (bool);
+    function outcome() external returns (bool);
 }
