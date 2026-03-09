@@ -55,18 +55,18 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
         _mint(to, amount);
     }
 
-    function stakeToDeal(address deal, uint256 amount) external {
+    function stakeToDeal(address dealCell, uint256 amount) external {
         require(
-            IDealManagerAdapter(dealManager).state(deal).id != 0, 
+            IDealManagerAdapter(dealManager).state(dealCell).id != 0, 
             InvalidDeal()
         );
         
-        require(IDealCell(deal).isValidDeal(), InvalidDeal());
-        require(!IDealCell(deal).isApproved(), InvalidDeal());
+        require(IDealCell(dealCell).isValidDeal(), InvalidDeal());
+        require(!IDealCell(dealCell).isApproved(), InvalidDeal());
         
-        _transfer(msg.sender, deal, amount);
-        IDealCellAdapter(deal).onAgentTokenStaked(msg.sender, amount);
-        emit Staked(msg.sender, deal, amount);
+        _transfer(msg.sender, dealCell, amount);
+        IDealCellAdapter(dealCell).onAgentTokenStaked(msg.sender, amount);
+        emit Staked(msg.sender, dealCell, amount);
     }
 
     function burnFrom(address from, uint256 amount) external {

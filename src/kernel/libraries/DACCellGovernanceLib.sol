@@ -143,9 +143,9 @@ library DACCellGovernanceLib {
 
         dealState[dealCell].rewardsLimit += rewardsLimit;
 
-        IDealCellAdapter(dealCell).approveFunding(trancheId);
-        
         emit DACEventsLib.FundingApproved(dacCell, dealId, trancheId, rewardsLimit);
+
+        IDealCellAdapter(dealCell).approveFunding(trancheId);
     }
 
     function approveFunding(

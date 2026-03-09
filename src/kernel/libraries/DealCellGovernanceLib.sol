@@ -264,7 +264,7 @@ library DealCellGovernanceLib {
     ) public {
         if (trancheId == 0) {
             require(!approved, DACErrorsLib.DealAlreadyApproved());
-            require(block.timestamp > _approveDeadline, DACErrorsLib.DeadlineNotPassed());
+            require(block.timestamp <= _approveDeadline, DACErrorsLib.DeadlineNotPassed());
         }
         else {
             require(_fundingTranches[trancheId].amount > 0, DACErrorsLib.TrancheNotExists());

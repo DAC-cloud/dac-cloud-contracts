@@ -57,7 +57,9 @@ contract TreasuryDeal is Deal {
     function _afterApprove(uint256 trancheId) internal override {
         if (trancheId > 0) {
             require(IDealCell(dealCell).fundingTranche(trancheId).amount > 0, DACErrorsLib.InvalidTranche());
-            
+        }
+
+        if (IDealCell(dealCell).fundingTranche(trancheId).amount > 0) {
             require(
                 IERC20(
                     IDealCell(dealCell).fundingTranche(trancheId).token
