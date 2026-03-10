@@ -2,12 +2,14 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../../src/modules/core/CoreModuleDeals.sol";
-import "../../src/modules/core/evaluators/RevenueBasedEvaluator.sol";
-import "../../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
-import "../../src/interfaces/IDealCell.sol";
-import "../../src/kernel/libraries/MathLib.sol";
-import "../../src/modules/core/interfaces/Structs.sol";
+import {Tranche, DealParams, EvaluationResult} from "../../src/interfaces/Structs.sol";
+import {CoreDealType, CoreEvaluatorType} from "../../src/modules/core/CoreModuleDeals.sol";
+import {RevenueBasedEvaluator} from "../../src/modules/core/evaluators/RevenueBasedEvaluator.sol";
+import {RevenueEvaluatorFactory} from "../../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
+import {IDeal} from "../../src/interfaces/IDeal.sol";
+import {IDealCell} from "../../src/interfaces/IDealCell.sol";
+import {MathLib} from "../../src/kernel/libraries/MathLib.sol";
+import {RevenueSchedule} from "../../src/modules/core/interfaces/Structs.sol";
 
 contract MockDealCell is IDealCell {
     uint256 public returnedCapital;

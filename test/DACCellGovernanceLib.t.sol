@@ -2,10 +2,11 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/kernel/libraries/DACCellGovernanceLib.sol";
-import "../src/kernel/libraries/MathLib.sol";
-import "../src/interfaces/Structs.sol";
-import "../src/interfaces/IModuleFactory.sol";
+import {DACCellGovernanceLib, IDACGovernanceAdapter} from "../src/kernel/libraries/DACCellGovernanceLib.sol";
+import {MathLib} from "../src/kernel/libraries/MathLib.sol";
+import {DealState} from "../src/kernel/interfaces/Structs.sol";
+import {DealParams, VotingConfig} from "../src/interfaces/Structs.sol";
+import {IModuleFactory} from "../src/interfaces/IModuleFactory.sol";
 
 contract DACCellGovernanceLibTest is Test {
 

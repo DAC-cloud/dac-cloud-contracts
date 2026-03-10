@@ -2,26 +2,31 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../../src/kernel/DACCell.sol";
-import "../../src/kernel/DACFactory.sol";
-import "../../src/kernel/Deal.sol";
-import "../../src/interfaces/IDealManager.sol";
-import "../../src/interfaces/Structs.sol";
-import "../../src/kernel/libraries/MathLib.sol";
-import "../../src/modules/core/CoreModuleFactory.sol";
-import "../../src/modules/core/deals/factories/DACDealFactory.sol";
-import "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
-import "../../src/modules/core/evaluators/MilestoneBasedEvaluator.sol";
-import "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
-import "../../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
-import "../../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
-import "../../src/modules/core/deals/factories/DACDealFactory.sol";
-import "../../src/modules/core/interfaces/Structs.sol";
-import "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
-import "../../src/kernel/factories/DealManagerFactory.sol";
-import "../../src/kernel/factories/DealCellFactory.sol";
-import "../../src/kernel/tokens/factories/TokenFactories.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {DACCell} from "../../src/kernel/DACCell.sol";
+import {DACFactory} from "../../src/kernel/DACFactory.sol";
+import {Deal} from "../../src/kernel/Deal.sol";
+import {IDealManager} from "../../src/interfaces/IDealManager.sol";
+import {IVoting} from "../../src/interfaces/IVoting.sol";
+import {DACConfig, CapitalCall, ProposalParams, DealParams} from "../../src/interfaces/Structs.sol";
+import {MathLib} from "../../src/kernel/libraries/MathLib.sol";
+import {CoreDealType, CoreEvaluatorType} from "../../src/modules/core/CoreModuleDeals.sol";
+import {CoreModuleFactory} from "../../src/modules/core/CoreModuleFactory.sol";
+import {DACDealFactory} from "../../src/modules/core/deals/factories/DACDealFactory.sol";
+import {TreasuryDealFactory} from "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
+import {MilestoneBasedEvaluator} from "../../src/modules/core/evaluators/MilestoneBasedEvaluator.sol";
+import {MilestoneEvaluatorFactory} from "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
+import {RevenueEvaluatorFactory} from "../../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
+import {CoreManagementProposalFactory} from "../../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
+import {DACCellFactory} from "../../src/kernel/factories/DACCellFactory.sol";
+import {Milestone, DACDealConfig} from "../../src/modules/core/interfaces/Structs.sol";
+import {DACManagementProposalFactory} from "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
+import {DACManagementProposalType} from "../../src/kernel/governance/DACManagementProposals.sol";
+import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.sol";
+import {DealCellFactory} from "../../src/kernel/factories/DealCellFactory.sol";
+import {MainToken} from "../../src/kernel/tokens/MainToken.sol";
+import {AgentToken} from "../../src/kernel/tokens/AgentToken.sol";
+import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
 
 contract MockUSDC is ERC20 {
     constructor() ERC20("Crypto Dollars", "USDC") {}
