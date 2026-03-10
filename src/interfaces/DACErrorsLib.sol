@@ -17,6 +17,10 @@ library DACErrorsLib {
 
     error ProposalAlreadyExecuted();
 
+    error MaxSupplyExceeded();
+
+    error NotTransferable();
+
     error TransferFailed();
     error InsufficientBalance();
     error NotEnoughBalance();
@@ -30,6 +34,7 @@ library DACErrorsLib {
     error ModuleNotApproved();
     error ModuleDisabled();
 
+    error InvalidDealAddress();
     error InvalidDeal(address deal);
     error InvalidDealId(uint256 deal);
 

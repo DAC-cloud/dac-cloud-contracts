@@ -7,6 +7,7 @@ import {ERC20PermitUpgradeable} from"@openzeppelin/contracts-upgradeable/token/E
 import {ERC20VotesUpgradeable} from"@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {AccessControlUpgradeable} from"@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
+import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, AccessControlUpgradeable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -15,9 +16,6 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
     uint256 public maxSupply;
     
     address public dealManager;
-
-    error NotAuthorized();
-    error MaxSupplyExceeded();
 
     constructor() {
         _disableInitializers();
@@ -70,9 +68,9 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
     }
 
     function mint(address to, uint256 amount) external {
-        require(hasRole(MINTER_ROLE, msg.sender), NotAuthorized());
+        require(hasRole(MINTER_ROLE, msg.sender), DACErrorsLib.NotAuthorized());
 
-        require(totalSupply() + amount <= maxSupply, MaxSupplyExceeded());
+        require(totalSupply() + amount <= maxSupply, DACErrorsLib.MaxSupplyExceeded());
         _mint(to, amount);
     }
 

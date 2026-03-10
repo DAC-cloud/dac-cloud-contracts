@@ -15,6 +15,8 @@ interface IDealCell {
 
     function stakeToken() external view returns (address);
 
+    function invite(address invitee, bool grantInviteRight) external;
+
     function claimMainToken(uint256 evaluatorId) external;
     function unstake() external;
     

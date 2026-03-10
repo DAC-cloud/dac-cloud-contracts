@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {DACCell} from "../src/kernel/DACCell.sol";
 import {MainToken} from "../src/kernel/tokens/MainToken.sol";
@@ -42,52 +43,21 @@ contract DACCellDealTest is DACTestBase {
         onboardAgent(agent2);
     }
 
-    function testTreasuryDeal() public {
+    function testUnstakeBeforeApprove() public {
         DealHandle memory handle = createTreasuryDeal(agent1);
-
-        assertEq(IDealCell(IDealManager(dac.getDealManager()).deals(handle.dealId)).name(), "Test Treasury Deal", "deal name by id wiring");
-
         vm.warp(block.timestamp + 1);
 
         vm.startPrank(agent1);
         agentToken.stakeToDeal(handle.dealCell, 20_000);
-        StakedAgent(IDealCell(handle.dealCell).stakeToken()).delegate(agent1);
         vm.stopPrank();
-
-        vm.startPrank(founder);
-        IVoting(dac.getProposalVoting(handle.proposalId)).vote(true);
-        dac.executeDACProposal(handle.proposalId);
-        vm.stopPrank();
-
-        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
-        assertEq(usdc.balanceOf(treasuryAddr), 10_000, "Balance transferred to treasury");
-    }
-
-    function testDealExpired() public {
-        DealHandle memory handle = createTreasuryDeal(agent1);
-
-        assertEq(IDealCell(IDealManager(dac.getDealManager()).deals(handle.dealId)).name(), "Test Treasury Deal", "deal name by id wiring");
-
-        vm.warp(block.timestamp + 1);
 
         vm.startPrank(agent1);
-        agentToken.stakeToDeal(handle.dealCell, 20_000);
-        StakedAgent(IDealCell(handle.dealCell).stakeToken()).delegate(agent1);
-        vm.stopPrank();
-
-        vm.startPrank(founder);
-        IVoting(dac.getProposalVoting(handle.proposalId)).vote(true);
-
-        vm.warp(block.timestamp + 30 days); // Was not approved in time
-
         vm.expectRevert(DACErrorsLib.DeadlineNotPassed.selector);
-        dac.executeDACProposal(handle.proposalId);
-        vm.stopPrank();
+        IDealCell(handle.dealCell).unstake();
     }
 
-    function testDACDeal() public {
-        DealHandle memory handle = createDACDeal(agent1);
-
+    function testStakeWithoutInvite() public {
+        DealHandle memory handle = createTreasuryDeal(agent1);
         vm.warp(block.timestamp + 1);
 
         vm.startPrank(agent1);
@@ -95,12 +65,43 @@ contract DACCellDealTest is DACTestBase {
         StakedAgent(IDealCell(handle.dealCell).stakeToken()).delegate(agent1);
         vm.stopPrank();
 
-        vm.startPrank(founder);
-        IVoting(dac.getProposalVoting(handle.proposalId)).vote(true);
-        dac.executeDACProposal(handle.proposalId);
+        vm.startPrank(agent2);
+        vm.expectRevert(DACErrorsLib.NotWhitelistedAgent.selector);
+        agentToken.stakeToDeal(handle.dealCell, 20_000);
+        vm.stopPrank();
+    }
+
+    function testStakeWithInvite() public {
+        DealHandle memory handle = createTreasuryDeal(agent1);
+        vm.warp(block.timestamp + 1);
+
+        vm.startPrank(agent1);
+        agentToken.stakeToDeal(handle.dealCell, 20_000);
+        StakedAgent(IDealCell(handle.dealCell).stakeToken()).delegate(agent1);
+
+        IDealCell(handle.dealCell).invite(agent2, true);
+
         vm.stopPrank();
 
-        address childDac = DACDeal(handle.dealAddr).managedEntity();
-        assertEq(usdc.balanceOf(childDac), 10_000, "Balance transferred to child");
+        vm.startPrank(agent2);
+        agentToken.stakeToDeal(handle.dealCell, 20_000);
+        StakedAgent(IDealCell(handle.dealCell).stakeToken()).delegate(agent1);
+        vm.stopPrank();
+
+        assertEq(IERC20(IDealCell(handle.dealCell).stakeToken()).balanceOf(agent2), 20_000, "Staked token transferred to agent");
+    }
+
+    function testUnstakeAfterDeadline() public {
+        DealHandle memory handle = createTreasuryDeal(agent1);
+        vm.warp(block.timestamp + 1);
+
+        vm.startPrank(agent1);
+        agentToken.stakeToDeal(handle.dealCell, 20_000);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 30 days);
+
+        vm.startPrank(agent1);
+        IDealCell(handle.dealCell).unstake();
     }
 }

@@ -40,6 +40,7 @@ contract MockDealCell is IDealCell {
     function deal() external pure returns (IDeal) { revert("Not implemented"); }
     function manager() external pure returns (address) { return address(0); }
     function stakeToken() external pure returns (address) { return address(0); }
+    function invite(address, bool) external pure { revert("Not implemented"); }
     function claimMainToken(uint256 evaluatorId) external {}
     function unstake() external {}
     function fundingTranche(uint256) external pure returns (Tranche memory tranche) { }

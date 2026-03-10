@@ -23,6 +23,7 @@ import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryD
 import {MilestoneEvaluatorFactory} from "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 import {DACManagementProposalType} from "../src/kernel/governance/DACManagementProposals.sol";
+import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
 
 contract MockUSDC is ERC20 {
     constructor() ERC20("Crypto Dollars", "USDC") {}
@@ -190,7 +191,7 @@ contract DACCellMainTest is Test {
 
         IVoting(dac.getProposalVoting(propId)).vote(true);
 
-        vm.expectRevert(MainToken.MaxSupplyExceeded.selector);
+        vm.expectRevert(DACErrorsLib.MaxSupplyExceeded.selector);
         dac.executeDACProposal(propId);
 
         vm.stopPrank();

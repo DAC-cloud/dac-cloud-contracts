@@ -7,15 +7,12 @@ import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IAgentToken} from "../../interfaces/IAgentToken.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
+import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     
-    error NotAuthorized();
-    error InvalidDeal();
-    error NotTransferable();
-
     address public dacCell;
     address public dealManager;
 
@@ -50,7 +47,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     }
 
     function mint(address to, uint256 amount) external {
-        require(hasRole(MINTER_ROLE, msg.sender), NotAuthorized());
+        require(hasRole(MINTER_ROLE, msg.sender), DACErrorsLib.NotAuthorized());
 
         _mint(to, amount);
     }
@@ -58,11 +55,11 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     function stakeToDeal(address dealCell, uint256 amount) external {
         require(
             IDealManagerAdapter(dealManager).state(dealCell).id != 0, 
-            InvalidDeal()
+            DACErrorsLib.InvalidDealAddress()
         );
         
-        require(IDealCell(dealCell).isValidDeal(), InvalidDeal());
-        require(!IDealCell(dealCell).isApproved(), InvalidDeal());
+        require(IDealCell(dealCell).isValidDeal(), DACErrorsLib.InvalidDealAddress());
+        require(!IDealCell(dealCell).isApproved(), DACErrorsLib.InvalidDealAddress());
         
         _transfer(msg.sender, dealCell, amount);
         IDealCellAdapter(dealCell).onAgentTokenStaked(msg.sender, amount);
@@ -70,7 +67,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     }
 
     function burnFrom(address from, uint256 amount) external {
-        require(hasRole(BURNER_ROLE, msg.sender), NotAuthorized());
+        require(hasRole(BURNER_ROLE, msg.sender), DACErrorsLib.NotAuthorized());
 
         _burn(from, amount);
     }
@@ -78,11 +75,11 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     function transfer(address to, uint256 amount) public override returns (bool) {
         require(
             IDealManagerAdapter(dealManager).state(msg.sender).id != 0, 
-            InvalidDeal()
+            DACErrorsLib.InvalidDealAddress()
         );
         
-        require(IDealCell(msg.sender).isValidDeal(), InvalidDeal());
-        require(!IDealCell(msg.sender).isApproved(), InvalidDeal());
+        require(IDealCell(msg.sender).isValidDeal(), DACErrorsLib.InvalidDealAddress());
+        require(!IDealCell(msg.sender).isApproved(), DACErrorsLib.InvalidDealAddress());
         
         _transfer(msg.sender, to, amount);
 
@@ -92,11 +89,11 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     function approve(address deal, uint256 amount) public override returns (bool) {
         require(
             IDealManagerAdapter(dealManager).state(deal).id != 0, 
-            InvalidDeal()
+            DACErrorsLib.InvalidDealAddress()
         );
         
-        require(IDealCell(deal).isValidDeal(), InvalidDeal());
-        require(IDealCell(deal).isApproved(), InvalidDeal());
+        require(IDealCell(deal).isValidDeal(), DACErrorsLib.InvalidDealAddress());
+        require(IDealCell(deal).isApproved(), DACErrorsLib.InvalidDealAddress());
 
         _approve(msg.sender, deal, amount);
 
