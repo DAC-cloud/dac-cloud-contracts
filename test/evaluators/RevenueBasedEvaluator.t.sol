@@ -13,6 +13,7 @@ import {RevenueSchedule} from "../../src/modules/core/interfaces/Structs.sol";
 
 contract MockDealCell is IDealCell {
     uint256 public returnedCapital;
+    mapping(address => uint256) internal investedCapital;
 
     uint256 internal _startTime;
 
@@ -24,6 +25,10 @@ contract MockDealCell is IDealCell {
 
     function setReturnedCapital(uint256 _returned) external {
         returnedCapital = _returned;
+    }
+
+    function setInvestedCapital(address token, uint256 amount) external {
+        investedCapital[token] = amount;
     }
 
     function getReturnedCapital(address) external view returns (uint256) {
@@ -46,7 +51,7 @@ contract MockDealCell is IDealCell {
     function fundingTranche(uint256) external pure returns (Tranche memory tranche) { }
     function fundingTokens() external pure returns (address[] memory) { return new address[](0); }
     function getMainRewardsLimit() external pure returns (uint256) { return 0; }
-    function getInvestedCapital(address) external pure returns (uint256) { return 0; }
+    function getInvestedCapital(address token) external view returns (uint256) { return investedCapital[token]; }
     function allowEarlyReturns() external pure returns (bool) { return false; }
     function allowDACVeto() external pure returns (bool) { return false; }
     function isValidDeal() external pure returns (bool) { return true; }
@@ -472,6 +477,110 @@ contract RevenueBasedEvaluatorTest is Test {
         EvaluationResult[] memory second = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
         assertEq(second.length, 1);
         assertEq(second[0].percent, MathLib.atScale(5));
+    }
+
+    function test_projectionFromInvestedCapital_usesProjectionMode() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 1,
+            revenueProjection: 2,
+            requirementCurveCoeffs: new int256[](2),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(25),
+            graceCycles: 0,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false
+        });
+        cfg.curveCoeffs[0] = 0;
+        cfg.curveCoeffs[1] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100));
+        cfg.requirementCurveCoeffs[1] = 0;
+
+        RevenueBasedEvaluator.Config memory evaluatorCfg = RevenueBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(100),
+            schedule: cfg
+        });
+        deployEvaluator(evaluatorCfg);
+
+        mockDealCell.setInvestedCapital(address(0x1111), 20_000e6);
+        mockDealCell.setReturnedCapital(10_000e6);
+        vm.warp(block.timestamp + 30 days);
+
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(results.length, 1);
+        assertEq(results[0].action, 1);
+        assertEq(results[0].percent, MathLib.atScale(10));
+    }
+
+    function test_projectionModeWithoutInvestedCapital_reverts() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 1,
+            revenueProjection: 2,
+            requirementCurveCoeffs: new int256[](2),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(25),
+            graceCycles: 0,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false
+        });
+        cfg.curveCoeffs[0] = 0;
+        cfg.curveCoeffs[1] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100));
+        cfg.requirementCurveCoeffs[1] = 0;
+
+        RevenueBasedEvaluator.Config memory evaluatorCfg = RevenueBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(100),
+            schedule: cfg
+        });
+        deployEvaluator(evaluatorCfg);
+
+        vm.warp(block.timestamp + 30 days);
+        vm.expectRevert(RevenueBasedEvaluator.RevenueBaseMisconfigured.selector);
+        evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+    }
+
+    function test_multiCycleBatch_usesRequirementCurveForEachCycle() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(0),
+            graceCycles: 0,
+            penaltyPerMiss: 0,
+            evaluationStart: 0,
+            autoClose: false
+        });
+        cfg.curveCoeffs[0] = 0;
+        cfg.curveCoeffs[1] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100));
+        cfg.requirementCurveCoeffs[1] = int256(MathLib.atScale(100));
+
+        RevenueBasedEvaluator.Config memory evaluatorCfg = RevenueBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(100),
+            schedule: cfg
+        });
+        deployEvaluator(evaluatorCfg);
+
+        mockDealCell.setReturnedCapital(30_000e6);
+        vm.warp(block.timestamp + 60 days);
+
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(results.length, 1);
+        assertEq(results[0].action, 1);
+        assertEq(results[0].percent, 175e15);
     }
 
     function test_negativeCoeff_sCurve() public {
