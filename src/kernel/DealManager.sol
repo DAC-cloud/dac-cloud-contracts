@@ -219,13 +219,12 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         }
 
         else if (prop.typ() == DACManagementProposalType.DEAL_MESSAGE) {
-            (uint256 dealId) = abi.decode(DACManagementProposal(prop).data(), (uint256));
-            address deal = deals[dealId];
-
-            (bytes4 message, bytes memory data) = abi.decode(
+            (uint256 dealId, bytes4 message, bytes memory data) = abi.decode(
                 DACManagementProposal(prop).data(),
-                (bytes4, bytes)
+                (uint256, bytes4, bytes)
             );
+
+            address deal = deals[dealId];
 
             IDealCellAdapter(deal).messageDeal(message, data);  
         }

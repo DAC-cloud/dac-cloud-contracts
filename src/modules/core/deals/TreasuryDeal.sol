@@ -30,7 +30,8 @@ contract TreasuryDeal is Deal {
         address _agentToken,
         address _mainToken,
         address _proposer,
-        address _permit2TreasuryFactory
+        address _permit2TreasuryFactory,
+        address _factory
     ) external initializer {
         __Deal_init(
             _id,
@@ -38,7 +39,8 @@ contract TreasuryDeal is Deal {
             _governanceFactory,
             _agentToken,
             _mainToken,
-            _proposer
+            _proposer,
+            _factory
         );
 
         treasury = Permit2TreasuryFactory(_permit2TreasuryFactory).deployPermit2Treasury(address(this));

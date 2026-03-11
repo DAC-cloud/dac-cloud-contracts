@@ -62,11 +62,12 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         address _governanceFactory,
         address _agentToken,
         address _mainToken,
-        address _proposer
+        address _proposer,
+        address _factory
     ) internal onlyInitializing {
         nextId = 1;
 
-        factory = msg.sender;
+        factory = _factory;
         id = _id;
         governanceFactory = _governanceFactory;
         dacCell = _dac;
@@ -78,6 +79,8 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
     function joinDac(
         address _dealCell
     ) external {
+        require(msg.sender == factory, DACErrorsLib.NotAuthorized());
+        
         dealCell = _dealCell;
     }
 
@@ -231,8 +234,8 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
 
     function executeStakedAgentProposal(uint256 proposalId) external onlyAfterStakedAgentVote(proposalId) {
         // Here we protecting from the reentrancy only with check-effect-update pattern
-        require(!executed[id], DACErrorsLib.AlreadyExecuted());
-        executed[id] = true; // We will not enter this method with the same id twice
+        require(!executed[proposalId], DACErrorsLib.AlreadyExecuted());
+        executed[proposalId] = true; // We will not enter this method with the same proposalId twice
 
         _beforeExecuteProposal(proposalId);
 

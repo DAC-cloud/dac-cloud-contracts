@@ -38,7 +38,8 @@ contract DACDeal is Deal {
         address _governanceFactory,
         address _agentToken,
         address _mainToken,
-        address _proposer
+        address _proposer,
+        address _factory
     ) external initializer {
         __Deal_init(
             _id,
@@ -46,7 +47,8 @@ contract DACDeal is Deal {
             _governanceFactory,
             _agentToken,
             _mainToken,
-            _proposer
+            _proposer,
+            _factory
         );
     }
 

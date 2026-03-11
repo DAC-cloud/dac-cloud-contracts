@@ -40,6 +40,8 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     function dacInit(
         address _dealManager
     ) external {
+        require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+        
         dealManager = _dealManager;
 
         _grantRole(MINTER_ROLE, _dealManager);

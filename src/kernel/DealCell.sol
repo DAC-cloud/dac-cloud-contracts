@@ -329,14 +329,21 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function closeDeal() external {
-        require(msg.sender == address(this) || msg.sender == dacCell, DACErrorsLib.NotAuthorized());
-        require(!closed, DACErrorsLib.DealIsClosed());
-        
-        deal.beforeClose();
+        require(
+            (
+                msg.sender == address(this) || 
+                msg.sender == manager 
+            ), 
+            DACErrorsLib.NotAuthorized()
+        );
 
-        closed = true;
-        
-        emit DACEventsLib.DealClosed(dacCell, id, address(deal), token.totalSupply());
+        if (!closed) {
+            deal.beforeClose();
+
+            closed = true;
+            
+            emit DACEventsLib.DealClosed(dacCell, id, address(deal), token.totalSupply());
+        }
     }
 
     function recoverDeal(address liquidator, uint256 liquidatorStake) external onlyDealManager {
@@ -414,6 +421,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
                 uint256(DealManagementProposal(prop).i()),
                 id,
                 deal,
+                agentTokenAddr,
                 token,
                 holders
             );

@@ -32,7 +32,8 @@ contract TreasuryDealFactory is IDealFactory {
             agentToken,
             mainToken,
             params.proposer,
-            permit2VaultFactory
+            permit2VaultFactory,
+            address(this)
         );
 
         dealAddr = address(new UUPSProxy(address(referenceImpl), initData));

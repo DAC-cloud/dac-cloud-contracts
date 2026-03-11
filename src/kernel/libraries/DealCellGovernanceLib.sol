@@ -61,11 +61,12 @@ library DealCellGovernanceLib {
         uint256 amount,
         uint256 id,
         IDeal deal,
+        address agentTokenAddr,
         StakedAgent token,
         address[] storage holders
     ) public {
         require(
-            token.transferFrom(
+            AgentToken(agentTokenAddr).transferFrom(
                 staker, address(this), amount
             ),
             DACErrorsLib.TransferFailed()
@@ -468,7 +469,7 @@ library DealCellGovernanceLib {
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
             uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), reward, token.totalSupply());  // pro-rata on original stake
-            claimableRewards[h] = holderShare;
+            claimableRewards[h] += holderShare;
         }
 
         rewardsConvertedPct += rewardPercent;

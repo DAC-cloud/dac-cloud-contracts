@@ -87,7 +87,7 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
         address destination,
         uint160 amount
     ) external onlyDeal nonReentrant {
-        IERC20(token).safeTransfer(treasuryDeal, amount);
+        IERC20(token).safeTransfer(destination, amount);
 
         emit DirectSpend(token, destination, amount);
     }

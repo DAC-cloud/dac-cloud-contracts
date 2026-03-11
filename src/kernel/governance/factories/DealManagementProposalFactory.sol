@@ -93,7 +93,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             // Module-specific factory is allowed to examine deal (and/or dac) state 
             //  to enforce it's own quorum rules
             
-            require(!quorumConfig.allowed, ProposalNotSupported());
+            require(quorumConfig.allowed, ProposalNotSupported());
 
             if (quorumConfig.high) {
                 quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);

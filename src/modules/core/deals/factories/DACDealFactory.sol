@@ -29,7 +29,8 @@ contract DACDealFactory is IDealFactory {
             params.governanceFactory,
             agentToken,
             mainToken,
-            params.proposer
+            params.proposer,
+            address(this)
         );
 
         dealAddr = address(new UUPSProxy(address(referenceImpl), initData));
