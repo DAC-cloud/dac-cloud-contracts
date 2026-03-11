@@ -2,6 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {DACTestBase} from "./base/DACTestBase.t.sol";
 import {ProposalParams} from "../src/interfaces/Structs.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -25,13 +29,44 @@ import {TreasurySpendAllowance, RevenueSchedule} from "../src/modules/core/inter
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IDealManagerAdapter} from "../src/kernel/interfaces/IDealManagerAdapter.sol";
 import {DealState} from "../src/kernel/interfaces/Structs.sol";
+import {IPermit2} from "../src/lib/IPermit2.sol";
+
+contract MockPermit2 {
+    function approve(address, address, uint160, uint48) external pure {}
+    function transferFrom(address, address, uint256, address) external pure {}
+    function permitTransferFrom(
+        IPermit2.PermitTransferFrom calldata,
+        IPermit2.SignatureTransferDetails calldata,
+        address,
+        bytes calldata
+    ) external pure {}
+}
+
+contract MockVotesToken is ERC20, ERC20Permit, ERC20Votes {
+    constructor() ERC20("Mock Governance Token", "MGOV") ERC20Permit("Mock Governance Token") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {
+        super._update(from, to, value);
+    }
+
+    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
+        return super.nonces(owner);
+    }
+}
 
 contract DealGovernanceFlowTest is DACTestBase {
     address public agent1 = makeAddr("agent1");
     address public agent2 = makeAddr("agent2");
+    MockVotesToken public govToken;
 
     function setUp() public {
         setUpBase();
+        vm.etch(permit2, address(new MockPermit2()).code);
+        govToken = new MockVotesToken();
 
         onboardAgent(agent1);
         onboardAgent(agent2);
@@ -446,6 +481,43 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(usdc.balanceOf(treasuryAddr), 7_000);
     }
 
+    function test_approvePermit2Spend_callsPermit2AndSetsAllowance() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        address spender = makeAddr("permit2-spender");
+        uint160 amount = 2_750;
+        uint48 expiration = uint48(block.timestamp + 7 days);
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.APPROVE_PERMIT2_SPEND,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(spender, amount, expiration)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+
+        vm.expectCall(
+            permit2,
+            abi.encodeWithSelector(
+                IPermit2.approve.selector,
+                address(usdc),
+                spender,
+                amount,
+                expiration
+            )
+        );
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertEq(usdc.allowance(treasuryAddr, permit2), uint256(type(uint160).max));
+    }
+
     function test_approveAgentSpend_allowsAgentToExecuteSpend() public {
         DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
         address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
@@ -558,6 +630,37 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(treasury.approvedAgents(accessHash), 0);
         (uint160 remainingAmount,,,) = treasury.agentAllowance(accessHash);
         assertEq(remainingAmount, 0);
+    }
+
+    function test_delegateVoteRights_delegatesTreasuryHeldVotes() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        uint256 treasuryVotes = 50_000e18;
+
+        govToken.mint(founder, treasuryVotes);
+        vm.startPrank(founder);
+        govToken.delegate(founder);
+        govToken.transfer(treasuryAddr, treasuryVotes);
+        vm.stopPrank();
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.DELEGATE_VOTE_RIGHTS,
+                target: address(0),
+                i: 0,
+                data: abi.encode(address(govToken), agent2)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertEq(govToken.delegates(treasuryAddr), agent2);
+        assertEq(govToken.getVotes(agent2), treasuryVotes);
     }
 
     function _setupApprovedTreasuryDealWithTwoAgents() internal returns (DealHandle memory handle) {

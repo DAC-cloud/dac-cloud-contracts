@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IVotes} from "../../../lib/IVotes.sol";
 import {ProposalParams, DealParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {Deal} from "../../../kernel/Deal.sol";
 import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
@@ -169,7 +168,7 @@ contract TreasuryDeal is Deal {
                 (address, address)
             );
 
-            IVotes(token).delegate(delegatee);
+            treasury.delegateVotes(token, delegatee);
 
             emit DACEventsLib.VotesDelegated(token, delegatee);
         }

@@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPermit2} from "../../../lib/IPermit2.sol";
 import {IClock} from "../../../lib/IClock.sol";
+import {IVotes} from "../../../lib/IVotes.sol";
 import {TreasurySpendAllowance} from "../interfaces/Structs.sol";
 import {UUPSProxy} from "../../../kernel/proxies/UUPSProxy.sol";
 
@@ -132,6 +133,10 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
         approvedAgents[calldataHash] = amount;
 
         emit AgentReceiveApproved(agent, token, source, amount);
+    }
+
+    function delegateVotes(address token, address delegatee) external onlyDeal {
+        IVotes(token).delegate(delegatee);
     }
 
     // Called by an assigned agent after approval

@@ -188,6 +188,69 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         assertFalse(IDealManagerAdapter(dealManager).state(handle.dealCell).active);
     }
 
+    function test_forceReturnCapital_holderCanWithdrawAfterDeadline() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal();
+
+        uint256 dacBalanceBefore = usdc.balanceOf(address(dac));
+
+        vm.warp(IDealCell(handle.dealCell).dealDeadline() + 1);
+        vm.prank(founder);
+        DealManager(dealManager).forceReturnCapital(handle.dealId);
+
+        assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), 10_000);
+        assertEq(usdc.balanceOf(address(dac)), dacBalanceBefore + 10_000);
+    }
+
+    function test_forceReturnCapital_revertsBeforeDeadline() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal();
+
+        vm.prank(founder);
+        vm.expectRevert(DACErrorsLib.DeadlineNotPassed.selector);
+        DealManager(dealManager).forceReturnCapital(handle.dealId);
+    }
+
+    function test_forceReturnCapital_nonHolderReverts() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal();
+        address outsider = makeAddr("outsider");
+
+        vm.prank(outsider);
+        vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
+        DealManager(dealManager).forceReturnCapital(handle.dealId);
+    }
+
+    function test_evaluateDeal_nonAgentOrHolderReverts() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal();
+        address outsider = makeAddr("outsider");
+
+        vm.prank(outsider);
+        vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+    }
+
+    function test_recoverDealProposal_revertsWhileStakeStillOutstanding() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal();
+
+        EvaluationResult[] memory results = _singleResult(3, 0, 0);
+        MockEvaluator(handle.evaluatorAddr).setResults(results);
+
+        vm.prank(agent1);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+
+        vm.startPrank(founder);
+        vm.expectRevert(
+            abi.encodeWithSelector(DACErrorsLib.InvalidDealState.selector, handle.dealCell)
+        );
+        dac.createManagementProposal(
+            ProposalParams({
+                typ: DACManagementProposalType.RECOVER_DEAL,
+                target: liquidator,
+                i: bytes32(uint256(8_000)),
+                data: abi.encode(handle.dealId)
+            })
+        );
+        vm.stopPrank();
+    }
+
     function test_recoverDeal_assignsGovernanceOnlyStakeToLiquidator() public {
         DealHandle memory handle = _closeAndExitDeal();
 
