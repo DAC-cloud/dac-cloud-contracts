@@ -6,14 +6,18 @@ import {DACTestBase} from "./base/DACTestBase.t.sol";
 import {ProposalParams} from "../src/interfaces/Structs.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
 import {IDealCell} from "../src/interfaces/IDealCell.sol";
+import {IDACCell} from "../src/interfaces/IDACCell.sol";
 import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
 import {Deal} from "../src/kernel/Deal.sol";
 import {StakedAgent} from "../src/kernel/tokens/StakedAgent.sol";
+import {MainToken} from "../src/kernel/tokens/MainToken.sol";
+import {AgentToken} from "../src/kernel/tokens/AgentToken.sol";
 import {DACManagementProposalType} from "../src/kernel/governance/DACManagementProposals.sol";
 import {AbstractDealManagementType} from "../src/kernel/governance/AbstractDealManagementProposals.sol";
 import {DealManagementProposal} from "../src/kernel/governance/DealManagementProposal.sol";
 import {CoreDealManagementType} from "../src/modules/core/governance/CoreDealManagementProposals.sol";
 import {TreasuryDeal} from "../src/modules/core/deals/TreasuryDeal.sol";
+import {DACDeal} from "../src/modules/core/deals/DACDeal.sol";
 import {Permit2Treasury} from "../src/modules/core/deals/Permit2Treasury.sol";
 import {CoreEvaluatorType} from "../src/modules/core/CoreModuleDeals.sol";
 import {RevenueBasedEvaluator} from "../src/modules/core/evaluators/RevenueBasedEvaluator.sol";
@@ -331,6 +335,90 @@ contract DealGovernanceFlowTest is DACTestBase {
         Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
     }
 
+    function test_createChildProposal_andVote_executesOnChildDAC() public {
+        DealHandle memory handle = _setupApprovedDACDealWithTwoAgents();
+        address childDac = DACDeal(handle.dealAddr).managedEntity();
+        AgentToken childAgentToken = AgentToken(IDACCell(childDac).getAgentToken());
+
+        ProposalParams memory childProposal = ProposalParams({
+            typ: DACManagementProposalType.MINT_AGENT_TOKENS,
+            target: agent2,
+            i: bytes32(uint256(12_345)),
+            data: bytes("")
+        });
+
+        (uint256 childProposalId, uint256 voteProposalId) = _createChildProposalViaParent(handle, childProposal);
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, voteProposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, voteProposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(voteProposalId);
+
+        vm.prank(founder);
+        IDACCell(childDac).executeDACProposal(childProposalId);
+
+        assertEq(childAgentToken.balanceOf(agent2), 12_345);
+    }
+
+    function test_reinvestProfits_fulfillsChildCapitalCall() public {
+        DealHandle memory handle = _setupApprovedDACDealWithTwoAgents();
+        address childDac = DACDeal(handle.dealAddr).managedEntity();
+        MainToken childMainToken = MainToken(IDACCell(childDac).getMainToken());
+
+        bytes32 capitalCallHash = _createAndExecuteChildCapitalCall(handle, 22_222, 2_500);
+
+        usdc.mint(handle.dealAddr, 2_500);
+
+        uint256 childUsdcBefore = usdc.balanceOf(childDac);
+        uint256 childMainBefore = childMainToken.balanceOf(handle.dealAddr);
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.REINVEST_PROFITS,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(uint256(2_500), capitalCallHash)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertEq(usdc.balanceOf(childDac), childUsdcBefore + 2_500);
+        assertEq(childMainToken.balanceOf(handle.dealAddr), childMainBefore + 22_222);
+        assertEq(usdc.balanceOf(handle.dealAddr), 0);
+    }
+
+    function test_returnProfits_returnsTokensToParentDAC() public {
+        DealHandle memory handle = _setupApprovedDACDealWithTwoAgents();
+
+        usdc.mint(handle.dealAddr, 3_333);
+        uint256 dacBalanceBefore = usdc.balanceOf(address(dac));
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.RETURN_PROFITS,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(uint256(3_333))
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), 3_333);
+        assertEq(usdc.balanceOf(address(dac)), dacBalanceBefore + 3_333);
+        assertEq(usdc.balanceOf(handle.dealAddr), 0);
+    }
+
     function test_approveDirectSpend_transfersTreasuryFunds() public {
         DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
         address recipient = makeAddr("recipient");
@@ -482,6 +570,18 @@ contract DealGovernanceFlowTest is DACTestBase {
         vm.warp(block.timestamp + 1);
     }
 
+    function _setupApprovedDACDealWithTwoAgents() internal returns (DealHandle memory handle) {
+        handle = createDACDeal(agent1);
+
+        vm.warp(block.timestamp + 1);
+        _stakeAndDelegate(agent1, handle.dealCell, 20_000);
+        vm.prank(agent1);
+        IDealCell(handle.dealCell).invite(agent2, true);
+        _stakeAndDelegate(agent2, handle.dealCell, 20_000);
+        _approveDeal(handle);
+        vm.warp(block.timestamp + 1);
+    }
+
     function _enableDealVeto(DealHandle memory handle) internal {
         vm.startPrank(agent1);
         uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
@@ -544,5 +644,85 @@ contract DealGovernanceFlowTest is DACTestBase {
         }
 
         revert("deal proposal id not found");
+    }
+
+    function _createChildProposalViaParent(
+        DealHandle memory handle,
+        ProposalParams memory childProposal
+    ) internal returns (uint256 childProposalId, uint256 voteProposalId) {
+        vm.startPrank(agent1);
+        uint256 createProposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.CREATE_DAC_PROPOSAL,
+                target: address(0),
+                i: 0,
+                data: abi.encode(childProposal)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, createProposalId, agent1, true);
+
+        vm.recordLogs();
+        Deal(handle.dealAddr).executeStakedAgentProposal(createProposalId);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        return _findChildVoteCreated(logs);
+    }
+
+    function _createAndExecuteChildCapitalCall(
+        DealHandle memory handle,
+        uint256 tokenAmount,
+        uint256 cashAmount
+    ) internal returns (bytes32 callHash) {
+        ProposalParams memory childProposal = ProposalParams({
+            typ: DACManagementProposalType.CAPITAL_CALL,
+            target: handle.dealAddr,
+            i: bytes32(tokenAmount),
+            data: abi.encode(address(usdc), cashAmount)
+        });
+
+        (uint256 childProposalId, uint256 voteProposalId) = _createChildProposalViaParent(handle, childProposal);
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, voteProposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, voteProposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(voteProposalId);
+
+        vm.recordLogs();
+        vm.prank(founder);
+        IDACCell(DACDeal(handle.dealAddr).managedEntity()).executeDACProposal(childProposalId);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        callHash = _findCapitalCallHash(logs);
+        vm.warp(block.timestamp + 1);
+    }
+
+    function _findChildVoteCreated(Vm.Log[] memory logs) internal pure returns (uint256 childProposalId, uint256 voteProposalId) {
+        bytes32 eventSig = keccak256("ChildVoteCreated(uint256,uint256)");
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == eventSig) {
+                childProposalId = uint256(logs[i].topics[1]);
+                voteProposalId = abi.decode(logs[i].data, (uint256));
+                return (childProposalId, voteProposalId);
+            }
+        }
+
+        revert("child vote event not found");
+    }
+
+    function _findCapitalCallHash(Vm.Log[] memory logs) internal pure returns (bytes32 callHash) {
+        bytes32 eventSig = keccak256("CapitalCallCreated(uint256,address,bytes32,uint256)");
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == eventSig) {
+                (callHash,) = abi.decode(logs[i].data, (bytes32, uint256));
+                return callHash;
+            }
+        }
+
+        revert("capital call hash not found");
     }
 }

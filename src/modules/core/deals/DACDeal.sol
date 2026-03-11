@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
+import {IVotes} from "../../../lib/IVotes.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
 import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
@@ -133,6 +134,8 @@ contract DACDeal is Deal {
 
             _allocation += call.tokenAmount;
         }
+
+        IVotes(IDACCell(managedEntity).getMainToken()).delegate(address(this));
     }
 
     function _beforeClose() internal override {
