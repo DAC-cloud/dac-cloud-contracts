@@ -13,6 +13,7 @@ import {StakedAgentFactory} from "./tokens/factories/TokenFactories.sol";
 import {DealManagementProposal} from "./governance/DealManagementProposal.sol";
 import {DealCellGovernanceLib} from "./libraries/DealCellGovernanceLib.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
+import {MathLib} from "./libraries/MathLib.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
@@ -305,10 +306,10 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         );
     }
 
-    function markAsFailed(uint256 slashPercent) external onlyDealManager {
+    function markAsFailed(uint256 slashPercent) external onlyDealManager returns (uint256 slashedTokens) {
         require(!closed, DACErrorsLib.DealIsClosed());
 
-        DealCellGovernanceLib.markAsFailed(
+        slashedTokens = DealCellGovernanceLib.markAsFailed(
             slashPercent,
             id,
             dacCell,
@@ -329,13 +330,11 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function closeDeal() external {
-        require(
-            (
-                msg.sender == address(this) || 
-                msg.sender == manager 
-            ), 
-            DACErrorsLib.NotAuthorized()
-        );
+        if (msg.sender != manager) {
+            require(token.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
+
+            require(rewardsConverted == MathLib.SCALE, DACErrorsLib.NotAllowed());
+        }
 
         if (!closed) {
             deal.beforeClose();
@@ -343,6 +342,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             closed = true;
             
             emit DACEventsLib.DealClosed(dacCell, id, address(deal), token.totalSupply());
+
+            IDealManagerAdapter(manager).onDealClosed(id);
         }
     }
 

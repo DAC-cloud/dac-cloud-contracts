@@ -46,7 +46,9 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             params.typ == AbstractDealManagementType.ADD_STAKE || 
             params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
             params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
-            params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
+            params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
+            params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
+            params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
         ) {
             if (
                 params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
@@ -54,7 +56,8 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 params.typ == AbstractDealManagementType.ADD_STAKE || 
                 params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
                 params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
-                params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS
+                params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
+                params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
             ) {
                 quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
 

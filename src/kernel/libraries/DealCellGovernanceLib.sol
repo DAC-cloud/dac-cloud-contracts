@@ -411,7 +411,7 @@ library DealCellGovernanceLib {
         address[] storage _fundingTokens,
         mapping(address => uint256) storage returnedCapital
     ) public {
-        if (msg.sender == dacCell) {
+        if (msg.sender == IDACCellAdapter(dacCell).getDealManager()) {
             require(block.timestamp > _dealDeadline, DACErrorsLib.DeadlineNotPassed());
         }
         else {
@@ -455,31 +455,31 @@ library DealCellGovernanceLib {
         address[] storage holders,
         mapping(address => uint256) storage claimableRewards,
         address self
-    ) public returns (uint256 rewardsConvertedPct, uint256 reward) {
+    ) public returns (uint256 rewardsConvertedPct, uint256 rewardAmount) {
         rewardsConvertedPct = rewardsConverted;
         
         require(rewardsConvertedPct + rewardPercent <= MathLib.SCALE, DACErrorsLib.InsufficientRewards());
 
         deal.onMarkAsSuccess(rewardPercent);
 
-        reward = MathLib.mul(_tokenRewardsLimit, rewardPercent);
-
-        uint256 transformAmount = reward; // for event
+        uint256 rewardBase = MathLib.mul(_tokenRewardsLimit, rewardPercent);
 
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
-            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), reward, token.totalSupply());  // pro-rata on original stake
+            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), rewardBase, token.totalSupply());  // pro-rata on original stake
             claimableRewards[h] += holderShare;
+
+            rewardAmount += holderShare;
         }
 
         rewardsConvertedPct += rewardPercent;
 
-        // if all rewards were paid out, marking the deal as closed so MP tokens can withdraw stakes
+        // if all rewards were paid out, marking the deal as closed so Agent tokens can withdraw stakes
         if (rewardsConvertedPct == MathLib.SCALE) {
             IDealCellGovernanceAdapter(self).closeDeal();
         }
 
-        emit DACEventsLib.RewardsAllocated(dacCell, id, address(deal), transformAmount);
+        emit DACEventsLib.RewardsAllocated(dacCell, id, address(deal), rewardAmount);
     }
 
     function markAsFailed(
@@ -489,12 +489,13 @@ library DealCellGovernanceLib {
         StakedAgent token,
         IDeal deal,
         address[] storage holders
-    ) public {
-        uint256 slashAmount = MathLib.mul(token.totalSupply(), slashPercent);
+    ) public returns (uint256 slashAmount) {
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
             uint256 holderSlash = MathLib.mul(token.balanceOf(h), slashPercent);
             token.burn(h, holderSlash);
+
+            slashAmount += holderSlash;
         }
         
         emit DACEventsLib.StakesSlashed(dacCell, id, address(deal), slashAmount);

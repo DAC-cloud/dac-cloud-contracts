@@ -141,7 +141,7 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
             if (progressScaled < MathLib.mul(config.schedule.minCycleRevenuePercent, MathLib.SCALE)) {
                 missedCycles++;
                 if (missedCycles > config.schedule.graceCycles) {
-                    penalties++; // todo: let's calculate miss also pro-rata, linearly without curve with minCycleRevenuePercent as base
+                    penalties++;
                 }
             } else {
                 missedCycles = 0;

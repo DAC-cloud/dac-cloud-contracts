@@ -27,11 +27,14 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
             params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL || 
+            params.typ == CoreDealManagementType.RETURN_PROFITS ||
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND || 
             params.typ == CoreDealManagementType.ASSIGN_CLAIMER ||
-            params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC
+            params.typ == CoreDealManagementType.REVOKE_AGENT ||
+            params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC ||
+            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS
         );
 
         quorum.high = (

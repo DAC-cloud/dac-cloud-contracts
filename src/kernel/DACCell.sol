@@ -244,13 +244,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
             mainToken.burn(uint256(prop.i()));
 
+            treasuryBalances[address(mainToken)] -= uint256(prop.i());
             emit DACEventsLib.TokenBurnt(id, uint256(prop.i()));
         }
 
         else if (typ == DACManagementProposalType.MINT_AGENT_TOKENS) {
             agentToken.mint(address(prop.target()), uint256(prop.i()));
 
-            treasuryBalances[address(mainToken)] += uint256(prop.i());
             emit DACEventsLib.AgentTokenMinted(id, prop.target(), uint256(prop.i()));
         }
 

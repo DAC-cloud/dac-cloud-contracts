@@ -80,7 +80,9 @@ contract TreasuryDeal is Deal {
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND ||
             params.typ == CoreDealManagementType.ASSIGN_CLAIMER ||
-            params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC
+            params.typ == CoreDealManagementType.REVOKE_AGENT ||
+            params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC ||
+            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS
         );
 
         if (params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC) {

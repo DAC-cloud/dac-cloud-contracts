@@ -192,7 +192,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
                 typ: AbstractDealManagementType.PERMIT_EVALUATOR_ADD,
                 target: address(0),
                 i: 0,
-                data: evaluatorConfig
+                data: abi.encode(
+                    prop.id(),
+                    evaluatorConfig
+                )
             });
 
             require(deals[dealId] != address(0), DACErrorsLib.NotFound());
@@ -201,7 +204,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             bytes32 propHash = keccak256(
                 abi.encode(
                     deals[dealId],
-                    keccak256(evaluatorConfig)
+                    keccak256(evaluatorConfig),
+                    prop.id()
                 )
             );
 
@@ -254,36 +258,33 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder {
-        if (
-            //todo: allow maintoken holder to evaluate only after approved deadline
-            //todo: allow only bonded agent to evaluate, not every agent, at any time
-            DACCellGovernanceLib.evaluateDeal(
-                dacCell,
-                id,
-                evaluatorId,
-                agentToken,
-                deals,
-                dealState
-            )
-        ) {
-            // If the deal is closed, rewards are no longer available,
-            //  whatever is left locked need to free, the difference between 
-            //  unlocked and paid still will be accounted as obligations
-            mainTokenObligations -= (dealState[deals[id]].rewardsLimit - dealState[deals[id]].rewardsUnlocked);
-
-            dealState[deals[id]].active = false;
-        }
-    }
-
-    function permitEvaluatorAdd(uint256 dealId, bytes memory evaluatorConfig) external onlyDealCell {
-        DACCellGovernanceLib.permitEvaluatorAdd(
-            dealId,
-            evaluatorConfig,
+        DACCellGovernanceLib.evaluateDeal(
             dacCell,
-            evaluatorWhitelist,
+            id,
+            evaluatorId,
+            agentToken,
             deals,
             dealState
         );
+    }
+
+    function permitEvaluatorAdd(uint256 dealId, bytes memory evaluatorHandle) external onlyDealCell {
+        DACCellGovernanceLib.permitEvaluatorAdd(
+            dealId,
+            evaluatorHandle,
+            dacCell,
+            deals[dealId],
+            evaluatorWhitelist,
+            dealState
+        );
+    }
+
+    function onDealClosed(uint256 dealId) external onlyDealCell {
+        require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
+
+        mainTokenObligations -= (dealState[deals[dealId]].rewardsLimit - dealState[deals[dealId]].rewardsUnlocked);
+
+        dealState[deals[dealId]].active = false;
     }
 
     function registerControlledAddress(address controlled) external onlyDealCell {

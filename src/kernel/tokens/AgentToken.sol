@@ -41,7 +41,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
         address _dealManager
     ) external {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
-        
+
         dealManager = _dealManager;
 
         _grantRole(MINTER_ROLE, _dealManager);
@@ -81,7 +81,6 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
         );
         
         require(IDealCell(msg.sender).isValidDeal(), DACErrorsLib.InvalidDealAddress());
-        require(!IDealCell(msg.sender).isApproved(), DACErrorsLib.InvalidDealAddress());
         
         _transfer(msg.sender, to, amount);
 

@@ -24,7 +24,7 @@ interface IDealCellAdapter {
     ) external returns (bool);
     
     function markAsSuccess(uint256 rewardPercent) external returns (uint256 currentReward);
-    function markAsFailed(uint256 slashPercent) external;
+    function markAsFailed(uint256 slashPercent) external returns (uint256 slashedTokens);
     function extendDeadline(uint256 newDeadline) external;
     function closeDeal() external;
     function recoverDeal(address liquidator, uint256 stakedAmount) external;

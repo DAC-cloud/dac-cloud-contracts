@@ -64,7 +64,7 @@ library DACCellGovernanceLib {
             module: IModuleFactory(params.moduleFactory),
             active: false,
             evaluators: evaluators,
-            rewardsLimit: params.rewardsLimit,
+            rewardsLimit: 0, // rewards will be added to state once approved by DAC cell
             rewardsUnlocked: 0,
             rewardsPaid: 0,
             initParams: abi.encode(params)
@@ -343,10 +343,9 @@ library DACCellGovernanceLib {
     ) internal {
         address dealCell = deals[id];
         
-        uint256 slashedTokens = MathLib.mul(IERC20(IDealCell(dealCell).stakeToken()).totalSupply(), slashPercent);
+        uint256 slashedTokens = IDealCellAdapter(dealCell).markAsFailed(slashPercent);
+
         AgentToken(agentToken).burnFrom(dealCell, slashedTokens);
-        
-        IDealCellAdapter(dealCell).markAsFailed(slashPercent);
     }
 
     function evaluateDeal(
@@ -356,9 +355,18 @@ library DACCellGovernanceLib {
         AgentToken agentToken,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
-    ) public returns (bool closed) {
+    ) public {
         address dealCell = deals[id];
         require(dealCell != address(0), DACErrorsLib.InvalidDeal(dealCell));
+
+        require(dealState[dealCell].active, DACErrorsLib.DealIsNotApproved());
+
+        if (agentToken.balanceOf(msg.sender) == 0) {
+            require(
+                IDealCell(dealCell).dealDeadline() < block.timestamp, 
+                DACErrorsLib.NotAllowed()
+            );
+        }
 
         address evaluatorAddr = dealState[dealCell].evaluators[evaluatorId];
 
@@ -380,7 +388,6 @@ library DACCellGovernanceLib {
                 IDealCellAdapter(dealCell).extendDeadline(evaluations[i].extendTo);
             } else if (evaluations[i].action == 3) {    // close
                 IDealCellAdapter(dealCell).closeDeal();
-                closed = true;
             }
         }
         
@@ -389,19 +396,22 @@ library DACCellGovernanceLib {
 
     function permitEvaluatorAdd(
         uint256 dealId, 
-        bytes memory evaluatorConfig,
+        bytes memory evaluatorHandle,
         address dacCell,
+        address dealCell,
         mapping(bytes32 => bool) storage evaluatorWhitelist,
-        mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
     ) public {
-        require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
+        require(msg.sender == dealCell, DACErrorsLib.NotAuthorized());
+
+        (uint256 nonce, bytes memory evaluatorConfig) = abi.decode(evaluatorHandle, (uint256, bytes));
 
         require(
             evaluatorWhitelist[keccak256(
                 abi.encode(
-                    deals[dealId],
-                    keccak256(evaluatorConfig)
+                    dealCell,
+                    keccak256(evaluatorConfig),
+                    nonce
                 )
             )], 
             DACErrorsLib.NotAllowed()
@@ -412,18 +422,18 @@ library DACCellGovernanceLib {
             (bytes4, bytes)
         );
 
-        DealState memory state = dealState[deals[dealId]];
+        DealState memory state = dealState[dealCell];
 
         address evaluator = IModuleFactory(state.module).deployEvaluator(
             dacCell,
             dealId,
-            deals[dealId],
+            dealCell,
             abi.decode(state.initParams, (DealParams)),
             evaluatorSelector,
             evaluatorParams
         );
 
-        dealState[deals[dealId]].evaluators.push(evaluator);
+        dealState[dealCell].evaluators.push(evaluator);
 
         emit DACEventsLib.EvaluatorAdded(
             dacCell,

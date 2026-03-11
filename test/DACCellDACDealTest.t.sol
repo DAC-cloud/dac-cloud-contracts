@@ -66,6 +66,8 @@ contract DACCellDealTest is Test {
 
         // Core module
 
+        coreDealGovernanceFactory = new CoreManagementProposalFactory();
+
         coreModule = new CoreModuleFactory(
             address(new DealCellFactory()),
             address(new DACDealFactory()),

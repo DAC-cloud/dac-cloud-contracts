@@ -23,4 +23,6 @@ interface IDealManagerAdapter {
     function mintMain(address deal, uint256 evaluatorId, address to, uint256 amount) external;
 
     function permitEvaluatorAdd(uint256 dealId, bytes memory evaluatorConfig) external;
+
+    function onDealClosed(uint256 dealId) external;
 }

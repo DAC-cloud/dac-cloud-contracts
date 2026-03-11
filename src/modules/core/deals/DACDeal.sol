@@ -150,9 +150,10 @@ contract DACDeal is Deal {
 
     function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
-            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
+            params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
-            params.typ == CoreDealManagementType.REINVEST_PROFITS
+            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
+            params.typ == CoreDealManagementType.RETURN_PROFITS
         );
     }
 
