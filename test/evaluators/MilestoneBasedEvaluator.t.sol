@@ -22,6 +22,7 @@ contract MockUSDC is ERC20 {
 contract MockDealCell is IDealCell {
     uint256 public returnedCapital;
     uint256 internal _startTime;
+    mapping(address => uint256) internal investedCapital;
 
     constructor(uint256 __startTime) {
         _startTime = __startTime;
@@ -29,6 +30,10 @@ contract MockDealCell is IDealCell {
 
     function setReturnedCapital(uint256 _returned) external {
         returnedCapital = _returned;
+    }
+
+    function setInvestedCapital(address token, uint256 amount) external {
+        investedCapital[token] = amount;
     }
 
     function getReturnedCapital(address) external view returns (uint256) {
@@ -50,7 +55,7 @@ contract MockDealCell is IDealCell {
     function fundingTokens() external pure returns (address[] memory) { return new address[](0); }
     function getStakedAgentTotal() external pure returns (uint256) { return 0; }
     function getMainRewardsLimit() external pure returns (uint256) { return 0; }
-    function getInvestedCapital(address) external pure returns (uint256) { return 0; }
+    function getInvestedCapital(address token) external view returns (uint256) { return investedCapital[token]; }
     function allowEarlyReturns() external pure returns (bool) { return false; }
     function allowDACVeto() external pure returns (bool) { return false; }
     function isValidDeal() external pure returns (bool) { return true; }
@@ -246,6 +251,147 @@ contract MilestoneBasedEvaluatorTest is Test {
         assertEq(results.length, 2);
         assertEq(results[1].action, 0); // slash
         assertEq(results[1].percent, MathLib.atScale(30));
+    }
+
+    function test_multipleMilestones_capRewardShareAcrossEvaluations() public {
+        Milestone[] memory milestones = new Milestone[](2);
+
+        // For milestone evaluator every milestone is independent and should count total returns
+        // Therefore second milestones include also target of the first (20_000 = 10_000 x2)
+
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(40),
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
+        });
+        milestones[1] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 20_000e6,
+            timestamp: block.timestamp + 60 days,
+            rewardPercentage: MathLib.atScale(40),
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
+        });
+        milestones[0].rewardCurve[0] = 1e18;
+        milestones[1].rewardCurve[0] = 1e18;
+
+        MilestoneBasedEvaluator.Config memory cfg = MilestoneBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(50),
+            milestones: milestones
+        });
+
+        deployEvaluator(cfg);
+        mockDealCell.setReturnedCapital(10_000e6);
+
+        vm.warp(block.timestamp + 30 days);
+        EvaluationResult[] memory first = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(first.length, 1);
+        assertEq(first[0].action, 1);
+        assertEq(first[0].percent, MathLib.atScale(40));
+
+        mockDealCell.setReturnedCapital(20_000e6);
+
+        vm.warp(block.timestamp + 30 days);
+        EvaluationResult[] memory second = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(second.length, 1);
+        assertEq(second[0].action, 1);
+        assertEq(second[0].percent, MathLib.atScale(10));
+    }
+
+    function test_extendedMilestone_canBeEvaluatedLater() public {
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 1,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(100),
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: MathLib.atScale(80),
+            extension: 7 days
+        });
+        milestones[0].rewardCurve[0] = 1e18;
+
+        MilestoneBasedEvaluator.Config memory cfg = MilestoneBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(100),
+            milestones: milestones
+        });
+
+        deployEvaluator(cfg);
+        mockDealCell.setReturnedCapital(8_500e6);
+
+        vm.warp(block.timestamp + 30 days);
+        EvaluationResult[] memory first = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(first.length, 0);
+
+        mockDealCell.setReturnedCapital(10_000e6);
+        vm.warp(block.timestamp + 1 days);
+
+        EvaluationResult[] memory second = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(second.length, 2);
+        assertEq(second[0].action, 1);
+        assertEq(second[0].percent, MathLib.atScale(100));
+        assertEq(second[1].action, 3);
+    }
+
+    function test_sameTokenFunding_withoutOracle_usesRawAmounts() public {
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(usdc),
+            expectedReturn: 10_000e6,
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(25),
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
+        });
+        milestones[0].rewardCurve[0] = 1e18;
+
+        MilestoneBasedEvaluator.Config memory cfg = MilestoneBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(100),
+            milestones: milestones
+        });
+
+        deployEvaluator(cfg);
+        mockDealCell.setInvestedCapital(address(usdc), 10_000e6);
+        mockDealCell.setReturnedCapital(5_000e6);
+        usdc.mint(address(mockDealCell), 5_000e6);
+
+        vm.warp(block.timestamp + 30 days);
+
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(results.length, 1);
+        assertEq(results[0].action, 1);
+        assertEq(results[0].percent, MathLib.atScale(25));
     }
 
     /*//////////////////////////////////////////////////////////////
