@@ -162,6 +162,22 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         assertEq(agentToken.balanceOf(handle.dealCell), 30_000);
     }
 
+    function test_mockEvaluator_fullSlashAutoClosesAndMakesDealRecoverable() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal();
+
+        EvaluationResult[] memory results = _singleResult(0, MathLib.SCALE, 0);
+        MockEvaluator(handle.evaluatorAddr).setResults(results);
+
+        vm.prank(agent1);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+
+        StakedAgent stakeToken = StakedAgent(IDealCell(handle.dealCell).stakeToken());
+        assertEq(stakeToken.totalSupply(), 0);
+        assertEq(agentToken.balanceOf(handle.dealCell), 0);
+        assertTrue(IDealCell(handle.dealCell).isClosed());
+        assertTrue(DealManager(dealManager).isRecoverable(handle.dealId));
+    }
+
     function test_mockEvaluator_extendUpdatesDealDeadline() public {
         DealHandle memory handle = _setupApprovedMockTreasuryDeal();
 
