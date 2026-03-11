@@ -8,9 +8,17 @@ import {IVoting} from "../src/interfaces/IVoting.sol";
 import {IDealCell} from "../src/interfaces/IDealCell.sol";
 import {Deal} from "../src/kernel/Deal.sol";
 import {StakedAgent} from "../src/kernel/tokens/StakedAgent.sol";
+import {DACManagementProposalType} from "../src/kernel/governance/DACManagementProposals.sol";
 import {AbstractDealManagementType} from "../src/kernel/governance/AbstractDealManagementProposals.sol";
 import {CoreDealManagementType} from "../src/modules/core/governance/CoreDealManagementProposals.sol";
 import {TreasuryDeal} from "../src/modules/core/deals/TreasuryDeal.sol";
+import {Permit2Treasury} from "../src/modules/core/deals/Permit2Treasury.sol";
+import {CoreEvaluatorType} from "../src/modules/core/CoreModuleDeals.sol";
+import {RevenueBasedEvaluator} from "../src/modules/core/evaluators/RevenueBasedEvaluator.sol";
+import {TreasurySpendAllowance, RevenueSchedule} from "../src/modules/core/interfaces/Structs.sol";
+import {MathLib} from "../src/kernel/libraries/MathLib.sol";
+import {IDealManagerAdapter} from "../src/kernel/interfaces/IDealManagerAdapter.sol";
+import {DealState} from "../src/kernel/interfaces/Structs.sol";
 
 contract DealGovernanceFlowTest is DACTestBase {
     address public agent1 = makeAddr("agent1");
@@ -97,15 +105,7 @@ contract DealGovernanceFlowTest is DACTestBase {
     }
 
     function test_toggleEarlyReturns_thenReturnCapitalToDAC() public {
-        DealHandle memory handle = createTreasuryDeal(agent1);
-
-        vm.warp(block.timestamp + 1);
-        _stakeAndDelegate(agent1, handle.dealCell, 20_000);
-        vm.prank(agent1);
-        IDealCell(handle.dealCell).invite(agent2, true);
-        _stakeAndDelegate(agent2, handle.dealCell, 20_000);
-        _approveDeal(handle);
-        vm.warp(block.timestamp + 1);
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
 
         vm.startPrank(agent1);
         uint256 toggleProposalId = Deal(handle.dealAddr).createStakedAgentProposal(
@@ -148,6 +148,221 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(usdc.balanceOf(treasuryAddr), 6_000);
     }
 
+    function test_addEvaluator_requiresDACAndStakedAgentApproval() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+
+        RevenueSchedule memory schedule = RevenueSchedule({
+            token: address(usdc),
+            duration: 30 days,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](2),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(25),
+            graceCycles: 1,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false
+        });
+        schedule.requirementCurveCoeffs[0] = int256(MathLib.atScale(100));
+        schedule.requirementCurveCoeffs[1] = 0;
+        schedule.curveCoeffs[0] = 0;
+        schedule.curveCoeffs[1] = 1e18;
+
+        bytes memory evaluatorConfig = abi.encode(
+            CoreEvaluatorType.REVENUE_EVALUATOR,
+            abi.encode(
+                RevenueBasedEvaluator.Config({
+                    rewardShare: MathLib.atScale(20),
+                    schedule: schedule
+                })
+            )
+        );
+
+        vm.startPrank(founder);
+        uint256 dacProposalId = dac.createManagementProposal(
+            ProposalParams({
+                typ: DACManagementProposalType.ADD_EVALUATOR,
+                target: address(0),
+                i: 0,
+                data: abi.encode(handle.dealId, evaluatorConfig)
+            })
+        );
+        vm.warp(block.timestamp + 1);
+        IVoting(dac.getProposalVoting(dacProposalId)).vote(true);
+
+        vm.recordLogs();
+        dac.executeDACProposal(dacProposalId);
+        vm.stopPrank();
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 permitEvaluatorProposalId = _findDealProposalId(logs, AbstractDealManagementType.PERMIT_EVALUATOR_ADD);
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, permitEvaluatorProposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, permitEvaluatorProposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(permitEvaluatorProposalId);
+
+        DealState memory state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertEq(state.evaluators.length, 2);
+        assertEq(RevenueBasedEvaluator(state.evaluators[1]).dealId(), handle.dealId);
+        assertEq(RevenueBasedEvaluator(state.evaluators[1]).cell(), handle.dealCell);
+        assertEq(state.evaluators[0], handle.evaluatorAddr);
+        assertTrue(state.evaluators[1] != address(0));
+    }
+
+    function test_approveDirectSpend_transfersTreasuryFunds() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address recipient = makeAddr("recipient");
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.APPROVE_DIRECT_SPEND,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(recipient, uint160(3_000))
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertEq(usdc.balanceOf(recipient), 3_000);
+        assertEq(usdc.balanceOf(treasuryAddr), 7_000);
+    }
+
+    function test_approveAgentSpend_allowsAgentToExecuteSpend() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        address destination = makeAddr("destination");
+
+        TreasurySpendAllowance memory allowance = TreasurySpendAllowance({
+            totalAmount: 4_000,
+            singleTxAmount: 2_500,
+            clockLimit: 0,
+            duration: 1 days
+        });
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.APPROVE_AGENT_SPEND,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(agent1, destination, allowance)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        Permit2Treasury treasury = Permit2Treasury(treasuryAddr);
+        bytes32 allowanceHash = keccak256(abi.encode(agent1, address(usdc), destination));
+        (uint160 totalAmount, uint160 singleTxAmount,,) = treasury.agentAllowance(allowanceHash);
+        assertEq(totalAmount, 4_000);
+        assertEq(singleTxAmount, 2_500);
+
+        vm.prank(agent1);
+        treasury.executeAgentSpend(address(usdc), destination, 1_500);
+
+        assertEq(usdc.balanceOf(destination), 1_500);
+        assertEq(usdc.balanceOf(treasuryAddr), 8_500);
+        (uint160 remainingAmount,,,) = treasury.agentAllowance(allowanceHash);
+        assertEq(remainingAmount, 2_500);
+    }
+
+    function test_assignClaimer_and_revokeAgent_updateTreasuryPermissions() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        address counterparty = makeAddr("counterparty");
+
+        TreasurySpendAllowance memory allowance = TreasurySpendAllowance({
+            totalAmount: 4_000,
+            singleTxAmount: 2_000,
+            clockLimit: 0,
+            duration: 1 days
+        });
+
+        vm.startPrank(agent1);
+        uint256 assignProposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.ASSIGN_CLAIMER,
+                target: agent1,
+                i: 0,
+                data: abi.encode(address(usdc), counterparty, uint160(2_500))
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, assignProposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, assignProposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(assignProposalId);
+
+        vm.startPrank(agent1);
+        uint256 spendProposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.APPROVE_AGENT_SPEND,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(agent1, counterparty, allowance)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, spendProposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, spendProposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(spendProposalId);
+
+        Permit2Treasury treasury = Permit2Treasury(treasuryAddr);
+        bytes32 accessHash = keccak256(abi.encode(agent1, address(usdc), counterparty));
+        assertEq(treasury.approvedAgents(accessHash), 2_500);
+        (uint160 totalAmount,,,) = treasury.agentAllowance(accessHash);
+        assertEq(totalAmount, 4_000);
+
+        vm.startPrank(agent1);
+        uint256 revokeProposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.REVOKE_AGENT,
+                target: address(usdc),
+                i: 0,
+                data: abi.encode(agent1, counterparty)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, revokeProposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, revokeProposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(revokeProposalId);
+
+        assertEq(treasury.approvedAgents(accessHash), 0);
+        (uint160 remainingAmount,,,) = treasury.agentAllowance(accessHash);
+        assertEq(remainingAmount, 0);
+    }
+
+    function _setupApprovedTreasuryDealWithTwoAgents() internal returns (DealHandle memory handle) {
+        handle = createTreasuryDeal(agent1);
+
+        vm.warp(block.timestamp + 1);
+        _stakeAndDelegate(agent1, handle.dealCell, 20_000);
+        vm.prank(agent1);
+        IDealCell(handle.dealCell).invite(agent2, true);
+        _stakeAndDelegate(agent2, handle.dealCell, 20_000);
+        _approveDeal(handle);
+        vm.warp(block.timestamp + 1);
+    }
+
     function _stakeAndDelegate(address agent, address dealCell, uint256 amount) internal {
         vm.startPrank(agent);
         agentToken.stakeToDeal(dealCell, amount);
@@ -176,5 +391,18 @@ contract DealGovernanceFlowTest is DACTestBase {
         }
 
         revert("proposal id not found");
+    }
+
+    function _findDealProposalId(Vm.Log[] memory logs, bytes4 proposalType) internal pure returns (uint256 proposalId) {
+        bytes32 eventSig = keccak256("DealManagementProposalCreated(address,address,uint256,bytes4,address,bytes32,bytes)");
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == eventSig && logs[i].topics[3] == bytes32(proposalType)) {
+                (proposalId,,,) = abi.decode(logs[i].data, (uint256, address, bytes32, bytes));
+                return proposalId;
+            }
+        }
+
+        revert("deal proposal id not found");
     }
 }
