@@ -415,6 +415,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         else if (typ == AbstractDealManagementType.ADD_STAKE) {
             // if the deal is not approved adding stakes not allowed
             require(approved, DACErrorsLib.DealIsNotApproved());
+            require(!recovery, DACErrorsLib.DealInLiquidation());
 
             DealCellGovernanceLib.addStake(
                 dacCell,

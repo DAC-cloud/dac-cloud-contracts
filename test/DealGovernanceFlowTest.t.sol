@@ -46,6 +46,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         IDealCell(handle.dealCell).invite(agent2, true);
         _stakeAndDelegate(agent2, handle.dealCell, 20_000);
         _approveDeal(handle);
+        assertEq(IDealCell(handle.dealCell).getInvestedCapital(address(usdc)), 10_000);
         vm.warp(block.timestamp + 1);
 
         vm.startPrank(agent1);
@@ -81,6 +82,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         vm.stopPrank();
 
         address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        assertEq(IDealCell(handle.dealCell).getInvestedCapital(address(usdc)), 15_000);
         assertEq(usdc.balanceOf(treasuryAddr), 15_000);
     }
 
