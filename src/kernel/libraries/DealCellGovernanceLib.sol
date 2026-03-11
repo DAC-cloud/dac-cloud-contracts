@@ -17,7 +17,6 @@ import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {MathLib} from "./MathLib.sol";
 
 interface IDealCellGovernanceAdapter {
-    function closeDeal() external;
     function invite(address invitee, bool grantInviteRight) external;
 }
 
@@ -453,8 +452,7 @@ library DealCellGovernanceLib {
         uint256 rewardsConverted,
         uint256 _tokenRewardsLimit,
         address[] storage holders,
-        mapping(address => uint256) storage claimableRewards,
-        address self
+        mapping(address => uint256) storage claimableRewards
     ) public returns (uint256 rewardsConvertedPct, uint256 rewardAmount) {
         rewardsConvertedPct = rewardsConverted;
         
@@ -473,11 +471,6 @@ library DealCellGovernanceLib {
         }
 
         rewardsConvertedPct += rewardPercent;
-
-        // if all rewards were paid out, marking the deal as closed so Agent tokens can withdraw stakes
-        if (rewardsConvertedPct == MathLib.SCALE) {
-            IDealCellGovernanceAdapter(self).closeDeal();
-        }
 
         emit DACEventsLib.RewardsAllocated(dacCell, id, address(deal), rewardAmount);
     }

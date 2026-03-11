@@ -333,6 +333,10 @@ library DACCellGovernanceLib {
         );
 
         dealState[dealCell].rewardsUnlocked += unlockedAmount;
+
+        if (IDealCell(dealCell).rewardsConvertedPct() == MathLib.SCALE) {
+            IDealCellAdapter(dealCell).closeDeal();
+        }
     }
 
     function _performSlash(
@@ -346,6 +350,10 @@ library DACCellGovernanceLib {
         uint256 slashedTokens = IDealCellAdapter(dealCell).markAsFailed(slashPercent);
 
         AgentToken(agentToken).burnFrom(dealCell, slashedTokens);
+
+        if (IERC20(IDealCell(dealCell).stakeToken()).totalSupply() == 0) {
+            IDealCellAdapter(dealCell).closeDeal();
+        }
     }
 
     function evaluateDeal(

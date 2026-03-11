@@ -301,8 +301,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             rewardsConverted,
             _tokenRewardsLimit,
             holders,
-            claimableRewards,
-            address(this)
+            claimableRewards
         );
     }
 
@@ -333,6 +332,9 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         if (msg.sender != manager) {
             require(token.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
 
+            // Normally should never happen as the deal is auto closed by manager
+            // however for additional safety allowing agent to close the deal if
+            // no more rewards are available
             require(rewardsConverted == MathLib.SCALE, DACErrorsLib.NotAllowed());
         }
 
@@ -490,6 +492,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function getReturnedCapital(address _fundingToken) external view returns (uint256) { return returnedCapital[_fundingToken]; }
     function getInvestedCapital(address _fundingToken) external view returns (uint256) { return investedCapital[_fundingToken]; }
     function getMainRewardsLimit() external view returns (uint256) { return _tokenRewardsLimit; }
+    function rewardsConvertedPct() external view returns (uint256) { return rewardsConverted; }
     
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external view returns (bool) { return approved; }

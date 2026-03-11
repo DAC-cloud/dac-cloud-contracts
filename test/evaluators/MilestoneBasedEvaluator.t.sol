@@ -68,6 +68,7 @@ contract MockDealCell is IDealCell {
     function fundingTokens() external pure returns (address[] memory) { return new address[](0); }
     function getStakedAgentTotal() external pure returns (uint256) { return 0; }
     function getMainRewardsLimit() external pure returns (uint256) { return 0; }
+    function rewardsConvertedPct() external pure returns (uint256) { return 0; }
     function getInvestedCapital(address token) external view returns (uint256) { return investedCapital[token]; }
     function allowEarlyReturns() external pure returns (bool) { return false; }
     function allowDACVeto() external pure returns (bool) { return false; }

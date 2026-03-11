@@ -26,6 +26,7 @@ interface IDealCell {
     function getReturnedCapital(address token) external view returns (uint256);
     function getInvestedCapital(address token) external view returns (uint256);
     function getMainRewardsLimit() external view returns (uint256);
+    function rewardsConvertedPct() external view returns (uint256);
     
     function allowEarlyReturns() external view returns (bool);
     function allowDACVeto() external view returns (bool);
