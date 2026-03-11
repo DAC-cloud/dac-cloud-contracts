@@ -6,10 +6,12 @@ import {DACTestBase} from "./base/DACTestBase.t.sol";
 import {ProposalParams} from "../src/interfaces/Structs.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
 import {IDealCell} from "../src/interfaces/IDealCell.sol";
+import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
 import {Deal} from "../src/kernel/Deal.sol";
 import {StakedAgent} from "../src/kernel/tokens/StakedAgent.sol";
 import {DACManagementProposalType} from "../src/kernel/governance/DACManagementProposals.sol";
 import {AbstractDealManagementType} from "../src/kernel/governance/AbstractDealManagementProposals.sol";
+import {DealManagementProposal} from "../src/kernel/governance/DealManagementProposal.sol";
 import {CoreDealManagementType} from "../src/modules/core/governance/CoreDealManagementProposals.sol";
 import {TreasuryDeal} from "../src/modules/core/deals/TreasuryDeal.sol";
 import {Permit2Treasury} from "../src/modules/core/deals/Permit2Treasury.sol";
@@ -212,6 +214,123 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertTrue(state.evaluators[1] != address(0));
     }
 
+    function test_vetoEnabledHighQuorumProposal_waitsFullDuration() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        _enableDealVeto(handle);
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.TOGGLE_EARLY_RETURNS,
+                target: address(0),
+                i: 0,
+                data: abi.encode(true)
+            })
+        );
+        vm.stopPrank();
+
+        address proposal = Deal(handle.dealAddr).getProposal(proposalId);
+        assertTrue(DealManagementProposal(proposal).vetoRight());
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+
+        assertFalse(IVoting(proposal).isResolved());
+        vm.expectRevert(DACErrorsLib.NotResolved.selector);
+        IVoting(proposal).outcome();
+
+        vm.expectRevert(DACErrorsLib.VoteNotPassed.selector);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        vm.warp(block.timestamp + 7 days + 1);
+        assertTrue(IVoting(proposal).isResolved());
+
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+        assertTrue(IDealCell(handle.dealCell).allowEarlyReturns());
+    }
+
+    function test_vetoEnabledBlockingProposal_waitsFullDuration() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        _enableDealVeto(handle);
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.REQUEST_TRANCHE,
+                target: address(usdc),
+                i: bytes32(uint256(2_000)),
+                data: bytes("")
+            })
+        );
+        vm.stopPrank();
+
+        address proposal = Deal(handle.dealAddr).getProposal(proposalId);
+        assertTrue(DealManagementProposal(proposal).vetoRight());
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+
+        assertFalse(IVoting(proposal).isResolved());
+        vm.expectRevert(DACErrorsLib.NotResolved.selector);
+        IVoting(proposal).outcome();
+
+        vm.expectRevert(DACErrorsLib.VoteNotPassed.selector);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        vm.warp(block.timestamp + 7 days + 1);
+        assertTrue(IVoting(proposal).isResolved());
+
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+        assertEq(IDealCell(handle.dealCell).fundingTranche(proposalId).amount, 2_000);
+    }
+
+    function test_dacCanVetoDealProposal_beforeExpiry() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        _enableDealVeto(handle);
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.REQUEST_TRANCHE,
+                target: address(usdc),
+                i: bytes32(uint256(2_500)),
+                data: bytes("")
+            })
+        );
+        vm.stopPrank();
+
+        address proposal = Deal(handle.dealAddr).getProposal(proposalId);
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+
+        assertFalse(IVoting(proposal).isResolved());
+
+        vm.startPrank(founder);
+        uint256 dacProposalId = dac.createManagementProposal(
+            ProposalParams({
+                typ: DACManagementProposalType.CAST_VETO_DEAL,
+                target: address(0),
+                i: 0,
+                data: abi.encode(handle.dealId, proposalId)
+            })
+        );
+        vm.warp(block.timestamp + 1);
+        IVoting(dac.getProposalVoting(dacProposalId)).vote(true);
+        dac.executeDACProposal(dacProposalId);
+        vm.stopPrank();
+
+        assertTrue(IVoting(proposal).isResolved());
+        assertFalse(IVoting(proposal).outcome());
+        assertTrue(DealManagementProposal(proposal).vetoCasted());
+
+        vm.expectRevert(DACErrorsLib.VoteNotPassed.selector);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+    }
+
     function test_approveDirectSpend_transfersTreasuryFunds() public {
         DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
         address recipient = makeAddr("recipient");
@@ -360,6 +479,27 @@ contract DealGovernanceFlowTest is DACTestBase {
         IDealCell(handle.dealCell).invite(agent2, true);
         _stakeAndDelegate(agent2, handle.dealCell, 20_000);
         _approveDeal(handle);
+        vm.warp(block.timestamp + 1);
+    }
+
+    function _enableDealVeto(DealHandle memory handle) internal {
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.ENABLE_VETO_RIGHT,
+                target: address(0),
+                i: 0,
+                data: bytes("")
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertTrue(IDealCell(handle.dealCell).allowDACVeto());
         vm.warp(block.timestamp + 1);
     }
 
