@@ -1,213 +1,293 @@
-**DAC_contracts.md**  
-**v1.0 – February 22, 2026**  
-**Complete Contract Inventory & Responsibilities**
+**DAC Cloud Contract Inventory**
+**Implementation-aligned reference**
+**Updated: March 11, 2026**
 
-This document serves as the single source of truth for all contracts in the DAC Engine codebase. It lists every deployed contract, its purpose, key responsibilities, and how it interacts with others.
+This file is the contract map for the current repository.
 
-### Relationships diagram
+## 1. Top-Level Architecture
 
 ```mermaid
 flowchart TB
-    %% Root Level
-    Root[DACEntity<br/>Kernel + Treasury] 
-    Root --> LP[LPToken<br/>Equity, transferable]
-    Root --> MP[MPToken<br/>Non-transferable managing rights]
-    Root --> Registry[Trusted Factories Registry<br/>LP-governed]
-    Root --> VotingConfig[VotingConfig<br/>Quorum + Duration]
+    Factory["DACFactory"] --> Cell["DACCell"]
+    Factory --> Main["MainToken"]
+    Factory --> Agent["AgentToken"]
+    Cell --> Manager["DealManager"]
 
-    %% Factories
-    Registry --> DealFactory[DealFactory<br/>CREATE2 deployment]
-    Registry --> EvaluatorFactory[EvaluatorFactory<br/>Per-deal evaluators]
-    Registry --> LPMFactory[LPManagementFactory<br/>LP proposals]
-    Registry --> StakedFactory[StakedMPProposalFactory<br/>Per-Deal proposals]
+    Manager --> Module["ModuleFactory"]
+    Module --> DealCell["DealCell"]
+    Module --> Deal["Deal implementation"]
+    Module --> Eval["Evaluator"]
 
-    %% Deal Types
-    subgraph DealTypes ["Deal Instances (modular)"]
-        DealBase[abstract Deal<br/>Core logic + hooks]
-        DACDeal[DACDeal<br/>Child DAC capital calls + tranches]
-        VaultDeal[VaultDeal<br/>Agent treasury + Permit2]
-    end
-
-    DealFactory --> DealBase
-    DealBase --> DACDeal
-    DealBase --> VaultDeal
-
-    %% Vault specifics
-    VaultDeal --> VaultTreasury[VaultTreasury<br/>Holds assets<br/>Permit2 execution]
-
-    %% Evaluators
-    EvaluatorFactory --> Evaluator[Per-Deal Evaluator<br/>Math / Oracle / AI<br/>Returns EvaluationResult]
-
-    %% Governance flows
-    LP --> LPMFactory
-    MP --> StakedFactory
-
-    %% Capital & Interaction flows
-    DACDeal -- Capital Call + LP mint --> Root
-    VaultDeal -- Return Capital --> Root
-    VaultDeal -- x402 Payments --> VaultTreasury
-    VaultTreasury -- Permit2 Spends --> External[External Contracts<br/>DEX, Agents, x402]
-
-    %% Tree structure
-    Root -- Child DAC creation --> ChildDAC[Child DACEntity<br/>Independent tree node]
-    ChildDAC --> SubDeal[Sub-Deals / Sub-Vaults]
-
-    %% Legend / Notes
-    classDef core fill:#e3f2fd,stroke:#1976d2
-    classDef token fill:#f3e5f5,stroke:#7b1fa2
-    classDef factory fill:#e8f5e9,stroke:#388e3c
-    classDef deal fill:#fff3e0,stroke:#f57c00
-    classDef treasury fill:#fce4ec,stroke:#c2185b
-
-    class Root,ChildDAC core
-    class LP,MP token
-    class Registry,DealFactory,EvaluatorFactory,LPMFactory,StakedFactory factory
-    class DealBase,DACDeal,VaultDeal deal
-    class VaultTreasury treasury
+    Agent -->|"stake"| DealCell
+    DealCell --> Stake["StakedAgent"]
+    Cell -->|"DAC proposals"| DACGov["DACManagementProposal"]
+    Deal -->|"deal proposals"| DealGov["DealManagementProposal"]
 ```
 
-### Core Kernel & Shared Contracts
+## 2. Kernel Contracts
 
-1. **DACEntity.sol**  
-   **Role**: The central kernel / corporation OS of each DAC.  
-   **Key Responsibilities**:
-    - Holds the treasury (ERC-20 only)
-    - Manages LP/MP token minting/burning
-    - Maintains registry of trusted deal & evaluator factories (LP-governed)
-    - Executes LP proposals (generic command pattern via LPManagementProposal)
-    - Creates Deals via registered factories
-    - Evaluates Deals (calls per-deal evaluator)
-    - Governs voting config, oracles, and global parameters
+### `src/kernel/DACFactory.sol`
+- Deploys new DACs.
+- Predicts `DACCell` address with `CREATE2`.
+- Deploys `MainToken`, `AgentToken`, and `DACCell`.
+- Starts the DAC immediately or stores a deferred "sleeping cell" deployment for later activation.
 
-2. **Deal.sol** (abstract base)  
-   **Role**: Shared core logic for all deal types.  
-   **Key Responsibilities**:
-    - MP staking/unstaking
-    - Deadlines (approve/deal)
-    - Capped reward pool (`lpRewardsLimit`) & pro-rata distribution
-    - Hooks for customization (`_beforeStake`, `_afterApprove`, etc.)
-    - Generic staked-MP proposal system (via StakedMPProposal)
-    - Basic governance actions (earlyReturns toggle, etc.)
+### `src/kernel/DACCell.sol`
+- DAC-level governance and treasury kernel.
+- Stores DAC metadata, voting config, legal wrapper, and dividend state.
+- Creates and executes DAC governance proposals.
+- Tracks treasury balances and capital calls.
+- Initializes the root capital call.
 
-3. **DACDeal.sol**  
-   **Role**: Standard deal for investing into child DAC LP.  
-   **Key Responsibilities**:
-    - Handles capital calls to child DAC (tranches)
-    - Manages child proposal voting & execution (proxy voting)
-    - Overrides `onApproved` for capital call fulfillment
+### `src/kernel/DealManager.sol`
+- Registry and lifecycle controller for all deals created by a DAC.
+- Holds the approved module-factory set for that DAC.
+- Tracks per-deal state, evaluator list, reward caps, reward unlocks, and reward payments.
+- Prevents controlled or unreleased `MainToken` balances from voting.
+- Evaluates deals and applies evaluator actions.
 
-4. **VaultDeal.sol**  
-   **Role**: Agent-controlled treasury vault.  
-   **Key Responsibilities**:
-    - Controls VaultTreasury via quorum-approved Permit2 spends
-    - Supports two staked-MP proposal types: `ApprovePermit2Spend`, `ReturnCapitalToDAC`
-    - Returns only original funding token to parent DAC
-    - Integrates with x402 payment flows (incoming receipts)
+### `src/kernel/DealCell.sol`
+- Per-deal state container.
+- Stores deal metadata, deadlines, tranches, whitelist state, early-return flag, veto flag, capital accounting, and claimable rewards.
+- Mints and burns the deal's `StakedAgent`.
+- Bridges the DAC, deal logic, and evaluator outputs.
 
-5. **VaultTreasury.sol**  
-   **Role**: Asset-holding contract controlled by VaultDeal.  
-   **Key Responsibilities**:
-    - Holds ERC-20 tokens
-    - Executes Permit2-approved spends (on-chain approve + execute)
-    - Returns capital to parent VaultDeal (only funding token)
-    - Receives x402 payments (agent-friendly)
+### `src/kernel/Deal.sol`
+- Abstract base contract for all deal logic.
+- Hosts staked-agent governance proposals and lifecycle hooks.
+- Delegates generic accounting/state to `DealCell` while retaining custom execution logic in child contracts.
 
-### Token Contracts
+### `src/kernel/ModuleFactory.sol`
+- Abstract deployment layer for modules.
+- Deploys a `DealCell`, concrete `Deal`, and concrete evaluator for a new deal.
+- Used by `DealManager` through `IModuleFactory`.
 
-6. **LPToken.sol**  
-   **Role**: Equity token of the DAC.  
-   **Key Responsibilities**:
-    - Minted only by DACEntity
-    - Freely transferable
-    - Used for LP governance and reward distribution
+### `src/kernel/proxies/UUPSProxy.sol`
+- Generic proxy used by the factories.
+- Current contracts use it mainly for initialization and factory deployment patterns.
 
-7. **MPToken.sol**  
-   **Role**: Non-transferable managing rights.  
-   **Key Responsibilities**:
-    - Minted/burned only by DACEntity
-    - Staked into Deals (via `stakeToDeal`)
-    - Non-transferable by design
+## 3. Kernel Factories
 
-### Proposal & Voting Contracts
+### `src/kernel/factories/DACCellFactory.sol`
+- Deploys `DACCell` proxies.
 
-8. **LPManagementProposal.sol**  
-   **Role**: LP-governed proposals (generic command pattern).  
-   **Key Responsibilities**:
-    - Stores proposal parameters (`typ`, `target`, `amount`, `data`)
-    - Decodes `data` for type-specific execution
-    - Handles MintMP, Dividend, CapitalCall, factory management, MP revocation, etc.
+### `src/kernel/factories/DealManagerFactory.sol`
+- Deploys `DealManager` proxies.
 
-9. **StakedMPProposal.sol**  
-   **Role**: Staked-MP-governed proposals per Deal.  
-   **Key Responsibilities**:
-    - Stores deal-specific actions (tranche requests, Permit2 approves, early returns, etc.)
-    - Decodes `data` for execution
-    - Votes weighted by StakedMP balance
+### `src/kernel/factories/DealCellFactory.sol`
+- Deploys `DealCell` proxies.
 
-10. **Proposal.sol** (abstract base)  
-    **Role**: Shared voting logic for both LP and staked-MP proposals.  
-    **Key Responsibilities**:
-    - Implements basic quorum/blocking voting
-    - Handles `vote`, `isResolved`, `outcome`
+## 4. Governance Contracts
 
-### Factories
+### `src/kernel/governance/Proposal.sol`
+- Shared snapshot-voting base used by DAC and deal proposals.
+- Supports quorum, blocking quorum, optional veto rights, resolution checks, and vote casting.
 
-11. **DACFactory.sol**  
-    **Role**: Deploys new DACs with CREATE2 (deterministic addresses).  
-    **Key Responsibilities**:
-    - Deploys LPToken, MPToken, DACEntity
-    - Predictable addresses via salt
+### `src/kernel/governance/DACManagementProposal.sol`
+- DAC-level proposal contract using `MainToken` voting power.
 
-12. **DealFactory.sol**  
-    **Role**: Deploys Deal instances (DACDeal, VaultDeal, future types).  
-    **Key Responsibilities**:
-    - Deploys child deal + evaluator
-    - Uses CREATE2 for predictability
+### `src/kernel/governance/DealManagementProposal.sol`
+- Deal-level proposal contract using `StakedAgent` voting power.
 
-13. **LPManagementFactory.sol**  
-    **Role**: Deploys generic LP proposals.
+### `src/kernel/governance/DACManagementProposals.sol`
+- DAC-level proposal type registry.
+- Defines selectors for:
+  - voting-config updates,
+  - legal wrapper updates,
+  - offchain approvals,
+  - main-token mint/burn,
+  - agent-token mint/revoke,
+  - dividends,
+  - capital calls,
+  - module management,
+  - deal and tranche approval,
+  - deal recovery,
+  - evaluator addition,
+  - deal messages,
+  - veto casting,
+  - vote delegation.
 
-14. **StakedMPProposalFactory.sol**  
-    **Role**: Deploys per-deal staked-MP proposals.
+### `src/kernel/governance/AbstractDealManagementProposals.sol`
+- Base deal-proposal type registry.
+- Defines selectors for:
+  - voting-config updates,
+  - tranche requests,
+  - stake changes,
+  - unstake permissions,
+  - whitelist toggle,
+  - early-return toggle,
+  - DAC veto enablement,
+  - evaluator-add permission.
 
-15. **EvaluatorFactory.sol** (example: BasicEvaluatorFactory)  
-    **Role**: Deploys per-deal evaluators with custom config.
+### `src/kernel/governance/factories/DACManagementProposalFactory.sol`
+- Deploys `DACManagementProposal`.
+- Selects quorum mode based on proposal type.
 
-### Supporting Contracts
+### `src/kernel/governance/factories/DealManagementProposalFactory.sol`
+- Abstract factory for `DealManagementProposal`.
+- Applies kernel quorum rules for base deal proposals.
+- Lets modules define additional quorum rules for module-specific proposals.
 
-16. **VotingFactory.sol**  
-    **Role**: Deploys Voting instances (now optional with Proposal base).
+## 5. Token Contracts
 
-### Summary Table – Quick Reference
+### `src/kernel/tokens/MainToken.sol`
+- DAC main token.
+- Transferable `ERC20Votes`.
+- Mint capped by `maxSupply`.
+- Delegation restricted through `DealManager` checks for controlled balances.
 
-| Contract                  | Type         | Deployed By          | Governance By     | Key Feature                          |
-|---------------------------|--------------|----------------------|-------------------|--------------------------------------|
-| DACEntity                 | Kernel       | DACFactory           | LP holders        | Treasury, registry, LP/MP minting    |
-| Deal (abstract)           | Base         | —                    | —                 | Shared staking, rewards, hooks       |
-| DACDeal                   | Deal type    | DealFactory          | Staked-MP         | Child DAC capital calls              |
-| VaultDeal                 | Deal type    | DealFactory          | Staked-MP         | Permit2 treasury control             |
-| VaultTreasury             | Treasury     | VaultDeal            | VaultDeal         | Permit2 spends, x402 receives        |
-| LPToken                   | Token        | DACFactory           | —                 | Transferable equity                  |
-| MPToken                   | Token        | DACFactory           | —                 | Non-transferable managing rights     |
-| LPManagementProposal      | Proposal     | LPManagementFactory  | LP holders        | Generic LP commands                  |
-| StakedMPProposal          | Proposal     | StakedMPProposalFactory | Staked-MP      | Per-Deal governance                  |
-| Proposal (abstract)       | Base         | —                    | —                 | Shared voting logic                  |
-| DACFactory                | Factory      | —                    | —                 | CREATE2 DAC deployment               |
-| DealFactory               | Factory      | —                    | —                 | Deal + evaluator deployment          |
+### `src/kernel/tokens/AgentToken.sol`
+- DAC agent token.
+- Minted and revoked through DAC governance.
+- Stake source for joining deals.
 
-### Final Notes
+### `src/kernel/tokens/StakedAgent.sol`
+- Per-deal non-transferable `ERC20Votes`.
+- Represents staked participation inside a deal.
 
-- All governance is now **LP or Staked-MP driven** — no deployer backdoors.
-- The system is **highly modular**: new deal types only need to inherit `Deal` and override hooks/proposal handlers.
-- **3rd-party extensibility** is ready: deploy a new factory → LP vote to trust it → anyone can create new deal instances.
+### `src/kernel/tokens/factories/TokenFactories.sol`
+- Contains:
+  - `MainTokenFactory`
+  - `AgentTokenFactory`
+  - `StakedAgentFactory`
 
-This document is now your single reference for "what contract does what".
+## 6. Kernel Libraries
 
-Let me know if you want:
-- To add a visual diagram (text or Mermaid)
-- To split into sub-documents (e.g., `DAC_vaults.md`, `DAC_deals.md`)
-- Or to move to the next code task (tests, x402 integration, deployment scripts, etc.)
+### `src/kernel/libraries/DACDeployment.sol`
+- Predicts `DACCell` addresses for factory deployments.
 
-We’re in excellent shape — the architecture is now very clear, secure, and ready for real-world use.
+### `src/kernel/libraries/DACCellGovernanceLib.sol`
+- Core DAC-side orchestration logic.
+- Creates deal proposals, DAC proposals, tranches, evaluator additions, reward minting, and evaluator execution.
 
-What’s next on your mind? 🚀
+### `src/kernel/libraries/DACCellCapitalLib.sol`
+- Handles capital calls, treasury deposits, treasury recovery, and dividend claims.
+
+### `src/kernel/libraries/DealCellGovernanceLib.sol`
+- Handles deal staking, unstaking, claim flows, tranche requests, capital return, reward allocation, and slashing.
+
+### `src/kernel/libraries/MathLib.sol`
+- Shared fixed-point math library used across voting and evaluator logic.
+
+## 7. Core Module Contracts
+
+### `src/modules/core/CoreModuleFactory.sol`
+- Active module factory shipped with the repository.
+- Maps supported deal kinds and evaluator kinds to concrete factories.
+
+### `src/modules/core/CoreModuleDeals.sol`
+- Declares current core deal/evaluator selectors:
+  - `DAC_DEAL`
+  - `PERMIT2_TREASURY`
+  - `MILESTONES_EVALUATOR`
+  - `REVENUE_EVALUATOR`
+
+### `src/modules/core/governance/CoreDealManagementProposals.sol`
+- Core-module proposal selector registry.
+- Covers child-DAC actions and treasury-management actions.
+
+### `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol`
+- Concrete deal-governance factory for core module proposals.
+- Applies quorum rules for the selectors defined above.
+
+## 8. Core Deal Implementations
+
+### `src/modules/core/deals/DACDeal.sol`
+- Deal type for owning and funding a child DAC.
+- Can deploy a new child DAC or connect to an existing one.
+- Fulfills child capital calls on tranche approval.
+- Returns the child DAC `MainToken` position to the parent DAC when the deal closes.
+
+### `src/modules/core/deals/TreasuryDeal.sol`
+- Deal type for a governed treasury / execution wallet.
+- Owns a dedicated `Permit2Treasury`.
+- Supports spend approvals, agent allowances, receive permissions, capital return, and treasury vote delegation.
+
+### `src/modules/core/deals/Permit2Treasury.sol`
+- Asset-holding treasury controlled by `TreasuryDeal`.
+- Supports:
+  - Permit2 spend approvals,
+  - direct spends,
+  - agent receive permissions,
+  - agent spend allowances,
+  - capital return to the deal.
+
+### `src/modules/core/deals/factories/DACDealFactory.sol`
+- Deploys `DACDeal`.
+
+### `src/modules/core/deals/factories/TreasuryDealFactory.sol`
+- Deploys `TreasuryDeal`.
+- Also deploys the shared `Permit2TreasuryFactory`.
+
+## 9. Evaluators
+
+### `src/modules/core/evaluators/MilestoneBasedEvaluator.sol`
+- Milestone schedule evaluator.
+- Supports reward and penalty curves, extensions, and close milestones.
+
+### `src/modules/core/evaluators/RevenueBasedEvaluator.sol`
+- Recurring revenue evaluator.
+- Supports periodic unlocks, missed-cycle penalties, and optional auto-close.
+
+### `src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol`
+- Deploys `MilestoneBasedEvaluator`.
+
+### `src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol`
+- Deploys `RevenueBasedEvaluator`.
+
+## 10. Shared Interfaces and Structs
+
+### `src/interfaces/Structs.sol`
+- Shared config and message structs:
+  - `DACConfig`
+  - `VotingConfig`
+  - `LegalWrapper`
+  - `CapitalCall`
+  - `ProposalParams`
+  - `DealParams`
+  - `EvaluationResult`
+  - `Tranche`
+
+### `src/kernel/interfaces/Structs.sol`
+- Kernel runtime state structs:
+  - `DealState`
+  - `CapitalCallState`
+
+### `src/modules/core/interfaces/Structs.sol`
+- Core-module config structs:
+  - `DACDealConfig`
+  - `TreasurySpendAllowance`
+  - `Milestone`
+  - `RevenueSchedule`
+
+### Other key interfaces
+- `src/interfaces/IDACCell.sol`
+- `src/interfaces/IDealManager.sol`
+- `src/interfaces/IDealCell.sol`
+- `src/interfaces/IDeal.sol`
+- `src/interfaces/IModuleFactory.sol`
+- `src/interfaces/IEvaluator.sol`
+- `src/kernel/interfaces/IDACCellAdapter.sol`
+- `src/kernel/interfaces/IDealCellAdapter.sol`
+- `src/kernel/interfaces/IDealManagerAdapter.sol`
+
+## 11. Event and Error Catalogs
+
+### `src/interfaces/DACEventsLib.sol`
+- Central event catalog for DAC creation, proposals, funding, staking, evaluation, rewards, and capital returns.
+
+### `src/interfaces/DACErrorsLib.sol`
+- Central custom-error catalog shared across the system.
+
+## 12. Current Contract Relationships
+
+| Contract | Owns / deploys | Governs / controls | Main purpose |
+|---|---|---|---|
+| `DACFactory` | `DACCell`, `MainToken`, `AgentToken` | none after init | bootstrap DACs |
+| `DACCell` | root capital calls, DAC proposals | DAC treasury and policy | DAC kernel |
+| `DealManager` | deals registry, evaluator registry | active deals, reward safety | DAC execution router |
+| `DealCell` | `StakedAgent` | one deal's state and staking | deal shell |
+| `Deal` | module-defined logic | one deal's actions | deal brain |
+| `CoreModuleFactory` | core deals and evaluators | module deployment | module system |
+| `DACDeal` | child DAC position | child-DAC funding flow | structured child DAC investment |
+| `TreasuryDeal` | `Permit2Treasury` | treasury execution | governed operational wallet |

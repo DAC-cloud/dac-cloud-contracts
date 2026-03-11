@@ -1,41 +1,28 @@
-**DAC Engine Architecture**  
-*(Updated: February 22, 2026 – v1.4)*
+**DAC Cloud Architecture**
+**Updated: March 11, 2026**
 
 **“Lego for Autonomous Corporations” – The Full Vision**
 
+## 1. Executive Summary
 
-#### 1. Abstract
+DAC Cloud is structured as a small kernel plus pluggable execution modules:
 
-DAC Engine is an open-source, modular EVM framework for building **Decentralized Autonomous Corporations** — self-organizing entities where capital and managers/agents are economically aligned through transparent, performance-based incentives.
+- `DACCell` is the DAC-level governance and treasury kernel.
+- `DealManager` is the DAC's execution router, deal registry, and reward accountant.
+- `DealCell` is the per-deal state container and staking/governance bridge.
+- `Deal` is the pluggable execution contract for a specific deal type.
+- `ModuleFactory` deploys concrete deal and evaluator implementations.
+- `Evaluator` returns outcome instructions for a deal.
 
-It solves classic DAO problems:
-- No real skin-in-the-game for managers → speculation over performance
-- Centralized control or chaotic voting → misaligned incentives
-- Hard-coded governance → no flexibility for different business models
+## 2. Core Philosophy & Origin Story
 
-Instead:
-- **Skin in the game** = managers staking their carreer path against risk, aligning economical incentives with capital
-- **Tree structure** = small team organizes into infinitely nested tree
-
-- **MP tokens** = non-transferable managing rights (limited supply, staked per deal)
-- **Deals** = project/milestone escrows with capped LP reward pools and managers risks aligned
-- **Evaluators** = per-deal smart contracts that decide success/failure/conversion based on real metrics (returned capital, oracles, schedules…)
-- **Governance** = 100% LP-driven (capital/risk holders decide factories, MP revocations, etc.)
-
-The protocol is modular and optimized for the AI-agent economy, enabling agents to act as managing partners, govern vaults, and earn real equity.
-
-Target: enable **AI agents**, **human teams**, **hybrid organizations** to self-organize with real economic consequences.
-
-
-### 2. Core Philosophy & Origin Story
-
-DAC Engine was born from a simple but powerful observation: **modern organizations are too rigid, while blockchains are too chaotic**.
+DAC Cloud was born from a simple but powerful observation: **modern organizations are too rigid, while blockchains are too chaotic**.
 
 Traditional corporations are hierarchical, slow to adapt, and misaligned between capital and execution. Classic DAOs are transparent but suffer from speculation, low skin-in-the-game for managers, and governance theater.
 
-The original 2021–2022 pitchdeck sketch (attached in your message) captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** — agile teams of 5–9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
+The original "DAC engine" idea of 2021–2022 captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** — agile teams of 5–9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
 
-This is the **lego idea** at the heart of DAC Engine.
+This is the **lego idea** at the heart of DAC Cloud.
 
 Every team, product group, or service unit becomes its own **DAC** — a lightweight, self-sovereign corporation with its own treasury, governance, and incentives. These DACs connect through **Deals** (capital calls, service agreements, revenue shares) and settle payments instantly via x402, Permit2, or direct ERC-20 transfers.
 
@@ -45,145 +32,347 @@ The result is a living, breathing organizational fractal:
 - Performance is measured and rewarded transparently.  
 - The whole system scales without losing alignment.
 
+## 3. System Layers
 
-### 3. The Lego Metaphor – How It Actually Works
+### 3.1 DAC Layer
 
-Think of a DAC as a **single Lego brick**.
+The DAC layer is the sovereign unit:
 
-- Each brick has standard connectors (interfaces): capital calls, proposal system, evaluator, treasury.
-- Bricks can be snapped together in any configuration:
-  - A product team DAC makes a Deal with a marketing team DAC.
-  - A development DAC receives funding tranches from a parent product DAC.
-  - An external agent or startup creates a VaultDeal inside a larger corporate DAC tree.
-  - Multiple DACs form a temporary consortium for a big project.
+- `DACFactory` deploys the DAC
+- `DACCell` owns DAC-level governance and treasury accounting
+- `MainToken` provides transferable ERC20Votes governance power
+- `AgentToken` provides operator rights at the DAC level
+- `DealManager` manages all deals created by the DAC
 
-The tree structure is **dynamic and permissionless**:
-- Any group can spin up a child DAC.
-- Parent DACs allocate capital via governance-approved tranches.
-- Child DACs can have their own sub-DACs (infinite nesting).
-- Deals between any two DACs (internal or external) are settled on-chain with real economic consequences.
+### 3.2 Deal Layer
 
-This mirrors how modern tech companies already operate internally (agile squads, product teams, platform teams) but makes the relationships **economic, transparent, and incentive-aligned** instead of bureaucratic.
+Each deal is split into two contracts:
 
+- `DealCell` stores deal state, tranches, deadlines, whitelist flags, capital-return accounting, and the staked-agent token
+- `Deal` stores execution logic and custom module proposal handling
 
-### 4. Technical Implementation of the Lego System
+This split is important:
+- `DealCell` is the generic governance-and-accounting shell
+- `Deal` is the custom execution brain
 
-**Core Building Blocks (Bricks)**
+### 3.3 Module Layer
 
-- **DACEntity** – the kernel of each brick. Holds treasury, governance, and registry of trusted factories.
-- **Deal** (abstract) – the universal connector. Every project, vault, or service agreement is a Deal with:
-  - Capped reward pool (`lpRewardsLimit`)
-  - Tranches for controlled capital deployment
-  - Deadlines and performance evaluator
-  - Hooks for customization
-- **DACDeal** – standard Deal for investing into child DAC LP.
-- **VaultDeal** – agent-controlled treasury with Permit2 execution (DEX trades, x402 payouts, borrowing, etc.).
+Modules define:
+- which deal kinds are supported,
+- which evaluator kinds are supported,
+- how concrete deal contracts are deployed.
 
-```mermaid
-flowchart TD
-    %% Root DAC
-    Root[DAC<br/>Root Corporation<br/>Treasury + Governance]
+The current repository ships one module:
+- `CoreModuleFactory`
 
-    %% Core Lego Bricks
-    Root --> LP[LP Token<br/>Equity for Investors]
-    Root --> MP[MP Token<br/>Managing Rights<br/>Non-Transferable]
+The core module currently supports:
+- `DACDeal`
+- `TreasuryDeal`
+- `MilestoneBasedEvaluator`
+- `RevenueBasedEvaluator`
 
-    %% Factories & Registry
-    Root --> Registry[Trusted Factories Registry<br/>LP-governed]
-    Registry --> DealFactory[Deal Factory]
-    Registry --> EvalFactory[Evaluator Factory]
+## 4. Deployment Flow
 
-    %% Deal Instances (Lego Bricks)
-    subgraph "Composable Deals (Lego Bricks)"
-        DealBase[abstract Deal<br/>Core Logic + Hooks]
-        DACDeal[DAC Deal<br/>Child DAC Funding]
-        VaultDeal[Vault Deal<br/>Agent Treasury + Permit2]
-    end
+### 4.1 DAC Deployment
 
-    DealFactory --> DealBase
-    DealBase --> DACDeal
-    DealBase --> VaultDeal
+`DACFactory.deployDAC` performs the full DAC bootstrap:
 
-    %% Vault detail
-    VaultDeal --> VaultTreasury[VaultTreasury<br/>Holds Assets<br/>Permit2 Spends]
+1. Predict the `DACCell` address with `CREATE2`
+2. Deploy `MainToken`
+3. Deploy `AgentToken`
+4. Deploy the `DACCell` proxy
+5. Initialize the cell with token addresses, default voting config, and the core module
+6. Deploy the `DealManager` from inside `DACCell.initializeAfterDeployment`
+7. Grant mint/burn privileges from the tokens to the `DealManager`
+8. Create the root capital call through `initializeRootCapitalCall`
 
-    %% Tree Structure
-    DACDeal -- Capital Call + LP Mint --> ChildDAC[Child DAC<br/>Independent Tree Node]
-    ChildDAC --> SubDeal[Sub-Deal / Sub-Vault]
+There is also a deferred-birth path:
+- if `deferBirthRole` is set, the child DAC is deployed but not started,
+- the deployment DNA is stored in `sleepingCells`,
+- an approved external address later calls `startDAC`.
 
-    %% External Agent / Payment Flows
-    Agent[AI Agent / External Party] -- x402 Payment --> VaultTreasury
-    VaultTreasury -- Permit2 Execution --> External[DEX / Agents / Services]
+That deferred path is used by `DACDeal` when a child DAC needs to be prepared before it is fully activated.
 
-    %% Legend
-    classDef root fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef token fill:#f3e5f5,stroke:#7b1fa2
-    classDef factory fill:#e8f5e9,stroke:#388e3c
-    classDef deal fill:#fff3e0,stroke:#f57c00
-    classDef treasury fill:#fce4ec,stroke:#c2185b
-    classDef agent fill:#e0f7fa,stroke:#0097a7
+## 5. Token Architecture
 
-    class Root,ChildDAC root
-    class LP,MP token
-    class Registry,DealFactory,EvalFactory factory
-    class DealBase,DACDeal,VaultDeal deal
-    class VaultTreasury treasury
-    class Agent agent
-```
+### 5.1 MainToken
 
-> DAC Engine organizes corporations as composable trees of autonomous DACs. Each team or function becomes a Lego brick (Deal) that connects via capital calls, service agreements, and agent payments (x402 + Permit2). Root DAC governs factories and high-level capital; child DACs operate independently but stay economically aligned.
+`MainToken` is:
+- transferable,
+- vote-enabled through OpenZeppelin `ERC20Votes`,
+- capped by `maxSupply`,
+- mintable only by DAC-authorized minters (`DACCell` and `DealManager`).
 
+`DealManager` tracks controlled addresses and unreleased supply so that:
+- main tokens held inside DAC-controlled contracts,
+- unreleased rewards,
+- other locked balances
 
-**Connectors (How Bricks Snap Together)**
+do not accidentally participate in governance.
 
-- **Capital Calls** – standardized way for one DAC to fund another (tranches, LP minting to the Deal contract).
-- **Staked-MP Voting** – managers of a Deal vote on spends, tranches, early returns, etc.
-- **LPManagement Proposals** – LP holders of the parent DAC vote on high-level actions (factory management, MP revocation, dividend distribution).
-- **Evaluators** – per-Deal performance judges (math, oracle, or AI).
-- **x402 + Permit2** – native payment rails for agent-to-agent and agent-to-DAC commerce.
+### 5.2 AgentToken
 
-**Registry & Factories** – the “Lego Instruction Manual”
+`AgentToken` is:
+- minted and revoked through DAC governance,
+- stakeable into a `DealCell` before approval,
+- the source asset from which deal-local `StakedAgent` voting power is derived.
 
-- LP holders maintain a registry of trusted DealFactories and EvaluatorFactories.
-- Any 3rd party can deploy a new factory (e.g., `OptionsDealFactory`, `RevenueShareEvaluatorFactory`) and request inclusion via LP vote.
-- Once added, anyone can create new deal types using that factory.
+### 5.3 StakedAgent
 
+`StakedAgent` is:
+- deployed per deal,
+- non-transferable,
+- vote-enabled,
+- minted and burned only by the deal's `DealCell`.
 
-### 5. How It Scales to Large Organizations
+It is the token used for deal-local governance.
 
-1. A large company deploys a root **Management Group DAC**.
-2. Each agile team (5–9 people) deploys its own child DAC (or joins an existing one).
-3. Teams make internal Deals with each other (marketing DAC sells services to product DAC).
-4. Capital flows through governance-approved tranches and capital calls.
-5. Performance is evaluated automatically or by specialized evaluators.
-6. Successful teams earn LP equity in the parent or their own DAC.
-7. External agents, startups, or freelancers can participate via VaultDeals or direct Deals.
+## 6. DAC Governance
 
-The entire organization becomes a **dynamic, self-optimizing network** where capital flows to where value is created, and misaligned teams naturally receive less funding.
+DAC governance lives in `DACCell` and uses `DACManagementProposal`.
 
+### 6.1 Voting Model
 
-### 6. Why This Is Powerful for AI Agents
+Proposal voting uses:
+- snapshot voting power,
+- `quorumPercent`,
+- `highQuorumPercent`,
+- `blockingPercent`,
+- `duration`,
+- `qualification`.
 
-- Agents can hold MP tokens and act as full managing partners.
-- They can create or join DACs, propose Deals, and execute via VaultDeals using Permit2 (gasless).
-- x402 payments flow directly into VaultDeals and automatically update evaluator metrics.
-- Tree structure allows hierarchical agent organizations (e.g., a “CEO agent” DAC managing multiple “department agent” DACs).
+The proposal base contract also supports:
+- optional veto rights,
+- early resolution when quorum conditions are met,
+- blocking resolution when `noVotes` reach the blocking quorum.
 
-This turns isolated agents into coordinated economic entities with real equity, governance rights, and treasury control.
+### 6.2 DAC Proposal Responsibilities
 
+The current DAC-level proposal surface includes:
+- updating voting config,
+- setting the legal wrapper,
+- approving offchain actions,
+- minting and burning `MainToken`,
+- minting and revoking `AgentToken`,
+- toggling dividends,
+- publishing dividend payout roots,
+- creating capital calls,
+- approving new deals,
+- approving extra tranches,
+- adding and removing module factories,
+- recovering closed deals,
+- forwarding messages to deals,
+- adding evaluators to active deals,
+- delegating DAC-held voting power in any compatible token.
 
-### 7. Current Status & Extensibility
+## 7. Deal Governance
 
-The current implementation already supports:
-- Infinite DAC trees via capital calls
-- Multiple deal types (DACDeal, VaultDeal, future types)
-- Per-deal evaluators with custom config
-- LP-governed factory registry
-- Capped rewards, tranches, whitelist, early returns, recovery
-- Permit2-controlled vaults for agent execution
-- Generic proposal systems for both LP and staked-MP
+Deal governance lives in `Deal` and uses `DealManagementProposal`.
 
-3rd-party developers can:
-- Deploy a new `CustomDealFactory`
-- Request inclusion via LP vote
-- Create entirely new deal types by inheriting abstract `Deal` and using hooks
+### 7.1 Base Deal Proposal Types
+
+The kernel-level deal proposal types are:
+- update voting config,
+- request tranche,
+- add stake,
+- permit unstake,
+- enable DAC veto,
+- toggle whitelist,
+- toggle early returns,
+- permit evaluator addition.
+
+### 7.2 Core Module Proposal Types
+
+The core module adds deal-specific proposal types.
+
+For `DACDeal`:
+- create child DAC proposal,
+- vote child DAC proposal,
+- reinvest profits,
+- return profits.
+
+For `TreasuryDeal`:
+- approve direct spend,
+- approve Permit2 spend,
+- approve agent spend allowance,
+- assign receive claimer,
+- revoke agent,
+- return capital to DAC,
+- delegate treasury voting rights.
+
+## 8. Deal Lifecycle
+
+### 8.1 Creation
+
+An agent creates a deal by calling `DealManager.createDealProposal`.
+
+That method:
+1. checks the module factory is approved and active,
+2. asks the module to deploy a `DealCell`, `Deal`, and initial evaluator,
+3. stores the new `DealState`,
+4. auto-creates a DAC proposal of type `APPROVE_DEAL`.
+
+At this point the deal exists, but DAC capital is not yet committed.
+
+### 8.2 Staking
+
+Before tranche `0` is approved:
+- agents stake `AgentToken` into the `DealCell`,
+- the deal mints `StakedAgent`,
+- staked agents can now govern the deal.
+
+Whitelist mode starts enabled by default:
+- only the proposer is initially whitelisted,
+- the proposer can invite other agents,
+- deal governance can later disable the whitelist.
+
+### 8.3 Approval and Funding
+
+If DAC governance approves the deal:
+- DAC treasury funds are transferred to `DealManager`,
+- `DealManager.approveFunding` transfers tranche funds to the `DealCell`,
+- `DealCell.approveFunding` forwards tranche capital to the `Deal`,
+- the deal becomes active.
+
+Extra tranches follow a two-step path:
+1. staked agents approve `REQUEST_TRANCHE`
+2. `DealManager` auto-creates a DAC `APPROVE_TRANCHE` proposal
+
+### 8.4 Evaluation
+
+Any authorized evaluator call returns an array of `EvaluationResult` actions:
+
+- `action == 0`: slash agent stake
+- `action == 1`: unlock reward percentage
+- `action == 2`: extend deadline
+- `action == 3`: close deal
+
+`DealManager` applies those actions by:
+- slashing `AgentToken`,
+- unlocking capped claimable `MainToken`,
+- extending the deal deadline,
+- closing the `DealCell`.
+
+### 8.5 Reward Claims
+
+Unlocked rewards become claimable per staked agent.
+
+When an agent claims:
+1. `DealCell` checks its claimable amount,
+2. `DealManager.mintMain` verifies the evaluator permits minting,
+3. reward minting is capped by:
+   - per-deal reward limit,
+   - unlocked amount,
+   - total DAC main-token max supply.
+
+## 9. Capital Model
+
+### 9.1 Root Capital Call
+
+Every DAC starts with root capital call `nonce = 0`.
+
+That call mints the founder's initial `MainToken` allocation once the founder deposits the committed treasury asset.
+
+### 9.2 Treasury Accounting
+
+`DACCell` tracks treasury balances per token in `treasuryBalances`.
+
+Deposits can happen through:
+- capital call fulfillment,
+- explicit deal returns through `depositTreasury`,
+- treasury recovery when tokens were sent directly.
+
+### 9.3 Capital Return
+
+Deals return capital through `DealCellGovernanceLib.transferCapital`:
+- the deal approves the `DACCell`,
+- `DACCell.depositTreasury` pulls funds in,
+- returned capital is recorded per funding token.
+
+This lets evaluators reason about how much value was actually returned to the DAC.
+
+## 10. Core Deal Types
+
+### 10.1 DACDeal
+
+`DACDeal` is the child-DAC investment primitive.
+
+It supports two modes:
+- target an already deployed child DAC,
+- deploy a new child DAC during deal initialization.
+
+Important behaviors:
+- tranche `0` fulfills the child DAC's root capital call,
+- later tranches fulfill child capital calls referenced by hash,
+- profits can be reinvested into the child DAC through deal governance,
+- on close, the child DAC `MainToken` position is transferred back to the parent DAC treasury.
+
+### 10.2 TreasuryDeal
+
+`TreasuryDeal` is the current treasury/vault primitive.
+
+It deploys a dedicated `Permit2Treasury` and can:
+- receive tranche funding,
+- approve Permit2-based spends,
+- approve direct spends,
+- assign agent receive rights,
+- assign agent spend limits,
+- return capital to the DAC,
+- hold non-funding-token profits until staked agents decide how to use them.
+
+This is the live successor to the older `VaultDeal` concept from the prototype docs.
+
+## 11. Evaluators
+
+### 11.1 MilestoneBasedEvaluator
+
+This evaluator:
+- stores a milestone list,
+- supports holdings, FDV, and growth valuation modes,
+- can unlock rewards, slash, extend, and close,
+- supports per-milestone reward and penalty curves.
+
+### 11.2 RevenueBasedEvaluator
+
+This evaluator:
+- measures revenue in periodic cycles,
+- computes expected revenue from a configurable schedule,
+- applies a polynomial unlock curve,
+- counts missed cycles,
+- applies penalties after the grace window,
+- can auto-close once its reward share is fully unlocked.
+
+## 12. Legal Wrapper and Compliance Hooks
+
+`DACCell` stores an optional `LegalWrapper`:
+- wrapper address,
+- operating agreement reference,
+- registered-agent metadata,
+- arbitrary extra bytes.
+
+The wrapper can:
+- emit legal-wrapper messages to the DAC,
+- emit legal-wrapper messages to deals through `DealManager`,
+- gate execution of legally sensitive actions such as enabling dividends or removing a module.
+
+## 13. Notes On Proxy Usage
+
+Many contracts are deployed behind `UUPSProxy`, but the runtime contracts expose no public upgrade flow.
+
+In practice the proxy is used here as:
+- an initialization wrapper,
+- a reusable deployment pattern for factories,
+- a deterministic deployment helper.
+
+The operational model is still effectively non-upgradeable unless new upgrade hooks are introduced later.
+
+## 14. Mental Model
+
+The cleanest way to think about DAC Cloud today is:
+
+- `DACCell` decides policy and holds the treasury view.
+- `DealManager` coordinates execution and enforces reward safety.
+- `DealCell` holds per-deal governance and accounting state.
+- `Deal` implements business logic.
+- `Evaluator` decides outcomes.
+- `ModuleFactory` decides which concrete business logic exists.

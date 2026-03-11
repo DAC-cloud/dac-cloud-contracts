@@ -1,50 +1,49 @@
 ## DAC
 
-Modular blockchain framework for operating **Decentralized Autonomous Corporations** — self-organizing entities where capital (LP holders) and managers/agents (MP holders) are economically aligned through transparent, performance-based incentives.
+Modular blockchain framework for operating **Decentralized Autonomous Corporations** — self-organizing entities where capital (`MainToken` holders) and managers/agents (`AgentToken` holders) are economically aligned through transparent, performance-based incentives.
 
 ## Documentation
 
 ```
 src/
 ├── interfaces/
-│   ├── Structs.sol       = All common structs here; common struct for all proposals - ProposalParams
-│   ├── IVoting.sol       = Simple voting with quorum, veto-rule, and expiration
-│   ├── IDACEntity.sol
-│   └── IDealCore.sol
-│       ... + Other interfaces. Mostly unchanged, with params rename and adaptation for new proposals
+│   ├── Structs.sol              = Shared DAC, deal, proposal, capital-call, and evaluator structs
+│   ├── IVoting.sol              = Snapshot voting interface with quorum, blocking, and veto support
+│   └── ...                      = DAC, deal, evaluator, and module interfaces
 ├── kernel/
-│   ├── tokens/
-│   │   ├── MPToken.sol   = Non-transferable ERC-20, minted and revoked by DAC LP, stakeable into Deals for rewards
-│   │   └── LPToken.sol   = Main DAC token, ERC-20 without transfer restrictions. Votes on proposals.
 │   ├── governance/
 │   │   ├── factories/
-│   │   │   ├── LPManagementProposalFactory.sol    = factory for DAC-LP governance proposals
-│   │   │   └── DealManagementProposalFactory.sol  = abstract factory for Deal staked-MP proposals
-│   │   ├── Proposal.sol                           = abstract proposal to be used in DAC system; is IVoting
-│   │   ├── LPManagementProposal.sol               = is Proposal; for DAC-LP governance
-│   │   ├── DealManagementProposal.sol             = is Proposal; for Deal staked-MP governance
-│   │   ├── AbstractDealManagementProposals.sol    = library const pattern for kernel-level Deal proposals
-│   │   └── LPManagementProposals.sol              = library const pattern for LP proposals at a DAC level
-│   ├── DACEntity.sol     = DAC kernel, single "cell" of the DAC tree, governed by LP token holders
-│   ├── Deal.sol          = abstract Deal, represents all deals made by DAC, governed by MP-stakers (Deal is ERC-20)
-│   └── DACFactory.sol    = Create2 factory for DAC cells
+│   │   │   ├── DACManagementProposalFactory.sol   = factory for DAC-level `MainToken` proposals
+│   │   │   └── DealManagementProposalFactory.sol  = abstract factory for deal-level `StakedAgent` proposals
+│   │   ├── Proposal.sol                           = shared proposal/voting base
+│   │   ├── DACManagementProposal.sol              = DAC-level governance proposal
+│   │   ├── DealManagementProposal.sol             = deal-level governance proposal
+│   │   ├── DACManagementProposals.sol             = DAC proposal type selectors
+│   │   └── AbstractDealManagementProposals.sol    = base deal proposal type selectors
+│   ├── tokens/
+│   │   ├── MainToken.sol                          = transferable DAC governance/equity token
+│   │   ├── AgentToken.sol                         = DAC-level operating-rights token staked into deals
+│   │   └── StakedAgent.sol                        = per-deal non-transferable governance token
+│   ├── DACCell.sol                                = DAC-level governance, treasury, capital calls, dividends, legal wrapper
+│   ├── DealManager.sol                            = deal registry, module registry, evaluator whitelist, reward accounting
+│   ├── DealCell.sol                               = per-deal state, tranches, staking, and reward accounting
+│   ├── Deal.sol                                   = abstract deal logic layer with lifecycle hooks
+│   └── DACFactory.sol                             = DAC deployment factory with optional deferred birth
 └── modules/
     └── core/
-        ├── CoreModuleDeals.sol       = library const pattern with all deal types provided by the module
+        ├── CoreModuleDeals.sol               = selectors for core deal and evaluator types
         ├── deals/
-        │   ├── DACDeal.sol           = is Deal; representing LP ownership of another DAC-cell, proxies LP governance
-        │   ├── TreasuryDeal.sol      = is Deal; Simple x402-enabled treasury
-        │   └── Permit2Treasury.sol   = Simple Permit2 governed vault contract for treasury
+        │   ├── DACDeal.sol                   = child-DAC funding and ownership deal
+        │   ├── TreasuryDeal.sol              = governed treasury / execution wallet deal
+        │   └── Permit2Treasury.sol           = Permit2-enabled treasury controlled by `TreasuryDeal`
+        ├── evaluators/
+        │   ├── MilestoneBasedEvaluator.sol   = milestone-based reward/slash evaluator
+        │   └── RevenueBasedEvaluator.sol     = revenue-schedule reward/slash evaluator
         ├── governance/
         │   ├── factories/
-        │   │   └── CoreDealManagementProposalFactory.sol   = concrete factory for core module deals governance
-        │   └── CoreDealTypes.sol     = library const pattern with all core module proposals
-        ├── evaluators/
-        │   └── BasicEvaluator.sol
-        └── factories/
-            ├── DealFactory.sol
-            └── EvaluatorFactory.sol
-
+        │   │   └── CoreDealManagementProposalFactory.sol = concrete factory for core deal governance
+        │   └── CoreDealManagementProposals.sol           = selectors for core module deal proposals
+        └── CoreModuleFactory.sol                         = active module factory shipping the core deal set
 ```
 
 ## Usage
