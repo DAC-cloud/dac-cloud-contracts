@@ -209,8 +209,7 @@ contract MilestoneBasedEvaluatorTest is Test {
 
         EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
 
-        assertEq(results.length, 1);
-        assertEq(results[0].action, 2); // extend
+        assertEq(results.length, 0); // milestone evaluator not extending base deal deadline
     }
 
     function test_slashing_penaltyCurve_applied() public {

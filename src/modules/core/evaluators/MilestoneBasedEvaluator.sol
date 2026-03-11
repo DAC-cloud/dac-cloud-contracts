@@ -131,6 +131,7 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
                 if (rewardPercent > 0) {
                     results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
+                    unlockedRewards += rewardPercent;
                 }
                 
                 if (m.milestoneType == 1) {
@@ -143,24 +144,30 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
                     // Allowing extension if target not yet reached and grace enabled
 
                     config.milestones[i].timestamp = m.timestamp + m.extension;
-                    results[resultIndex++] = EvaluationResult(2, 0, block.timestamp + m.extension);
-
+                    
                     // Allowing extension only once if minPercentGrace reached
                     config.milestones[i].extension = 0;
+
+                    continue;
 
                 }
                 else {
                     // Unlocking partial reward, calculated by the curve
                     //  can be configured to be very low (or even zero)
                     uint256 rewardPercent = evaluateCurve(m.rewardCurve, progress);
-                    if (unlockedRewards + rewardPercent > config.rewardShare) {
-                        // Rewards limited by `rewardShare`
-                        rewardPercent = config.rewardShare - unlockedRewards;
-                    }
-
+            
                     if (rewardPercent > 0) {
                         rewardPercent = MathLib.mul(rewardPercent, m.rewardPercentage);
-                        results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
+
+                        if (unlockedRewards + rewardPercent > config.rewardShare) {
+                            // Rewards limited by `rewardShare`
+                            rewardPercent = config.rewardShare - unlockedRewards;
+                        }
+
+                        if (rewardPercent > 0) {
+                            results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
+                            unlockedRewards += rewardPercent;
+                        }
                     }
 
                     // Partial slash, calculated by the curve
@@ -195,7 +202,7 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
             uint256 totalReturnsVolume = IDealCell(cell).getReturnedCapital(m.token);
             totalReturnsVolume += IERC20(m.token).balanceOf(cell);
 
-            if (m.oracle != address(0)) {
+            if (m.oracle != address(0) && m.fundingToken != m.token) {
                 uint256 price = getOraclePrice(m.oracle, m.token);
                 totalReturnsVolume = MathLib.mul(totalReturnsVolume, price);
             }
@@ -203,7 +210,7 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
             if (m.fundingToken != address(0)) {
                 uint256 investedCapital = IDealCell(cell).getInvestedCapital(m.fundingToken);
 
-                if (m.fundingToken == m.token) {
+                if (m.fundingToken != m.token) {
                     uint256 price = getOraclePrice(m.oracle, m.fundingToken);
                     investedCapital = MathLib.mul(investedCapital, price);
                 }

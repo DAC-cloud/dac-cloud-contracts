@@ -105,7 +105,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         uint256 trancheId
     ) external onlyDealCell nonReentrant override {
         DACCellGovernanceLib.createTrancheProposal(
-            address(this),
+            dacCell,
             dealId,
             trancheId,
             deals
@@ -214,6 +214,13 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         }
         
         else if (prop.typ() == DACManagementProposalType.RECOVER_DEAL) {
+            if (IDACCell(dacCell).getLegalWrapper().wrapperAddr != address(0)) {
+                require(
+                    msgSender == IDACCell(dacCell).getLegalWrapper().wrapperAddr,
+                    DACErrorsLib.LegalWrapperExecutionExpected()
+                );
+            }
+            
             (uint256 dealId) = abi.decode(prop.data(), (uint256));
             address deal = deals[dealId];
 

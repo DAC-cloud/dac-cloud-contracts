@@ -30,6 +30,7 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
     uint256 public lastChecked;
     uint256 public unlockedRewards;     // total % unlocked so far (scaled)
     uint256 public returnsSnapshot;
+    uint256 public totalEvaluatedCycles;
     uint256 public missedCycles;
 
     constructor() {
@@ -117,7 +118,7 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
             //  DAC main token holders only receives the right to evaluate after deal deadline.
             uint256 cycleRevenue = returned / cycles;
 
-            uint256 expected = _evaluateRequirement(c, baseExpectedRevenue);
+            uint256 expected = _evaluateRequirement(totalEvaluatedCycles + c, baseExpectedRevenue);
 
             // x = progress (0 to 1+)
             uint256 progressScaled = MathLib.div(cycleRevenue, expected);
@@ -150,6 +151,7 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
 
         // Next evaluation starts at the end of the last completed cycle
         lastChecked = lastChecked + cycles * config.schedule.duration;
+        totalEvaluatedCycles += cycles;
 
         EvaluationResult[] memory results = new EvaluationResult[](3); // producing max 3 results
         uint256 resultIndex = 0;
@@ -206,7 +208,7 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
     /// @dev Requirement curve (cycle number → expected revenue)
     function _evaluateRequirement(uint256 cycle, uint256 baseCycleRevenue) internal view returns (uint256) {
         // forge-lint: disable-next-line(unsafe-typecast)
-        int256 x = int256(cycle);
+        int256 x = int256(cycle * MathLib.SCALE);
         int256[] memory coeffs = config.schedule.requirementCurveCoeffs;
         int256 y = coeffs[coeffs.length - 1];
         for (int256 i = int256(coeffs.length) - 2; i >= 0; i--) {
