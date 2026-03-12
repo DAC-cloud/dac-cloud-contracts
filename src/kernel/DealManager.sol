@@ -220,7 +220,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
                     DACErrorsLib.LegalWrapperExecutionExpected()
                 );
             }
-            
+
             (uint256 dealId) = abi.decode(prop.data(), (uint256));
             address deal = deals[dealId];
 
@@ -316,6 +316,12 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             //  the unreleased float will be released first
 
             if (controlledAddresses[from]) {
+                // If address contains both, and transfer amount is bigger than unreleased
+                //  balance - transfering only full unreleased
+                if (lockedMainTokens[from] < amount) {
+                    amount = lockedMainTokens[from];
+                }
+
                 lockedMainTokens[from] -= amount;
                 if (controlledAddresses[to]) {
                     lockedMainTokens[to] += amount;

@@ -58,15 +58,30 @@ contract MockVotesToken is ERC20, ERC20Permit, ERC20Votes {
     }
 }
 
+contract ZeroFirstApproveToken is ERC20 {
+    constructor() ERC20("Zero First Token", "ZFT") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function approve(address spender, uint256 amount) public override returns (bool) {
+        require(amount == 0 || allowance(msg.sender, spender) == 0, "zero-first");
+        return super.approve(spender, amount);
+    }
+}
+
 contract DealGovernanceFlowTest is DACTestBase {
     address public agent1 = makeAddr("agent1");
     address public agent2 = makeAddr("agent2");
     MockVotesToken public govToken;
+    ZeroFirstApproveToken public zeroFirstToken;
 
     function setUp() public {
         setUpBase();
         vm.etch(permit2, address(new MockPermit2()).code);
         govToken = new MockVotesToken();
+        zeroFirstToken = new ZeroFirstApproveToken();
 
         onboardAgent(agent1);
         onboardAgent(agent2);
@@ -454,6 +469,72 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), 3_333);
         assertEq(usdc.balanceOf(address(dac)), dacBalanceBefore + 3_333);
         assertEq(usdc.balanceOf(handle.dealAddr), 0);
+    }
+
+    function test_returnProfits_revertsForChildMainTokenBeforeClose() public {
+        DealHandle memory handle = _setupApprovedDACDealWithTwoAgents();
+        address childDac = DACDeal(handle.dealAddr).managedEntity();
+        address childMainToken = IDACCell(childDac).getMainToken();
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.RETURN_PROFITS,
+                target: childMainToken,
+                i: 0,
+                data: abi.encode(uint256(1))
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+    }
+
+    function test_approvePermit2Spend_supportsZeroFirstTokensAcrossRepeatedApprovals() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        address spender1 = makeAddr("spender-1");
+        address spender2 = makeAddr("spender-2");
+
+        zeroFirstToken.mint(treasuryAddr, 10_000);
+
+        vm.startPrank(agent1);
+        uint256 proposalId1 = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.APPROVE_PERMIT2_SPEND,
+                target: address(zeroFirstToken),
+                i: 0,
+                data: abi.encode(spender1, uint160(2_000), uint48(block.timestamp + 1 days))
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId1, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId1, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId1);
+
+        vm.startPrank(agent1);
+        uint256 proposalId2 = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: CoreDealManagementType.APPROVE_PERMIT2_SPEND,
+                target: address(zeroFirstToken),
+                i: 0,
+                data: abi.encode(spender2, uint160(3_000), uint48(block.timestamp + 2 days))
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId2, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId2, agent2, true);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId2);
+
+        assertEq(zeroFirstToken.allowance(treasuryAddr, permit2), type(uint160).max);
     }
 
     function test_approveDirectSpend_transfersTreasuryFunds() public {

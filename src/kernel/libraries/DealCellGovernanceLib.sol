@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ProposalParams, VotingConfig, Tranche} from "../../interfaces/Structs.sol";
 import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
 import {IDeal} from "../../interfaces/IDeal.sol";
@@ -21,6 +22,7 @@ interface IDealCellGovernanceAdapter {
 }
 
 library DealCellGovernanceLib {
+    using SafeERC20 for IERC20;
 
     function whitelistHolders(
         address[] storage holders
@@ -364,7 +366,7 @@ library DealCellGovernanceLib {
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
             if (balance == 0) continue;
 
-            IERC20(_fundingToken).approve(dealCell, balance);
+            IERC20(_fundingToken).forceApprove(dealCell, balance);
         }
     }
 
@@ -376,7 +378,7 @@ library DealCellGovernanceLib {
         address dacCell,
         mapping(address => uint256) storage returnedCapital
     ) public {
-        IERC20(_token).approve(dacCell, amount);
+        IERC20(_token).forceApprove(dacCell, amount);
 
         IDACCellAdapter(dacCell).depositTreasury(_token, amount);
         returnedCapital[_token] += amount;

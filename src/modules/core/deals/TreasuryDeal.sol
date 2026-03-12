@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ProposalParams, DealParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {Deal} from "../../../kernel/Deal.sol";
 import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
@@ -14,6 +15,8 @@ import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../../interfaces/DACEventsLib.sol";
 
 contract TreasuryDeal is Deal {
+    using SafeERC20 for IERC20;
+
     Permit2Treasury public treasury;
 
     // Events
@@ -122,7 +125,7 @@ contract TreasuryDeal is Deal {
             
             treasury.returnCapitalToDeal(token, amount);
 
-            require(IERC20(token).approve(dealCell, amount), DACErrorsLib.TransferFailed());
+            IERC20(token).forceApprove(dealCell, amount);
             
             IDealCellAdapter(dealCell).transferCapital(token, amount);
         }
@@ -202,7 +205,7 @@ contract TreasuryDeal is Deal {
             if (balance > 0) {
                 treasury.returnCapitalToDeal(_fundingToken, balance);
 
-                require(IERC20(_fundingToken).approve(dealCell, balance), DACErrorsLib.TransferFailed());
+                IERC20(_fundingToken).forceApprove(dealCell, balance);
 
                 IDealCellAdapter(dealCell).transferCapital(_fundingToken, balance);
             }

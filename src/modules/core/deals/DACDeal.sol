@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
 import {IVotes} from "../../../lib/IVotes.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
@@ -18,6 +19,7 @@ import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.
 import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 
 contract DACDeal is Deal {
+    using SafeERC20 for IERC20;
 
     struct DACCellDNA {
         address dacMainToken;
@@ -107,7 +109,7 @@ contract DACDeal is Deal {
         address token = IDealCell(dealCell).fundingTranche(trancheId).token;
         uint256 amount = IDealCell(dealCell).fundingTranche(trancheId).amount;
 
-        IERC20(token).approve(managedEntity, amount);
+        IERC20(token).forceApprove(managedEntity, amount);
 
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
@@ -139,14 +141,14 @@ contract DACDeal is Deal {
     }
 
     function _beforeClose() internal override {
-        // On close we transfer child equity LP token to our DAC
+        // On close we transfer child Main token to our DAC
         // Now this equity is chickens' problem, they can distribute 
-        // these LP tokens as dividends, or establish a new Deal
+        // these equity tokens as dividends, or establish a new Deal
         // with new management
 
         address token = IDACCell(managedEntity).getMainToken();
 
-        require(IERC20(token).approve(dealCell, _allocation), DACErrorsLib.TransferFailed());
+        IERC20(token).forceApprove(dealCell, _allocation);
 
         IDealCellAdapter(dealCell).transferCapital(token, _allocation);
     }
@@ -185,8 +187,8 @@ contract DACDeal is Deal {
                 require(!IDealCell(dealCell).allowEarlyReturns(), DACErrorsLib.NotAllowed());
             }
             else {
-                address lpTokenAddress = IDACCell(managedEntity).getMainToken();
-                require(token != lpTokenAddress);
+                address mainTokenAddress = IDACCell(managedEntity).getMainToken();
+                require(token != mainTokenAddress);
             }
             
             require(
@@ -242,7 +244,7 @@ contract DACDeal is Deal {
             address token = proposal.target();
             (uint256 amount, bytes32 callHash) = abi.decode(proposal.data(), (uint256, bytes32));
 
-            IERC20(token).approve(managedEntity, amount);
+            IERC20(token).forceApprove(managedEntity, amount);
 
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(callHash);
             IDACCell(managedEntity).fulfillCapitalCall(call);
@@ -254,7 +256,9 @@ contract DACDeal is Deal {
             address token = proposal.target();
             (uint256 amount) = abi.decode(proposal.data(), (uint256));
             
-            require(IERC20(token).approve(dealCell, amount), DACErrorsLib.TransferFailed());
+            require(token != IDACCell(managedEntity).getMainToken(), DACErrorsLib.NotAllowed());
+
+            IERC20(token).forceApprove(dealCell, amount);
             IDealCellAdapter(dealCell).transferCapital(token, amount);
         }
 

@@ -132,6 +132,35 @@ contract DACAccountingFuzzTest is DACTestBase {
         }
     }
 
+    function test_controlledTreasuryMixedReleasedAndLockedMain_canSpendWithoutUnderflow() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+        address destination = makeAddr("mixed-main-destination");
+
+        uint256 lockedAmount = 100_000e18;
+        uint256 releasedIntoTreasury = 40_000e18;
+        uint256 spendAmount = 120_000e18;
+        uint256 releasedBefore = DealManager(dealManager).totalReleasedVotable();
+
+        uint256 proposalId = _createAndExecuteCapitalCallProposal(treasuryAddr, lockedAmount, 1);
+        CapitalCall memory call = _capitalCall(proposalId, treasuryAddr, lockedAmount, 1);
+
+        vm.startPrank(founder);
+        usdc.approve(address(dac), 1);
+        dac.fulfillCapitalCall(call);
+        mainToken.transfer(treasuryAddr, releasedIntoTreasury);
+        vm.stopPrank();
+
+        assertEq(mainToken.balanceOf(treasuryAddr), lockedAmount + releasedIntoTreasury);
+        assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore);
+
+        _directSpend(handle, address(mainToken), destination, spendAmount);
+
+        assertEq(mainToken.balanceOf(treasuryAddr), 20_000e18);
+        assertEq(mainToken.balanceOf(destination), spendAmount);
+        assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore + lockedAmount);
+    }
+
     function _createAndExecuteCapitalCallProposal(
         address recipient,
         uint256 tokenAmount,

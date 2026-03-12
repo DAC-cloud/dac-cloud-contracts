@@ -73,7 +73,7 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
         uint48 expiration
     ) external onlyDeal nonReentrant {
         // Approving the whole balance of the token to permit2
-        IERC20(token).approve(address(permit2), type(uint160).max);
+        IERC20(token).forceApprove(address(permit2), type(uint160).max);
 
         // On-chain Permit2 approval (no signature needed to spend)
         // to govern single spend transactions by routers / service providers.
