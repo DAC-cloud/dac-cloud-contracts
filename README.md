@@ -89,6 +89,34 @@ The deployment flow is split into two layers:
   Creates treasury deal governance proposals for direct spend, Permit2 spend approval, claimer assignment, and agent spend allowance.
 - `script/scenarios/SeedTreasuryExecuteActions.s.sol`
   Votes and executes the created treasury proposals, then performs an example `executeAgentSpend(...)`.
+- `script/scenarios/SeedChildDACCreateAgentMint.s.sol`
+  Creates the DAC proposal that mints `AgentToken` to the child-flow operator.
+- `script/scenarios/SeedChildDACExecuteAgentMint.s.sol`
+  Votes and executes the child-flow agent mint proposal.
+- `script/scenarios/SeedChildDACCreateDeal.s.sol`
+  Creates the `DACDeal`, stakes the operator, and writes the pending DAC approval id.
+- `script/scenarios/SeedChildDACApproveDeal.s.sol`
+  Votes and executes the parent DAC approval, recording the deployed child DAC addresses.
+- `script/scenarios/SeedChildDACCreateChildProposal.s.sol`
+  Creates the parent-deal proposal that will spawn a child DAC management proposal.
+- `script/scenarios/SeedChildDACExecuteChildProposalCreate.s.sol`
+  Votes and executes the parent create-proposal, recording the child proposal id and generated parent vote proposal id.
+- `script/scenarios/SeedChildDACExecuteChildProposalVote.s.sol`
+  Votes through the parent deal into the child DAC and executes the child proposal.
+- `script/scenarios/SeedChildDACCreateCapitalCallProposal.s.sol`
+  Creates a parent-deal proposal that will create a child DAC capital call.
+- `script/scenarios/SeedChildDACExecuteCapitalCallCreate.s.sol`
+  Votes and executes the parent create-proposal for the child capital call, recording the generated ids.
+- `script/scenarios/SeedChildDACExecuteCapitalCallVote.s.sol`
+  Votes through the parent deal into the child DAC and executes the child capital call, recording the child capital-call hash.
+- `script/scenarios/SeedChildDACCreateReinvestProposal.s.sol`
+  Mints mock treasury profits to the parent deal and creates a `REINVEST_PROFITS` proposal.
+- `script/scenarios/SeedChildDACExecuteReinvestProposal.s.sol`
+  Votes and executes the reinvest proposal.
+- `script/scenarios/SeedChildDACCreateReturnProfitsProposal.s.sol`
+  Mints mock treasury profits to the parent deal and creates a `RETURN_PROFITS` proposal.
+- `script/scenarios/SeedChildDACExecuteReturnProfitsProposal.s.sol`
+  Votes and executes the return-profits proposal.
 
 ### Inputs
 
@@ -144,6 +172,12 @@ Treasury flow manifests are written to:
 
 ```text
 deployments/<chainid>/treasury-flow-<label>.json
+```
+
+Child DAC flow manifests are written to:
+
+```text
+deployments/<chainid>/child-dac-flow-<label>.json
 ```
 
 ### Local dry-run
@@ -269,6 +303,47 @@ Inspect the treasury flow manifest:
 
 ```shell
 cat deployments/31337/treasury-flow-treasury.json
+```
+
+Seed the staged child DAC flow:
+
+```shell
+export AGENT_PRIVATE_KEY=0x...
+
+forge script \
+  script/scenarios/SeedChildDACCreateAgentMint.s.sol:SeedChildDACCreateAgentMint \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+
+forge script \
+  script/scenarios/SeedChildDACExecuteAgentMint.s.sol:SeedChildDACExecuteAgentMint \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+
+forge script \
+  script/scenarios/SeedChildDACCreateDeal.s.sol:SeedChildDACCreateDeal \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+
+forge script \
+  script/scenarios/SeedChildDACApproveDeal.s.sol:SeedChildDACApproveDeal \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+
+forge script \
+  script/scenarios/SeedChildDACCreateChildProposal.s.sol:SeedChildDACCreateChildProposal \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+
+forge script \
+  script/scenarios/SeedChildDACExecuteChildProposalCreate.s.sol:SeedChildDACExecuteChildProposalCreate \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+
+forge script \
+  script/scenarios/SeedChildDACExecuteChildProposalVote.s.sol:SeedChildDACExecuteChildProposalVote \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
 ```
 
 Important:

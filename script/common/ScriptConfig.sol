@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
-import {BasicDACSeedConfig, ProtocolConfig, TreasuryFlowSeedConfig} from "./ScriptTypes.sol";
+import {BasicDACSeedConfig, ChildDACFlowSeedConfig, ProtocolConfig, TreasuryFlowSeedConfig} from "./ScriptTypes.sol";
 
 abstract contract ScriptConfig is Script {
     error MissingEnv(string key);
@@ -40,6 +40,20 @@ abstract contract ScriptConfig is Script {
     string internal constant TREASURY_FLOW_AGENT_SPEND_TOTAL_ENV = "TREASURY_FLOW_AGENT_SPEND_TOTAL_AMOUNT";
     string internal constant TREASURY_FLOW_AGENT_SPEND_SINGLE_ENV = "TREASURY_FLOW_AGENT_SPEND_SINGLE_AMOUNT";
     string internal constant TREASURY_FLOW_AGENT_SPEND_DURATION_ENV = "TREASURY_FLOW_AGENT_SPEND_DURATION";
+    string internal constant CHILD_FLOW_LABEL_ENV = "CHILD_FLOW_LABEL";
+    string internal constant CHILD_FLOW_BASIC_DAC_LABEL_ENV = "CHILD_FLOW_BASIC_DAC_LABEL";
+    string internal constant CHILD_FLOW_AGENT_MINT_AMOUNT_ENV = "CHILD_FLOW_AGENT_MINT_AMOUNT";
+    string internal constant CHILD_FLOW_STAKE_AMOUNT_ENV = "CHILD_FLOW_STAKE_AMOUNT";
+    string internal constant CHILD_FLOW_FUNDING_AMOUNT_ENV = "CHILD_FLOW_FUNDING_AMOUNT";
+    string internal constant CHILD_FLOW_REWARDS_LIMIT_ENV = "CHILD_FLOW_REWARDS_LIMIT";
+    string internal constant CHILD_FLOW_MANAGED_EQUITY_ENV = "CHILD_FLOW_MANAGED_EQUITY";
+    string internal constant CHILD_FLOW_MAIN_MAX_SUPPLY_ENV = "CHILD_FLOW_MAIN_MAX_SUPPLY";
+    string internal constant CHILD_FLOW_DEFAULT_QUORUM_ENV = "CHILD_FLOW_DEFAULT_QUORUM";
+    string internal constant CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT_ENV = "CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT";
+    string internal constant CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT_ENV = "CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT";
+    string internal constant CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT_ENV = "CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT";
+    string internal constant CHILD_FLOW_REINVEST_AMOUNT_ENV = "CHILD_FLOW_REINVEST_AMOUNT";
+    string internal constant CHILD_FLOW_RETURN_PROFIT_AMOUNT_ENV = "CHILD_FLOW_RETURN_PROFIT_AMOUNT";
 
     function loadProtocolConfig() internal view returns (ProtocolConfig memory config) {
         if (!vm.envExists(PERMIT2_ENV)) revert MissingEnv(PERMIT2_ENV);
@@ -101,6 +115,10 @@ abstract contract ScriptConfig is Script {
         return string.concat(chainDeploymentsRoot(), "/treasury-flow-", label, ".json");
     }
 
+    function childDACFlowManifestPath(string memory label) internal view returns (string memory) {
+        return string.concat(chainDeploymentsRoot(), "/child-dac-flow-", label, ".json");
+    }
+
     function loadBasicDACSeedConfig() internal view returns (BasicDACSeedConfig memory config) {
         config.label = vm.envOr(BASIC_DAC_LABEL_ENV, string("seed"));
         config.symbol = vm.envOr(BASIC_DAC_SYMBOL_ENV, string("SDAC"));
@@ -142,5 +160,22 @@ abstract contract ScriptConfig is Script {
         config.agentSpendTotalAmount = uint160(vm.envOr(TREASURY_FLOW_AGENT_SPEND_TOTAL_ENV, uint256(4_000e6)));
         config.agentSpendSingleTxAmount = uint160(vm.envOr(TREASURY_FLOW_AGENT_SPEND_SINGLE_ENV, uint256(2_000e6)));
         config.agentSpendDuration = vm.envOr(TREASURY_FLOW_AGENT_SPEND_DURATION_ENV, uint256(1 days));
+    }
+
+    function loadChildDACFlowSeedConfig() internal view returns (ChildDACFlowSeedConfig memory config) {
+        config.label = vm.envOr(CHILD_FLOW_LABEL_ENV, string("child-dac"));
+        config.basicDACLabel = vm.envOr(CHILD_FLOW_BASIC_DAC_LABEL_ENV, vm.envOr(BASIC_DAC_LABEL_ENV, string("seed")));
+        config.agentMintAmount = vm.envOr(CHILD_FLOW_AGENT_MINT_AMOUNT_ENV, uint256(100_000));
+        config.stakeAmount = vm.envOr(CHILD_FLOW_STAKE_AMOUNT_ENV, uint256(20_000));
+        config.fundingAmount = vm.envOr(CHILD_FLOW_FUNDING_AMOUNT_ENV, uint256(10_000e6));
+        config.rewardsLimit = vm.envOr(CHILD_FLOW_REWARDS_LIMIT_ENV, uint256(500e6));
+        config.managedEquity = vm.envOr(CHILD_FLOW_MANAGED_EQUITY_ENV, uint256(100_000e18));
+        config.childMainTokenMaxSupply = vm.envOr(CHILD_FLOW_MAIN_MAX_SUPPLY_ENV, uint256(1_000_000e18));
+        config.childDefaultQuorum = vm.envOr(CHILD_FLOW_DEFAULT_QUORUM_ENV, uint256(5e17));
+        config.childMintAgentAmount = vm.envOr(CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT_ENV, uint256(12_345));
+        config.childCapitalCallTokenAmount = vm.envOr(CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT_ENV, uint256(22_222e18));
+        config.childCapitalCallCashAmount = vm.envOr(CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT_ENV, uint256(2_500e6));
+        config.reinvestAmount = vm.envOr(CHILD_FLOW_REINVEST_AMOUNT_ENV, uint256(2_500e6));
+        config.returnProfitAmount = vm.envOr(CHILD_FLOW_RETURN_PROFIT_AMOUNT_ENV, uint256(3_333e6));
     }
 }

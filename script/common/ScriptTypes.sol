@@ -89,6 +89,23 @@ struct TreasuryFlowSeedConfig {
     uint256 agentSpendDuration;
 }
 
+struct ChildDACFlowSeedConfig {
+    string label;
+    string basicDACLabel;
+    uint256 agentMintAmount;
+    uint256 stakeAmount;
+    uint256 fundingAmount;
+    uint256 rewardsLimit;
+    uint256 managedEquity;
+    uint256 childMainTokenMaxSupply;
+    uint256 childDefaultQuorum;
+    uint256 childMintAgentAmount;
+    uint256 childCapitalCallTokenAmount;
+    uint256 childCapitalCallCashAmount;
+    uint256 reinvestAmount;
+    uint256 returnProfitAmount;
+}
+
 struct TreasuryFlowSeed {
     uint256 chainId;
     uint256 blockNumber;
@@ -117,4 +134,44 @@ struct TreasuryFlowSeed {
     bool dealApproved;
     bool actionProposalsCreated;
     bool actionProposalsExecuted;
+}
+
+struct ChildDACFlowSeed {
+    uint256 chainId;
+    uint256 blockNumber;
+    string label;
+    string basicDACLabel;
+    address founder;
+    address agent;
+    address beneficiary;
+    address dac;
+    address mainToken;
+    address agentToken;
+    address treasuryToken;
+    uint256 dealId;
+    address dealCell;
+    address deal;
+    address evaluator;
+    address childDac;
+    address childMainToken;
+    address childAgentToken;
+    uint256 mintAgentProposalId;
+    uint256 dacProposalId;
+    uint256 childCreateProposalId;
+    uint256 childProposalId;
+    uint256 childVoteProposalId;
+    uint256 capitalCallCreateProposalId;
+    uint256 capitalCallProposalId;
+    uint256 capitalCallVoteProposalId;
+    uint256 reinvestProposalId;
+    uint256 returnProfitProposalId;
+    bytes32 childCapitalCallHash;
+    bool agentMinted;
+    bool dealApproved;
+    bool childProposalCreated;
+    bool childProposalExecuted;
+    bool childCapitalCallCreated;
+    bool childCapitalCallExecuted;
+    bool reinvestExecuted;
+    bool returnProfitExecuted;
 }

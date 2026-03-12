@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {stdJson} from "forge-std/StdJson.sol";
 import {ScriptConfig} from "./ScriptConfig.sol";
-import {BasicDACSeed, ProtocolDeployment, TreasuryFlowSeed} from "./ScriptTypes.sol";
+import {BasicDACSeed, ChildDACFlowSeed, ProtocolDeployment, TreasuryFlowSeed} from "./ScriptTypes.sol";
 
 abstract contract ManifestIO is ScriptConfig {
     using stdJson for string;
@@ -200,5 +200,95 @@ abstract contract ManifestIO is ScriptConfig {
         seed.dealApproved = json.readBool(".dealApproved");
         seed.actionProposalsCreated = json.readBool(".actionProposalsCreated");
         seed.actionProposalsExecuted = json.readBool(".actionProposalsExecuted");
+    }
+
+    function writeChildDACFlowManifest(ChildDACFlowSeed memory seed) internal returns (string memory path) {
+        string memory root = "childDacFlow";
+
+        vm.createDir(deploymentsRoot(), true);
+        vm.createDir(chainDeploymentsRoot(), true);
+
+        vm.serializeUint(root, "chainId", seed.chainId);
+        vm.serializeUint(root, "blockNumber", seed.blockNumber);
+        vm.serializeString(root, "label", seed.label);
+        vm.serializeString(root, "basicDACLabel", seed.basicDACLabel);
+        vm.serializeAddress(root, "founder", seed.founder);
+        vm.serializeAddress(root, "agent", seed.agent);
+        vm.serializeAddress(root, "beneficiary", seed.beneficiary);
+        vm.serializeAddress(root, "dac", seed.dac);
+        vm.serializeAddress(root, "mainToken", seed.mainToken);
+        vm.serializeAddress(root, "agentToken", seed.agentToken);
+        vm.serializeAddress(root, "treasuryToken", seed.treasuryToken);
+        vm.serializeUint(root, "dealId", seed.dealId);
+        vm.serializeAddress(root, "dealCell", seed.dealCell);
+        vm.serializeAddress(root, "deal", seed.deal);
+        vm.serializeAddress(root, "evaluator", seed.evaluator);
+        vm.serializeAddress(root, "childDac", seed.childDac);
+        vm.serializeAddress(root, "childMainToken", seed.childMainToken);
+        vm.serializeAddress(root, "childAgentToken", seed.childAgentToken);
+        vm.serializeUint(root, "mintAgentProposalId", seed.mintAgentProposalId);
+        vm.serializeUint(root, "dacProposalId", seed.dacProposalId);
+        vm.serializeUint(root, "childCreateProposalId", seed.childCreateProposalId);
+        vm.serializeUint(root, "childProposalId", seed.childProposalId);
+        vm.serializeUint(root, "childVoteProposalId", seed.childVoteProposalId);
+        vm.serializeUint(root, "capitalCallCreateProposalId", seed.capitalCallCreateProposalId);
+        vm.serializeUint(root, "capitalCallProposalId", seed.capitalCallProposalId);
+        vm.serializeUint(root, "capitalCallVoteProposalId", seed.capitalCallVoteProposalId);
+        vm.serializeUint(root, "reinvestProposalId", seed.reinvestProposalId);
+        vm.serializeUint(root, "returnProfitProposalId", seed.returnProfitProposalId);
+        vm.serializeBytes32(root, "childCapitalCallHash", seed.childCapitalCallHash);
+        vm.serializeBool(root, "agentMinted", seed.agentMinted);
+        vm.serializeBool(root, "dealApproved", seed.dealApproved);
+        vm.serializeBool(root, "childProposalCreated", seed.childProposalCreated);
+        vm.serializeBool(root, "childProposalExecuted", seed.childProposalExecuted);
+        vm.serializeBool(root, "childCapitalCallCreated", seed.childCapitalCallCreated);
+        vm.serializeBool(root, "childCapitalCallExecuted", seed.childCapitalCallExecuted);
+        vm.serializeBool(root, "reinvestExecuted", seed.reinvestExecuted);
+        string memory json = vm.serializeBool(root, "returnProfitExecuted", seed.returnProfitExecuted);
+
+        path = childDACFlowManifestPath(seed.label);
+        vm.writeJson(json, path);
+    }
+
+    function loadChildDACFlowManifest(string memory label) internal view returns (ChildDACFlowSeed memory seed) {
+        string memory json = vm.readFile(childDACFlowManifestPath(label));
+
+        seed.chainId = json.readUint(".chainId");
+        seed.blockNumber = json.readUint(".blockNumber");
+        seed.label = json.readString(".label");
+        seed.basicDACLabel = json.readString(".basicDACLabel");
+        seed.founder = json.readAddress(".founder");
+        seed.agent = json.readAddress(".agent");
+        seed.beneficiary = json.readAddress(".beneficiary");
+        seed.dac = json.readAddress(".dac");
+        seed.mainToken = json.readAddress(".mainToken");
+        seed.agentToken = json.readAddress(".agentToken");
+        seed.treasuryToken = json.readAddress(".treasuryToken");
+        seed.dealId = json.readUint(".dealId");
+        seed.dealCell = json.readAddress(".dealCell");
+        seed.deal = json.readAddress(".deal");
+        seed.evaluator = json.readAddress(".evaluator");
+        seed.childDac = json.readAddress(".childDac");
+        seed.childMainToken = json.readAddress(".childMainToken");
+        seed.childAgentToken = json.readAddress(".childAgentToken");
+        seed.mintAgentProposalId = json.readUint(".mintAgentProposalId");
+        seed.dacProposalId = json.readUint(".dacProposalId");
+        seed.childCreateProposalId = json.readUint(".childCreateProposalId");
+        seed.childProposalId = json.readUint(".childProposalId");
+        seed.childVoteProposalId = json.readUint(".childVoteProposalId");
+        seed.capitalCallCreateProposalId = json.readUint(".capitalCallCreateProposalId");
+        seed.capitalCallProposalId = json.readUint(".capitalCallProposalId");
+        seed.capitalCallVoteProposalId = json.readUint(".capitalCallVoteProposalId");
+        seed.reinvestProposalId = json.readUint(".reinvestProposalId");
+        seed.returnProfitProposalId = json.readUint(".returnProfitProposalId");
+        seed.childCapitalCallHash = json.readBytes32(".childCapitalCallHash");
+        seed.agentMinted = json.readBool(".agentMinted");
+        seed.dealApproved = json.readBool(".dealApproved");
+        seed.childProposalCreated = json.readBool(".childProposalCreated");
+        seed.childProposalExecuted = json.readBool(".childProposalExecuted");
+        seed.childCapitalCallCreated = json.readBool(".childCapitalCallCreated");
+        seed.childCapitalCallExecuted = json.readBool(".childCapitalCallExecuted");
+        seed.reinvestExecuted = json.readBool(".reinvestExecuted");
+        seed.returnProfitExecuted = json.readBool(".returnProfitExecuted");
     }
 }
