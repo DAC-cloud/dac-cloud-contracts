@@ -33,9 +33,9 @@ import {IPermit2} from "../src/lib/IPermit2.sol";
 
 contract MockPermit2 {
     function approve(address, address, uint160, uint48) external pure {}
-    function transferFrom(address, address, uint256, address) external pure {}
+    function transferFrom(address, address, uint160, address) external pure {}
     function permitTransferFrom(
-        IPermit2.PermitTransferFrom calldata,
+        IPermit2.PermitTransferFrom memory,
         IPermit2.SignatureTransferDetails calldata,
         address,
         bytes calldata

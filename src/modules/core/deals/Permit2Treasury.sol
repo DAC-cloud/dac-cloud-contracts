@@ -172,12 +172,12 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
     ) external nonReentrant {
         require(transferDetails.to == address(this), InvalidTransfer());
         
-        bytes32 calldataHash = keccak256(abi.encode(msg.sender, permit.token, source));
+        bytes32 calldataHash = keccak256(abi.encode(msg.sender, permit.permitted.token, source));
 
         if (approvedAgents[calldataHash] == 0) {
             // If specific destination allowance not exists,
             //  switching to wildcard allowance
-            calldataHash = keccak256(abi.encode(msg.sender, permit.token, address(0)));
+            calldataHash = keccak256(abi.encode(msg.sender, permit.permitted.token, address(0)));
         }
 
         require(approvedAgents[calldataHash] >= transferDetails.requestedAmount, ReceiveNotApproved());
@@ -186,7 +186,7 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
 
         permit2.permitTransferFrom(permit, transferDetails, source, signature);
 
-        emit AgentReceiveReceipt(msg.sender, permit.token, source, transferDetails.requestedAmount);
+        emit AgentReceiveReceipt(msg.sender, permit.permitted.token, source, transferDetails.requestedAmount);
     }
 
     function executeAgentSpend(address token, address destination, uint160 amount) external nonReentrant {
