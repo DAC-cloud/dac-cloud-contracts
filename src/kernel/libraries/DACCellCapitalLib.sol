@@ -69,7 +69,21 @@ library DACCellCapitalLib {
         );
 
         if (IERC20(token).balanceOf(address(this)) > treasuryBalances[token]) {
-            emit DACEventsLib.TreasuryDeposit(token, IERC20(token).balanceOf(address(this)) - treasuryBalances[token], msg.sender);
+            emit DACEventsLib.TreasuryDeposit(
+                token, 
+                IERC20(token).balanceOf(address(this)) - treasuryBalances[token], 
+                msg.sender
+            );
+
+            treasuryBalances[token] = IERC20(token).balanceOf(address(this));
+        }
+
+        else if (IERC20(token).balanceOf(address(this)) < treasuryBalances[token]) {
+            emit DACEventsLib.TreasurySyncMissing(
+                token, 
+                treasuryBalances[token] - IERC20(token).balanceOf(address(this))
+            );
+
             treasuryBalances[token] = IERC20(token).balanceOf(address(this));
         }
     }

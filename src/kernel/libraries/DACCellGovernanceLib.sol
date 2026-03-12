@@ -267,7 +267,10 @@ library DACCellGovernanceLib {
                 require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-                require(_votingConfig.qualification < mainToken.totalSupply(), DACErrorsLib.InvalidVotingConfig());
+                require(
+                    _votingConfig.qualification < IDealManager(address(dealManager)).totalReleasedVotable() / 2, 
+                    DACErrorsLib.InvalidVotingConfig()
+                );
             }
         }
 

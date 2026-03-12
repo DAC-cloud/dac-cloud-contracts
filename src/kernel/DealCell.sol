@@ -85,7 +85,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     mapping(address => bool) internal isWhitelisted;
     mapping(address => bool) internal canInviteOthers;
 
-    address[] internal holders; // only for claimable tracking
+    address[] internal holders; // historical, only for claimable tracking
 
     // Governance
     VotingConfig private _votingConfig;

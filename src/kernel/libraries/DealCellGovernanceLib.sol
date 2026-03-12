@@ -45,7 +45,14 @@ library DealCellGovernanceLib {
     ) public {
         deal.beforeEveryStake(staker, amount);
 
-        if (token.balanceOf(staker) == 0) {
+        bool newHolder = true;
+        for (uint256 i = 0; i < holders.length; i++) {
+            if (holders[i] == staker) {
+                newHolder = false;
+            }
+        }
+
+        if (newHolder) {
             holders.push(staker);
         }
         
@@ -75,7 +82,14 @@ library DealCellGovernanceLib {
 
         deal.beforeEveryStake(staker, amount);
 
-        if (token.balanceOf(staker) == 0) {
+        bool newHolder = true;
+        for (uint256 i = 0; i < holders.length; i++) {
+            if (holders[i] == staker) {
+                newHolder = false;
+            }
+        }
+        
+        if (newHolder) {
             holders.push(staker);
         }
         

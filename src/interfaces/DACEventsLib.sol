@@ -44,6 +44,7 @@ library DACEventsLib {
     event CapitalCallFulfilled(address indexed recipient, bytes32 callHash, uint256 amount);
     
     event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
+    event TreasurySyncMissing(address indexed token, uint256 amount);
     
     // Events emited by DealManager contract
 
