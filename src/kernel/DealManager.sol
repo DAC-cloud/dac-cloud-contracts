@@ -153,10 +153,12 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             DACErrorsLib.InvalidDealState(deal)
         );
 
-        require(
-            IERC20(IDealCell(deal).stakeToken()).totalSupply() == 0,
-            DACErrorsLib.InvalidDealState(deal)
-        );
+        if (!dealState[deal].liquidated) {
+            require(
+                IERC20(IDealCell(deal).stakeToken()).totalSupply() == 0,
+                DACErrorsLib.InvalidDealState(deal)
+            );
+        }
 
         return true;
     }
@@ -226,6 +228,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
             address liquidator = prop.target();
             
+            dealState[deal].liquidated = true;
+
             IDealCellAdapter(deal).recoverDeal(liquidator, uint256(prop.i()));
         }
 

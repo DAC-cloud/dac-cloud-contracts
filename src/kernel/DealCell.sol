@@ -351,6 +351,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
     function recoverDeal(address liquidator, uint256 liquidatorStake) external onlyDealManager {
         require(closed, DACErrorsLib.DealIsNotClosed());
+        require(liquidatorStake > 0, DACErrorsLib.NotAllowed());
         
         deal.beforeRecovery(liquidator, liquidatorStake);
 

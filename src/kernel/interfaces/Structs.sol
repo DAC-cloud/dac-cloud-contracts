@@ -9,6 +9,7 @@ struct DealState {
     address deal;
     IModuleFactory module;
     bool active;
+    bool liquidated;
     uint256 rewardsLimit;
     uint256 rewardsUnlocked;
     uint256 rewardsPaid;

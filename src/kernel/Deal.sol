@@ -80,7 +80,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         address _dealCell
     ) external {
         require(msg.sender == factory, DACErrorsLib.NotAuthorized());
-        
+
         dealCell = _dealCell;
     }
 
@@ -239,27 +239,22 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
 
         _beforeExecuteProposal(proposalId);
 
-        address prop = proposals[proposalId];
-        bytes4 typ = DealManagementProposal(prop).typ();
+        DealManagementProposal prop = DealManagementProposal(proposals[proposalId]);
+        bytes4 typ = (prop).typ();
 
         if (typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG) {
-            _votingConfig = abi.decode(
-                DealManagementProposal(prop).data(), 
-                (VotingConfig)
-            );
+            _votingConfig = abi.decode(prop.data(), (VotingConfig));
 
             emit DACEventsLib.VotingConfigUpdate(dealCell, proposalId, _votingConfig);
         }
 
         else {
             if (
-                !IDealCellAdapter(dealCell).executeCellAgentProposal(
-                    DealManagementProposal(prop)
-                )
+                !IDealCellAdapter(dealCell).executeCellAgentProposal(prop)
             ) {
                 // Forward to module if not executed by cell
 
-                _executeModuleManagementProposal(DealManagementProposal(prop));
+                _executeModuleManagementProposal(prop);
             }            
         }
         

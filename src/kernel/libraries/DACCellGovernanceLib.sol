@@ -63,6 +63,7 @@ library DACCellGovernanceLib {
             deal: dealAddr,
             module: IModuleFactory(params.moduleFactory),
             active: false,
+            liquidated: false,
             evaluators: evaluators,
             rewardsLimit: 0, // rewards will be added to state once approved by DAC cell
             rewardsUnlocked: 0,
@@ -263,6 +264,10 @@ library DACCellGovernanceLib {
                 require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.blockingPercent >= 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
+                require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+                require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+                require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+                require(_votingConfig.qualification < mainToken.totalSupply(), DACErrorsLib.InvalidVotingConfig());
             }
         }
 

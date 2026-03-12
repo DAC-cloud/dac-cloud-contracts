@@ -216,6 +216,22 @@ library DealCellGovernanceLib {
             );
         }
 
+        if (params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG) {
+            VotingConfig memory _votingConfig = abi.decode(params.data, (VotingConfig));
+            
+            require(_votingConfig.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.blockingPercent >= 0, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+            require(
+                _votingConfig.qualification < IERC20(IDealCell(dealCell).stakeToken()).totalSupply(), 
+                DACErrorsLib.InvalidVotingConfig()
+            );
+        }
+
         isBase =(
             params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||
             params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||

@@ -207,7 +207,7 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
 
         IERC20(token).safeTransfer(destination, amount);
 
-        emit AgentReceiveReceipt(msg.sender, token, destination, amount);
+        emit AgentSpendReceipt(msg.sender, token, destination, amount);
     }
 
     // For returning capital to Deal
