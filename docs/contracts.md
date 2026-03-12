@@ -1,8 +1,10 @@
 **DAC Cloud Contract Inventory**
 **Implementation-aligned reference**
-**Updated: March 11, 2026**
+**Updated: March 13, 2026**
 
 This file is the contract map for the current repository.
+
+For deployment scripts, seeded scenario flows, and manifest formats, see [development.md](development.md).
 
 ## 1. Top-Level Architecture
 
@@ -63,8 +65,8 @@ flowchart TB
 - Used by `DealManager` through `IModuleFactory`.
 
 ### `src/kernel/proxies/UUPSProxy.sol`
-- Generic proxy used by the factories.
-- Current contracts use it mainly for initialization and factory deployment patterns.
+- Lightweight ERC-1967 proxy used by factories for initialization-time deployment.
+- In practice the deployed protocol treats these instances as immutable after initialization.
 
 ## 3. Kernel Factories
 
@@ -178,7 +180,7 @@ flowchart TB
 ### `src/modules/core/CoreModuleDeals.sol`
 - Declares current core deal/evaluator selectors:
   - `DAC_DEAL`
-  - `PERMIT2_TREASURY`
+  - `PERMIT2_TREASURY` (the selector used for `TreasuryDeal`)
   - `MILESTONES_EVALUATOR`
   - `REVENUE_EVALUATOR`
 
@@ -210,7 +212,8 @@ flowchart TB
   - direct spends,
   - agent receive permissions,
   - agent spend allowances,
-  - capital return to the deal.
+  - capital return to the deal,
+  - compatible-token vote delegation.
 
 ### `src/modules/core/deals/factories/DACDealFactory.sol`
 - Deploys `DACDeal`.

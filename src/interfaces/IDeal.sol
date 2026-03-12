@@ -8,6 +8,8 @@ interface IDeal {
 
     function createStakedAgentProposal(ProposalParams calldata params) external returns (uint256 proposalId);
 
+    // Hooks
+
     function beforeInitialize(
         DealParams calldata params,
         VotingConfig calldata defaultVotingConfig

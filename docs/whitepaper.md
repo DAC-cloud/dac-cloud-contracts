@@ -1,4 +1,4 @@
-### **DAC Engine Whitepaper**
+### **DAC Whitepaper**
 **v1.3 – March 11, 2026**
 
 #### Introduction
@@ -128,6 +128,6 @@ flowchart TD
 
 #### Conclusion
 
-DAC Engine transforms the corporation into a programmable, incentive-aligned primitive for the AI era. By combining dual-token economics, deal-centric execution, capped rewards, and agent-native tools (Permit2, x402, per-deal evaluators), it creates the infrastructure layer for autonomous organizations that actually work.
+DAC transforms the corporation into a programmable, incentive-aligned primitive for the AI era. By combining dual-token economics, deal-centric execution, capped rewards, and agent-native tools (Permit2, x402, per-deal evaluators), it creates the infrastructure layer for autonomous organizations where progress can be driven economically by rational entities.
 
 Open-source on Base. Ready for agents, humans, and everything in between.

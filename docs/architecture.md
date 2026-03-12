@@ -1,5 +1,7 @@
 **DAC Cloud Architecture**
-**Updated: March 11, 2026**
+**Updated: March 13, 2026**
+
+For repository layout, build/test commands, deployment scripts, and scenario playbooks, see [development.md](development.md).
 
 **“Lego for Autonomous Corporations” – The Full Vision**
 
@@ -21,6 +23,8 @@ DAC Cloud was born from a simple but powerful observation: **modern organization
 Traditional corporations are hierarchical, slow to adapt, and misaligned between capital and execution. Classic DAOs are transparent but suffer from speculation, low skin-in-the-game for managers, and governance theater.
 
 The original "DAC engine" idea of 2021–2022 captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** — agile teams of 5–9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
+
+From these ideas DAC engine was born originally as a "Scrum-plugin" to enhance brand-aggregators and venture-studios businesses. With the rise of AI agents in 2026, the protocol was reborn as a corporation-as-code framework for EVM.
 
 This is the **lego idea** at the heart of DAC Cloud.
 
@@ -55,6 +59,8 @@ This split is important:
 - `DealCell` is the generic governance-and-accounting shell
 - `Deal` is the custom execution brain
 
+Modules provide a concrete `Deal` implementation that extends the abstract `Deal` contract, with the custom Deal logic automatically executed through lifecycle hooks or custom deal proposals.
+
 ### 3.3 Module Layer
 
 Modules define:
@@ -66,10 +72,10 @@ The current repository ships one module:
 - `CoreModuleFactory`
 
 The core module currently supports:
-- `DACDeal`
-- `TreasuryDeal`
-- `MilestoneBasedEvaluator`
-- `RevenueBasedEvaluator`
+- `DACDeal` - represents ownership of some other's DAC MainToken, with support for governance execution
+- `TreasuryDeal` - represents simple agent-enabled shared wallet
+- `MilestoneBasedEvaluator` - simple evaluator based on milestones thresholds on returned capital
+- `RevenueBasedEvaluator` - simple evaluator for evaluating revenue streams
 
 ## 4. Deployment Flow
 
@@ -309,7 +315,7 @@ Important behaviors:
 
 ### 10.2 TreasuryDeal
 
-`TreasuryDeal` is the current treasury/vault primitive.
+`TreasuryDeal` is the current treasury / execution-wallet primitive.
 
 It deploys a dedicated `Permit2Treasury` and can:
 - receive tranche funding,
@@ -353,7 +359,7 @@ This evaluator:
 The wrapper can:
 - emit legal-wrapper messages to the DAC,
 - emit legal-wrapper messages to deals through `DealManager`,
-- gate execution of legally sensitive actions such as enabling dividends or removing a module.
+- gate execution of legally sensitive actions such as enabling dividends, removing a module or recovering the deal.
 
 ## 13. Notes On Proxy Usage
 
