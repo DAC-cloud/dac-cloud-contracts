@@ -33,8 +33,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     address private proposer;
 
     IDeal public deal;
-    address internal managedEntity;
-
+    
     StakedAgent internal token; 
 
     // Entities in the DAC paradigm are analogue of the "balance sheets"
@@ -376,6 +375,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function toggleWhitelist(bool whitelistOnly) internal {
         if (isWhitelistOnly != whitelistOnly) {
             isWhitelistOnly = whitelistOnly;
+
+            emit DACEventsLib.WhitelistToggled(id, isWhitelistOnly);
             
             if (isWhitelistOnly) {
                 DealCellGovernanceLib.whitelistHolders(holders);

@@ -92,6 +92,24 @@ contract MockEvaluatorModuleFactory is ModuleFactory {
         mockEvaluatorFactory = address(new MockEvaluatorFactory());
     }
 
+    function moduleId() external pure returns (bytes32) { return bytes32("mock.evaluator"); }
+    function moduleVersion() external pure returns (uint32 major, uint32 minor, uint32 patch) { return (1, 0, 0); }
+    function moduleManifestURI() external pure returns (string memory) { return ""; }
+    function supportedDealKinds() external pure returns (bytes4[] memory kinds) {
+        kinds = new bytes4[](1);
+        kinds[0] = CoreDealType.PERMIT2_TREASURY;
+    }
+    function supportedEvaluatorKinds() external pure returns (bytes4[] memory kinds) {
+        kinds = new bytes4[](1);
+        kinds[0] = MOCK_EVALUATOR_SELECTOR;
+    }
+    function supportsDealKind(bytes4 dealKind) external pure returns (bool) {
+        return dealKind == CoreDealType.PERMIT2_TREASURY;
+    }
+    function supportsEvaluatorKind(bytes4, bytes4 evaluatorSelector) external pure returns (bool) {
+        return evaluatorSelector == MOCK_EVALUATOR_SELECTOR;
+    }
+
     function isActive() external pure returns (bool) { return true; }
     function safetyCheck(address) external pure returns (bool) { return true; }
 

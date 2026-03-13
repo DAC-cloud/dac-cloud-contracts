@@ -40,6 +40,7 @@ flowchart TB
 - Creates and executes DAC governance proposals.
 - Tracks treasury balances and capital calls.
 - Initializes the root capital call.
+- Emits enriched capital-call and dividend-claim events used by indexers.
 
 ### `src/kernel/DealManager.sol`
 - Registry and lifecycle controller for all deals created by a DAC.
@@ -58,11 +59,13 @@ flowchart TB
 - Abstract base contract for all deal logic.
 - Hosts staked-agent governance proposals and lifecycle hooks.
 - Delegates generic accounting/state to `DealCell` while retaining custom execution logic in child contracts.
+- Provides a shared helper for module deals to emit `DealRelatedContract` discovery events and register controlled runtime addresses.
 
 ### `src/kernel/ModuleFactory.sol`
 - Abstract deployment layer for modules.
 - Deploys a `DealCell`, concrete `Deal`, and concrete evaluator for a new deal.
 - Used by `DealManager` through `IModuleFactory`.
+- Exposed through `IModuleFactory` discovery getters for module id, semver, manifest URI, and supported deal/evaluator kinds.
 
 ### `src/kernel/proxies/UUPSProxy.sol`
 - Lightweight ERC-1967 proxy used by factories for initialization-time deployment.
@@ -176,6 +179,12 @@ flowchart TB
 ### `src/modules/core/CoreModuleFactory.sol`
 - Active module factory shipped with the repository.
 - Maps supported deal kinds and evaluator kinds to concrete factories.
+- Exposes module discovery metadata through `IModuleFactory`:
+  - `moduleId()`
+  - `moduleVersion()`
+  - `moduleManifestURI()`
+  - `supportedDealKinds()`
+  - `supportedEvaluatorKinds()`
 
 ### `src/modules/core/CoreModuleDeals.sol`
 - Declares current core deal/evaluator selectors:
@@ -199,11 +208,13 @@ flowchart TB
 - Can deploy a new child DAC or connect to an existing one.
 - Fulfills child capital calls on tranche approval.
 - Returns the child DAC `MainToken` position to the parent DAC when the deal closes.
+- Registers child DAC runtime addresses through `DealRelatedContract` for indexer discovery.
 
 ### `src/modules/core/deals/TreasuryDeal.sol`
 - Deal type for a governed treasury / execution wallet.
 - Owns a dedicated `Permit2Treasury`.
 - Supports spend approvals, agent allowances, receive permissions, capital return, and treasury vote delegation.
+- Registers its treasury wallet through `DealRelatedContract` and emits `ProfitsRecovered` when non-funding assets are moved into treasury control.
 
 ### `src/modules/core/deals/Permit2Treasury.sol`
 - Asset-holding treasury controlled by `TreasuryDeal`.
@@ -269,6 +280,8 @@ flowchart TB
 - `src/interfaces/IDealCell.sol`
 - `src/interfaces/IDeal.sol`
 - `src/interfaces/IModuleFactory.sol`
+- Module discovery interface for `DealManager` and offchain tooling.
+- Exposes module id, version, manifest URI, supported deal kinds, and supported evaluator kinds.
 - `src/interfaces/IEvaluator.sol`
 - `src/kernel/interfaces/IDACCellAdapter.sol`
 - `src/kernel/interfaces/IDealCellAdapter.sol`

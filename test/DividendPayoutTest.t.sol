@@ -21,6 +21,7 @@ import {AgentToken} from "../src/kernel/tokens/AgentToken.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../src/kernel/tokens/factories/TokenFactories.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 import {MockUSDC} from "./base/DACTestBase.t.sol";
 
 contract DividendPayoutTest is Test {
@@ -77,6 +78,8 @@ contract DividendPayoutTest is Test {
         uint256 before1 = usdc.balanceOf(recipient1);
         uint256 before2 = usdc.balanceOf(recipient2);
 
+        vm.expectEmit(true, true, true, true, address(dac));
+        emit DACEventsLib.DividendClaimed(proposalId, address(usdc), recipient1, 3_000e6);
         vm.prank(recipient1);
         dac.claimDividend(proposalId, 0, recipient1, 3_000e6, proof1);
 

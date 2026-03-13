@@ -278,6 +278,27 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         _onLegalWrapperMessage(legalWrapper, messageKind, message);
     }
 
+    function _registerRelatedContract(address relatedContract, bytes32 role, bool controlled, bool managed) internal {
+        if (relatedContract == address(0)) {
+            return;
+        }
+
+        if (controlled) {
+            IDealCellAdapter(dealCell).registerControlledAddress(relatedContract);
+        }
+
+        emit DACEventsLib.DealRelatedContract(
+            dacCell,
+            id,
+            relatedContract,
+            address(this),
+            dealCell,
+            role,
+            controlled,
+            managed
+        );
+    }
+
     function getCell() external view returns (address) { return dealCell; }
     
     function getProposal(uint256 proposalId) public view returns (address) {

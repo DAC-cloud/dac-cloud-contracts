@@ -78,6 +78,10 @@ contract DACDeal is Deal {
                 dacMainToken: mainTokenAddr,
                 dacAgentToken: agentTokenAddr
             });
+
+            _registerRelatedContract(managedEntity, bytes32("CHILD_DAC"), false, true);
+            _registerRelatedContract(dacCellDNA.dacMainToken, bytes32("CHILD_MAIN_TOKEN"), false, false);
+            _registerRelatedContract(dacCellDNA.dacAgentToken, bytes32("CHILD_AGENT_TOKEN"), false, false);
             
             _allocation = config.founderAllocation;
         }
@@ -96,6 +100,10 @@ contract DACDeal is Deal {
                 dacMainToken: IDACCell(params.dealTarget).getMainToken(),
                 dacAgentToken: IDACCell(params.dealTarget).getAgentToken()
             });
+
+            _registerRelatedContract(managedEntity, bytes32("CHILD_DAC"), false, true);
+            _registerRelatedContract(dacCellDNA.dacMainToken, bytes32("CHILD_MAIN_TOKEN"), false, false);
+            _registerRelatedContract(dacCellDNA.dacAgentToken, bytes32("CHILD_AGENT_TOKEN"), false, false);
 
             _rootCapitalCallId = dacDeal.capitalCallId;
             _allocation = dacDeal.managedEquity;

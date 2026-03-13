@@ -22,6 +22,8 @@ import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryD
 import {MilestoneEvaluatorFactory} from "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 import {DACManagementProposalType} from "../src/kernel/governance/DACManagementProposals.sol";
+import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
+import {CoreDealType, CoreEvaluatorType} from "../src/modules/core/CoreModuleDeals.sol";
 
 contract MockUSDC is ERC20 {
     constructor() ERC20("Crypto Dollars", "USDC") {}
@@ -118,10 +120,46 @@ contract DACCellCapitalCallTest is Test {
             cashAmount: 20_000
         });
 
+        vm.expectEmit(true, true, true, true, address(dac));
+        emit DACEventsLib.CapitalCallFulfilled(
+            founder,
+            founder,
+            keccak256(abi.encode(call)),
+            address(usdc),
+            200_000_000e18,
+            20_000,
+            0
+        );
+
         dac.fulfillCapitalCall(call);
 
         vm.stopPrank();
 
         assertEq(mainToken.balanceOf(founder), 200_000_000e18, "Incorrect main token balance after capital call");
+    }
+
+    function testCoreModuleMetadata() public view {
+        assertEq(coreModule.moduleId(), bytes32("dac.core"));
+
+        (uint32 major, uint32 minor, uint32 patch) = coreModule.moduleVersion();
+        assertEq(major, 1);
+        assertEq(minor, 0);
+        assertEq(patch, 0);
+
+        bytes4[] memory dealKinds = coreModule.supportedDealKinds();
+        assertEq(dealKinds.length, 2);
+        assertEq(dealKinds[0], CoreDealType.DAC_DEAL);
+        assertEq(dealKinds[1], CoreDealType.PERMIT2_TREASURY);
+        assertTrue(coreModule.supportsDealKind(dealKinds[0]));
+        assertTrue(coreModule.supportsDealKind(dealKinds[1]));
+
+        bytes4[] memory evaluatorKinds = coreModule.supportedEvaluatorKinds();
+        assertEq(evaluatorKinds.length, 2);
+        assertEq(evaluatorKinds[0], CoreEvaluatorType.MILESTONES_EVALUATOR);
+        assertEq(evaluatorKinds[1], CoreEvaluatorType.REVENUE_EVALUATOR);
+        assertTrue(coreModule.supportsEvaluatorKind(CoreDealType.DAC_DEAL, evaluatorKinds[0]));
+        assertTrue(coreModule.supportsEvaluatorKind(CoreDealType.DAC_DEAL, evaluatorKinds[1]));
+
+        assertEq(bytes(coreModule.moduleManifestURI()).length, 0);
     }
 }

@@ -23,7 +23,7 @@ contract TreasuryDeal is Deal {
     event PermitApproved(address indexed treasuryToken, uint160 amount);
     event AgentAssigned(address indexed treasuryToken, address indexed agent, uint160 amount);
     event AgentAllowed(address indexed treasuryToken, address indexed agent, uint160 amount, uint160 dealSize);
-    event ProfitsRecovered(address indexed token, uint160 amount);
+    event ProfitsRecovered(address indexed token, uint256 amount);
     
     function initialize(
         uint256 _id,
@@ -54,8 +54,7 @@ contract TreasuryDeal is Deal {
         VotingConfig calldata
     ) internal override {
         // Treasury Deal supports opening the wallet without initial funding
-
-        IDealCellAdapter(dealCell).registerControlledAddress(address(treasury));
+        _registerRelatedContract(address(treasury), bytes32("TREASURY"), true, true);
     }
 
     function _afterApprove(uint256 trancheId) internal override {
@@ -223,6 +222,8 @@ contract TreasuryDeal is Deal {
             IERC20(token).transfer(managedEntity, balance),
             DACErrorsLib.TransferFailed()
         );
+
+        emit ProfitsRecovered(token, balance);
 
         return balance;
     }

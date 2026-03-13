@@ -373,7 +373,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
     function _findProposalIdFromData(Vm.Log[] memory logs, bytes32 eventSig) internal pure returns (uint256 proposalId) {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == eventSig) {
-                return abi.decode(logs[i].data, (uint256));
+                return uint256(logs[i].topics[3]);
             }
         }
 

@@ -140,8 +140,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         rootCapitalCallInitialized = true;
 
         emit DACEventsLib.CapitalCallCreated(
-            0, 
-            recipient, 
+            0,
+            recipient,
             DACCellCapitalLib.createCapitalCall(
                 0,
                 treasuryToken,
@@ -149,8 +149,11 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
                 amount,
                 cashAmount,
                 capitalCalls
-            ), 
-            amount
+            ),
+            treasuryToken,
+            amount,
+            cashAmount,
+            0
         );
     }
 

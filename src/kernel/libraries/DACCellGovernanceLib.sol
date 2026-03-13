@@ -119,7 +119,7 @@ library DACCellGovernanceLib {
 
         uint256 votingId = IDACGovernanceAdapter(dacCell).createManagementProposal(trancheProposal);
 
-        emit DACEventsLib.TrancheCreated(dacCell, dealId, trancheId, votingId);
+        emit DACEventsLib.TrancheCreated(dacCell, dealId, votingId, trancheId);
     }
 
     function executeTrancheApprove(

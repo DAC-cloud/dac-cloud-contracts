@@ -61,12 +61,23 @@ This split is important:
 
 Modules provide a concrete `Deal` implementation that extends the abstract `Deal` contract, with the custom Deal logic automatically executed through lifecycle hooks or custom deal proposals.
 
+For offchain discovery, module deals can also emit standardized `DealRelatedContract` events through the shared `Deal` helper. This gives indexers a uniform way to learn about runtime-linked contracts such as treasury wallets, child DACs, or child tokens without hardcoding module-specific reads.
+
 ### 3.3 Module Layer
 
 Modules define:
 - which deal kinds are supported,
 - which evaluator kinds are supported,
 - how concrete deal contracts are deployed.
+
+Each module factory also exposes a lightweight discovery surface through `IModuleFactory`:
+- module id,
+- semantic version,
+- optional manifest URI,
+- supported deal kinds,
+- supported evaluator kinds.
+
+This onchain metadata is intentionally small and is meant to complement, not replace, richer offchain manifests used by SDKs, frontends, and indexers.
 
 The current repository ships one module:
 - `CoreModuleFactory`
@@ -170,6 +181,8 @@ The current DAC-level proposal surface includes:
 - forwarding messages to deals,
 - adding evaluators to active deals,
 - delegating DAC-held voting power in any compatible token.
+
+Capital-call and dividend execution paths emit enriched events with token addresses, hashes, recipients, and payout amounts so offchain systems can reconstruct treasury history without replaying internal storage.
 
 ## 7. Deal Governance
 

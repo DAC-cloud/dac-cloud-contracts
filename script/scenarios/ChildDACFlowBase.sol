@@ -145,12 +145,12 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
     }
 
     function _findCapitalCallHash(Vm.Log[] memory logs) internal pure returns (bytes32 capitalCallHash) {
-        bytes32 eventSig = keccak256("CapitalCallCreated(uint256,address,bytes32,uint256)");
+        bytes32 eventSig =
+            keccak256("CapitalCallCreated(uint256,address,bytes32,address,uint256,uint256,uint256)");
 
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == eventSig) {
-                (capitalCallHash,) = abi.decode(logs[i].data, (bytes32, uint256));
-                return capitalCallHash;
+                return logs[i].topics[3];
             }
         }
 

@@ -7,11 +7,13 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 import {ERC20Votes} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {DACTestBase} from "./base/DACTestBase.t.sol";
-import {ProposalParams} from "../src/interfaces/Structs.sol";
+import {DealParams, ProposalParams} from "../src/interfaces/Structs.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
 import {IDealCell} from "../src/interfaces/IDealCell.sol";
 import {IDACCell} from "../src/interfaces/IDACCell.sol";
+import {IDealManager} from "../src/interfaces/IDealManager.sol";
 import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 import {Deal} from "../src/kernel/Deal.sol";
 import {StakedAgent} from "../src/kernel/tokens/StakedAgent.sol";
 import {MainToken} from "../src/kernel/tokens/MainToken.sol";
@@ -23,9 +25,10 @@ import {CoreDealManagementType} from "../src/modules/core/governance/CoreDealMan
 import {TreasuryDeal} from "../src/modules/core/deals/TreasuryDeal.sol";
 import {DACDeal} from "../src/modules/core/deals/DACDeal.sol";
 import {Permit2Treasury} from "../src/modules/core/deals/Permit2Treasury.sol";
-import {CoreEvaluatorType} from "../src/modules/core/CoreModuleDeals.sol";
+import {CoreDealType, CoreEvaluatorType} from "../src/modules/core/CoreModuleDeals.sol";
+import {MilestoneBasedEvaluator} from "../src/modules/core/evaluators/MilestoneBasedEvaluator.sol";
 import {RevenueBasedEvaluator} from "../src/modules/core/evaluators/RevenueBasedEvaluator.sol";
-import {TreasurySpendAllowance, RevenueSchedule} from "../src/modules/core/interfaces/Structs.sol";
+import {Milestone, TreasurySpendAllowance, RevenueSchedule} from "../src/modules/core/interfaces/Structs.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IDealManagerAdapter} from "../src/kernel/interfaces/IDealManagerAdapter.sol";
 import {DealState} from "../src/kernel/interfaces/Structs.sol";
@@ -136,6 +139,28 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(usdc.balanceOf(treasuryAddr), 15_000);
     }
 
+    function test_createTreasuryDeal_emitsRelatedTreasuryContract() public {
+        (DealHandle memory handle, Vm.Log[] memory logs) = _createTreasuryDealWithLogs(agent1);
+
+        (
+            uint256 loggedId,
+            address relatedContract,
+            address loggedDeal,
+            address loggedDealCell,
+            bytes32 role,
+            bool controlled,
+            bool managed
+        ) = _findRelatedContract(logs);
+
+        assertEq(loggedId, handle.dealId);
+        assertEq(relatedContract, TreasuryDeal(handle.dealAddr).managedEntity());
+        assertEq(loggedDeal, handle.dealAddr);
+        assertEq(loggedDealCell, handle.dealCell);
+        assertEq(role, bytes32("TREASURY"));
+        assertTrue(controlled);
+        assertTrue(managed);
+    }
+
     function test_permitUnstake_releasesAgentPrincipalAfterApproval() public {
         DealHandle memory handle = createTreasuryDeal(agent1);
 
@@ -206,6 +231,33 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(usdc.balanceOf(treasuryAddr), 6_000);
     }
 
+    function test_toggleWhitelist_emitsEvent() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.TOGGLE_WHITELIST,
+                target: address(0),
+                i: 0,
+                data: abi.encode(false)
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+
+        vm.expectEmit(true, false, false, true, handle.dealCell);
+        emit DACEventsLib.WhitelistToggled(handle.dealId, false);
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        vm.prank(agent1);
+        vm.expectRevert(DACErrorsLib.NotWhitelistDeal.selector);
+        IDealCell(handle.dealCell).invite(makeAddr("late-invitee"), true);
+    }
+
     function test_addEvaluator_requiresDACAndStakedAgentApproval() public {
         DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
 
@@ -268,6 +320,22 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertEq(RevenueBasedEvaluator(state.evaluators[1]).cell(), handle.dealCell);
         assertEq(state.evaluators[0], handle.evaluatorAddr);
         assertTrue(state.evaluators[1] != address(0));
+    }
+
+    function test_recoverProfits_emitsEventAndTransfersToTreasury() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
+
+        zeroFirstToken.mint(handle.dealAddr, 777);
+
+        vm.expectEmit(true, false, false, true, handle.dealAddr);
+        emit TreasuryDeal.ProfitsRecovered(address(zeroFirstToken), 777);
+
+        vm.prank(agent1);
+        TreasuryDeal(handle.dealAddr).recoverProfits(address(zeroFirstToken));
+
+        assertEq(zeroFirstToken.balanceOf(handle.dealAddr), 0);
+        assertEq(zeroFirstToken.balanceOf(treasuryAddr), 777);
     }
 
     function test_vetoEnabledHighQuorumProposal_waitsFullDuration() public {
@@ -809,10 +877,79 @@ contract DealGovernanceFlowTest is DACTestBase {
         IVoting(proposal).vote(support);
     }
 
+    function _createTreasuryDealWithLogs(address agent)
+        internal
+        returns (DealHandle memory handle, Vm.Log[] memory logs)
+    {
+        vm.recordLogs();
+
+        vm.startPrank(agent);
+
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
+            timestamp: block.timestamp + 1 days,
+            rewardPercentage: 1e18,
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
+        });
+        milestones[0].rewardCurve[0] = 1e18;
+        milestones[0].penaltyCurve[0] = 1e18;
+
+        MilestoneBasedEvaluator.Config memory evaluatorCfg =
+            MilestoneBasedEvaluator.Config(MathLib.atScale(100), milestones);
+
+        (uint256 dealId, address dealCell, address dealAddr, address evaluatorAddr) = IDealManager(dealManager)
+            .createDealProposal(
+                DealParams({
+                    dealKind: CoreDealType.PERMIT2_TREASURY,
+                    name: "Test Treasury Deal",
+                    description: "Test Treasury Deal description",
+                    linkHash: "0x00112233",
+                    moduleFactory: address(coreModule),
+                    governanceFactory: address(coreDealGovernanceFactory),
+                    dealTarget: address(0),
+                    proposer: agent,
+                    vetoEnabled: false,
+                    fundingToken: address(usdc),
+                    fundingAmount: 10_000,
+                    rewardsLimit: 500e6,
+                    approveDeadline: block.timestamp + 1 days,
+                    dealDeadline: block.timestamp + 30 days,
+                    evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
+                    dealConfig: abi.encode("deal config"),
+                    evaluatorConfig: abi.encode(evaluatorCfg)
+                })
+            );
+
+        vm.stopPrank();
+
+        logs = vm.getRecordedLogs();
+
+        handle.dealId = dealId;
+        handle.dealCell = dealCell;
+        handle.dealAddr = dealAddr;
+        handle.evaluatorAddr = evaluatorAddr;
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == keccak256("DealCreated(address,uint256,uint256,address,bytes4,address,address)")) {
+                handle.proposalId = uint256(logs[i].topics[3]);
+                break;
+            }
+        }
+    }
+
     function _findProposalIdFromData(Vm.Log[] memory logs, bytes32 eventSig) internal pure returns (uint256 proposalId) {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == eventSig) {
-                return abi.decode(logs[i].data, (uint256));
+                return uint256(logs[i].topics[3]);
             }
         }
 
@@ -830,6 +967,34 @@ contract DealGovernanceFlowTest is DACTestBase {
         }
 
         revert("deal proposal id not found");
+    }
+
+    function _findRelatedContract(Vm.Log[] memory logs)
+        internal
+        pure
+        returns (
+            uint256 loggedId,
+            address relatedContract,
+            address loggedDeal,
+            address loggedDealCell,
+            bytes32 role,
+            bool controlled,
+            bool managed
+        )
+    {
+        bytes32 eventSig = keccak256("DealRelatedContract(address,uint256,address,address,address,bytes32,bool,bool)");
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == eventSig) {
+                loggedId = uint256(logs[i].topics[2]);
+                relatedContract = address(uint160(uint256(logs[i].topics[3])));
+                (loggedDeal, loggedDealCell, role, controlled, managed) =
+                    abi.decode(logs[i].data, (address, address, bytes32, bool, bool));
+                return (loggedId, relatedContract, loggedDeal, loggedDealCell, role, controlled, managed);
+            }
+        }
+
+        revert("related contract event not found");
     }
 
     function _createChildProposalViaParent(
@@ -900,12 +1065,12 @@ contract DealGovernanceFlowTest is DACTestBase {
     }
 
     function _findCapitalCallHash(Vm.Log[] memory logs) internal pure returns (bytes32 callHash) {
-        bytes32 eventSig = keccak256("CapitalCallCreated(uint256,address,bytes32,uint256)");
+        bytes32 eventSig =
+            keccak256("CapitalCallCreated(uint256,address,bytes32,address,uint256,uint256,uint256)");
 
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == eventSig) {
-                (callHash,) = abi.decode(logs[i].data, (bytes32, uint256));
-                return callHash;
+                return logs[i].topics[3];
             }
         }
 

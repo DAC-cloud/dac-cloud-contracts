@@ -38,10 +38,26 @@ library DACEventsLib {
     event LegalWrapperSet(uint256 indexed id, LegalWrapper legalWrapper);
     event OffchainActionApproved(uint256 indexed id, bytes4 action, bytes data);
     event DividendPayout(uint256 payoutId, address indexed token, uint256 totalPayout, bytes32 merkleRoot);
-    event DividendClaimed(uint256 payoutId, address indexed token, uint256 amountPayout);
+    event DividendClaimed(uint256 indexed payoutId, address indexed token, address indexed receiver, uint256 amountPayout);
     
-    event CapitalCallCreated(uint256 indexed id, address indexed recipient, bytes32 callHash, uint256 amount);
-    event CapitalCallFulfilled(address indexed recipient, bytes32 callHash, uint256 amount);
+    event CapitalCallCreated(
+        uint256 indexed id,
+        address indexed recipient,
+        bytes32 indexed callHash,
+        address treasuryToken,
+        uint256 tokenAmount,
+        uint256 cashAmount,
+        uint256 nonce
+    );
+    event CapitalCallFulfilled(
+        address indexed payer,
+        address indexed recipient,
+        bytes32 indexed callHash,
+        address treasuryToken,
+        uint256 tokenAmount,
+        uint256 cashAmount,
+        uint256 nonce
+    );
     
     event TreasuryDeposit(address indexed token, uint256 amount, address indexed from);
     event TreasurySyncMissing(address indexed token, uint256 amount);
@@ -113,6 +129,7 @@ library DACEventsLib {
     event Invited(address indexed invitee, bool canInvite);
     
     event EarlyReturnsToggled(uint256 indexed id, bool enabled);
+    event WhitelistToggled(uint256 indexed id, bool enabled);
     event VetoRightEnabled(uint256 indexed id);
 
     event DealManagementProposalCreated(
@@ -133,6 +150,16 @@ library DACEventsLib {
     // Events emited by DealCell contract (Deal escrow, connecting Deal to DAC)
 
     event DealInitialized(address indexed dac, uint256 indexed id, address indexed deal, DealParams params);
+    event DealRelatedContract(
+        address indexed dac,
+        uint256 indexed id,
+        address indexed relatedContract,
+        address deal,
+        address dealCell,
+        bytes32 role,
+        bool controlled,
+        bool managed
+    );
     event DealActivated(
         address indexed dac, 
         uint256 indexed id, 

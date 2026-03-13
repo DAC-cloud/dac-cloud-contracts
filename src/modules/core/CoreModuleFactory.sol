@@ -7,6 +7,11 @@ import {ModuleFactory} from "../../kernel/ModuleFactory.sol";
 import {CoreDealType, CoreEvaluatorType} from "./CoreModuleDeals.sol";
 
 contract CoreModuleFactory is ModuleFactory {
+    bytes32 internal constant MODULE_ID = bytes32("dac.core");
+    uint32 internal constant MODULE_MAJOR = 1;
+    uint32 internal constant MODULE_MINOR = 0;
+    uint32 internal constant MODULE_PATCH = 0;
+    string internal constant MODULE_MANIFEST_URI = "";
 
     // Deals
     address public dacDealFactory;
@@ -31,6 +36,35 @@ contract CoreModuleFactory is ModuleFactory {
         treasuryDealFactory = _treasuryDealFactory;
         milestoneEvaluatorFactory = _milestoneEvaluatorFactory;
         revenueEvaluatorFactory = _revenueEvaluatorFactory;
+    }
+
+    function moduleId() external pure returns (bytes32) { return MODULE_ID; }
+
+    function moduleVersion() external pure returns (uint32 major, uint32 minor, uint32 patch) {
+        return (MODULE_MAJOR, MODULE_MINOR, MODULE_PATCH);
+    }
+
+    function moduleManifestURI() external pure returns (string memory) { return MODULE_MANIFEST_URI; }
+
+    function supportedDealKinds() external pure returns (bytes4[] memory kinds) {
+        kinds = new bytes4[](2);
+        kinds[0] = CoreDealType.DAC_DEAL;
+        kinds[1] = CoreDealType.PERMIT2_TREASURY;
+    }
+
+    function supportedEvaluatorKinds() external pure returns (bytes4[] memory kinds) {
+        kinds = new bytes4[](2);
+        kinds[0] = CoreEvaluatorType.MILESTONES_EVALUATOR;
+        kinds[1] = CoreEvaluatorType.REVENUE_EVALUATOR;
+    }
+
+    function supportsDealKind(bytes4 dealKind) external pure returns (bool) {
+        return dealKind == CoreDealType.DAC_DEAL || dealKind == CoreDealType.PERMIT2_TREASURY;
+    }
+
+    function supportsEvaluatorKind(bytes4, bytes4 evaluatorKind) external pure returns (bool) {
+        return evaluatorKind == CoreEvaluatorType.MILESTONES_EVALUATOR
+            || evaluatorKind == CoreEvaluatorType.REVENUE_EVALUATOR;
     }
 
     function isActive() external pure returns (bool) { return true; }

@@ -57,6 +57,24 @@ contract MockGovernanceModuleFactory is ModuleFactory {
         mockEvaluatorFactory = address(new MockNoopEvaluatorFactory());
     }
 
+    function moduleId() external pure returns (bytes32) { return bytes32("mock.governance"); }
+    function moduleVersion() external pure returns (uint32 major, uint32 minor, uint32 patch) { return (1, 0, 0); }
+    function moduleManifestURI() external pure returns (string memory) { return ""; }
+    function supportedDealKinds() external pure returns (bytes4[] memory kinds) {
+        kinds = new bytes4[](1);
+        kinds[0] = CoreDealType.PERMIT2_TREASURY;
+    }
+    function supportedEvaluatorKinds() external pure returns (bytes4[] memory kinds) {
+        kinds = new bytes4[](1);
+        kinds[0] = DAC_TEST_EVALUATOR_SELECTOR;
+    }
+    function supportsDealKind(bytes4 dealKind) external pure returns (bool) {
+        return dealKind == CoreDealType.PERMIT2_TREASURY;
+    }
+    function supportsEvaluatorKind(bytes4, bytes4 evaluatorSelector) external pure returns (bool) {
+        return evaluatorSelector == DAC_TEST_EVALUATOR_SELECTOR;
+    }
+
     function isActive() external pure returns (bool) { return true; }
     function safetyCheck(address) external pure returns (bool) { return true; }
 

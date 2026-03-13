@@ -36,7 +36,15 @@ library DACCellCapitalLib {
 
         capitalCalls[callHash].fulfilled = true;
 
-        emit DACEventsLib.CapitalCallFulfilled(call.tokenRecipient, callHash, call.tokenAmount);
+        emit DACEventsLib.CapitalCallFulfilled(
+            msg.sender,
+            call.tokenRecipient,
+            callHash,
+            call.treasuryToken,
+            call.tokenAmount,
+            call.cashAmount,
+            call.nonce
+        );
         
         return true;
     }
@@ -122,18 +130,23 @@ library DACCellCapitalLib {
             (address, uint256)
         );
 
+        bytes32 callHash = createCapitalCall(
+            id,
+            treasuryToken,
+            prop.target(),
+            uint256(prop.i()),
+            cashAmount,
+            capitalCalls
+        );
+
         emit DACEventsLib.CapitalCallCreated(
-            id, 
-            prop.target(), 
-            createCapitalCall(
-                id,
-                treasuryToken,
-                prop.target(),
-                uint256(prop.i()),
-                cashAmount,
-                capitalCalls
-            ), 
-            uint256(prop.i())
+            id,
+            prop.target(),
+            callHash,
+            treasuryToken,
+            uint256(prop.i()),
+            cashAmount,
+            id
         );
     }
 
@@ -166,6 +179,6 @@ library DACCellCapitalLib {
         
         require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
 
-        emit DACEventsLib.DividendClaimed(proposalId, receiver, amount);
+        emit DACEventsLib.DividendClaimed(proposalId, token, receiver, amount);
     }
 }
