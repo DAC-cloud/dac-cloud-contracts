@@ -35,7 +35,15 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
     event DirectSpend(address token, address destination, uint256 amount);
     
     event AgentReceiveApproved(address indexed agent, address token, address source, uint256 amount);
-    event AgentSpendApproved(address indexed agent, address token, address source, uint256 amount);
+    event AgentSpendApproved(
+        address indexed agent, 
+        address token, 
+        address destination, 
+        uint256 amount, 
+        uint256 singleTxAmount,
+        uint256 clockLimit,
+        uint256 duration
+    );
 
     event AgentRevoked(address indexed agent, address token, address counterparty);
 
@@ -105,7 +113,15 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
         bytes32 calldataHash = keccak256(abi.encode(agent, token, destination));
         agentAllowance[calldataHash] = allowance;
 
-        emit AgentSpendApproved(agent, token, destination, allowance.totalAmount);
+        emit AgentSpendApproved(
+            agent, 
+            token, 
+            destination, 
+            allowance.totalAmount, 
+            allowance.singleTxAmount,
+            allowance.clockLimit,
+            allowance.duration
+        );
     }
 
     // Called by TreasuryDeal after staked-agents quorum approves a spend allowance towards agent
