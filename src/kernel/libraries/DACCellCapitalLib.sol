@@ -165,7 +165,7 @@ library DACCellCapitalLib {
 
         bytes32 leaf = keccak256(abi.encodePacked(index, receiver, amount));
 
-        bytes32 claimedKey = keccak256(abi.encodePacked(root, leaf));
+        bytes32 claimedKey = keccak256(abi.encodePacked(proposalId, root, leaf));
         require(!dividendClaimed[claimedKey], DACErrorsLib.DividendAlreadyClaimed(proposalId, receiver));
 
         require(MerkleProof.verify(proof, root, leaf), DACErrorsLib.InvalidMerkleProof());
