@@ -11,7 +11,7 @@ library DACEventsLib {
 
     // DAC Cell Events
 
-    event DACCreated(address indexed creator, string name);
+    event DACCreated(address indexed creator, string name, string description);
     event DACStarted(address indexed manager, VotingConfig config, bool dividendsEnabled, address coreModule);
     
     event VotingConfigUpdate(uint256 indexed id, VotingConfig config);

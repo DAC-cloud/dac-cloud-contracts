@@ -213,7 +213,7 @@ anvil \
   --host 127.0.0.1 \
   --port 8545 \
   --chain-id 31337 \
-  --gas-limit 30000000 \
+  --gas-limit 25000000 \
   --code-size-limit 24576
 ```
 

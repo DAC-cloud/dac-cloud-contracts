@@ -82,7 +82,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         cellStarted = false;
         rootCapitalCallInitialized = false;
 
-        emit DACEventsLib.DACCreated(msg.sender, name);
+        emit DACEventsLib.DACCreated(msg.sender, name, description);
     }
 
     function initializeAfterDeployment(
