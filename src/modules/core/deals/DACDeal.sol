@@ -173,12 +173,12 @@ contract DACDeal is Deal {
     function _beforeCreateProposal(ProposalParams calldata params) internal virtual override {
         if (params.typ == AbstractDealManagementType.REQUEST_TRANCHE) {
             // Checking that capital call exists
-            (uint256 fundingAmount, bytes32 calldataHash) = abi.decode(params.data, (uint256, bytes32));
+            (, bytes32 calldataHash) = abi.decode(params.data, (uint256, bytes32));
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(calldataHash);
 
             // Verifying capital call parameters
             require(call.treasuryToken == params.target);
-            require(call.cashAmount == fundingAmount);
+            require(call.cashAmount == uint256(params.i));
             require(call.tokenRecipient == address(this));
         }
 
