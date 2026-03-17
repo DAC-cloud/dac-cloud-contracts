@@ -114,7 +114,7 @@ library DACCellGovernanceLib {
             typ: DACManagementProposalType.APPROVE_TRANCHE,
             target: fundingTranche.token,
             i: bytes32(fundingTranche.amount),
-            data: abi.encode(dealId, trancheId, uint256(0))
+            data: abi.encode(dealId, trancheId, fundingTranche.rewards)
         });
 
         uint256 votingId = IDACGovernanceAdapter(dacCell).createManagementProposal(trancheProposal);
@@ -146,7 +146,7 @@ library DACCellGovernanceLib {
 
         emit DACEventsLib.FundingApproved(dacCell, dealId, trancheId, rewardsLimit);
 
-        IDealCellAdapter(dealCell).approveFunding(trancheId);
+        IDealCellAdapter(dealCell).approveFunding(trancheId, rewardsLimit);
     }
 
     function approveFunding(

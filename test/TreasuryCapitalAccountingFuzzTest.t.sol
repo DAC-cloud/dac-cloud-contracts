@@ -227,7 +227,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
                 typ: AbstractDealManagementType.REQUEST_TRANCHE,
                 target: address(usdc),
                 i: bytes32(amount),
-                data: bytes("")
+                data: abi.encode(uint256(0))
             })
         );
         vm.stopPrank();

@@ -290,43 +290,64 @@ library DealCellGovernanceLib {
         uint256 trancheId,
         bool approved,
         uint256 _approveDeadline,
+        uint256 _tokenRewardsLimit,
+        uint256 _rewardsConverted,
+        uint256 rewardsLimit,
         IDeal deal,
         mapping(uint256 => Tranche) storage _fundingTranches,
         mapping(address => uint256) storage investedCapital
-    ) public {
+    ) public returns (uint256 tokenRewardsLimit, uint256 rewardsConverted) {
+        Tranche memory tranche = _fundingTranches[trancheId];
+
         if (trancheId == 0) {
             require(!approved, DACErrorsLib.DealAlreadyApproved());
             require(block.timestamp <= _approveDeadline, DACErrorsLib.DeadlineNotPassed());
         }
         else {
-            require(_fundingTranches[trancheId].amount > 0, DACErrorsLib.TrancheNotExists());
-            require(!_fundingTranches[trancheId].settled, DACErrorsLib.TrancheAlreadySettled());
+            require(tranche.amount > 0, DACErrorsLib.TrancheNotExists());
+            require(!tranche.settled, DACErrorsLib.TrancheAlreadySettled());
         }
         
-        if (_fundingTranches[trancheId].amount > 0) {
+        if (tranche.amount > 0) {
             require(
                 IERC20(
-                    _fundingTranches[trancheId].token
+                    tranche.token
                 ).transfer(
                     address(deal), 
-                    _fundingTranches[trancheId].amount
+                    tranche.amount
                 ), 
                 DACErrorsLib.TransferFailed()
             );
 
-            investedCapital[_fundingTranches[trancheId].token] += _fundingTranches[trancheId].amount;
+            investedCapital[tranche.token] += tranche.amount;
 
             emit DACEventsLib.TrancheSettled(
                 dacCell,
                 dealId,
                 address(deal),
                 trancheId,
-                _fundingTranches[trancheId].token,
-                _fundingTranches[trancheId].amount
+                tranche.token,
+                tranche.amount
             );
         }
 
-        _fundingTranches[trancheId].settled = true;
+        tranche.settled = true;
+
+        if (!approved) {
+            // This is the initial deal approval, no need to adjust rewards
+            tokenRewardsLimit = _tokenRewardsLimit;
+            rewardsConverted = _rewardsConverted;
+        }
+
+        else {
+            // Adjusting rewards converted to extend percents
+            rewardsConverted = MathLib.div(
+                MathLib.mulDiv(_tokenRewardsLimit, rewardsConverted, MathLib.SCALE),
+                _tokenRewardsLimit + rewardsLimit - 1 // leaving some dust but preventing accounting issues
+            );
+
+            tokenRewardsLimit = _tokenRewardsLimit + rewardsLimit;
+        }
     }
 
     function requestTranche(
@@ -345,10 +366,11 @@ library DealCellGovernanceLib {
             _fundingTokens.push(_fundingToken);
         }
         _requestedFunding[_fundingToken] += uint256(DealManagementProposal(prop).i());
-        
+
         _fundingTranches[prop.id()] = Tranche({
             token: _fundingToken,
             amount: uint256(DealManagementProposal(prop).i()),
+            rewards: abi.decode(DealManagementProposal(prop).data(), (uint256)),
             settled: false
         });
 

@@ -16,7 +16,7 @@ interface IDealCellAdapter {
     
     function transferCapital(address token, uint256 amount) external;
 
-    function approveFunding(uint256 trancheId) external;
+    function approveFunding(uint256 trancheId, uint256 rewardsLimit) external;
     function withdrawCapital() external;
     
     function executeCellAgentProposal(

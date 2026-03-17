@@ -85,7 +85,7 @@ contract DirectAccessControlTest is DACTestBase {
 
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
-        cell.approveFunding(0);
+        cell.approveFunding(0, 1_000);
 
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);

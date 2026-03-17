@@ -238,6 +238,7 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
         fundingTranchesMap[trancheId] = Tranche({
             token: token,
             amount: amount,
+            rewards: 0,
             settled: settled
         });
     }
@@ -260,6 +261,9 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
             trancheId,
             approved,
             approveDeadlineValue,
+            0,
+            0,
+            0,
             IDeal(address(dealContract)),
             fundingTranchesMap,
             investedCapital

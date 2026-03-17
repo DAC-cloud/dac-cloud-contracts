@@ -108,7 +108,7 @@ contract DealGovernanceFlowTest is DACTestBase {
                 typ: AbstractDealManagementType.REQUEST_TRANCHE,
                 target: address(usdc),
                 i: bytes32(uint256(5_000)),
-                data: bytes("")
+                data: abi.encode(uint256(0))
             })
         );
         vm.stopPrank();
@@ -386,7 +386,7 @@ contract DealGovernanceFlowTest is DACTestBase {
                 typ: AbstractDealManagementType.REQUEST_TRANCHE,
                 target: address(usdc),
                 i: bytes32(uint256(2_000)),
-                data: bytes("")
+                data: abi.encode(uint256(0))
             })
         );
         vm.stopPrank();

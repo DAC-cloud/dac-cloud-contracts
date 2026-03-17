@@ -77,5 +77,6 @@ struct EvaluationResult {
 struct Tranche {
     address token;
     uint256 amount;
+    uint256 rewards;
     bool settled;
 }

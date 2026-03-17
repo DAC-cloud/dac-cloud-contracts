@@ -158,6 +158,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         _fundingTranches[0] = Tranche({
             token: params.fundingToken,
             amount: params.fundingAmount,
+            rewards: params.rewardsLimit,
             settled: false
         });
 
@@ -212,15 +213,18 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         deal.onVoluntaryStake(staker, amount);
     }
 
-    function approveFunding(uint256 trancheId) external onlyDealManager {
+    function approveFunding(uint256 trancheId, uint256 rewardsLimit) external onlyDealManager {
         deal.beforeApproveFunding(trancheId);
 
-        DealCellGovernanceLib.approveFunding(
+        (_tokenRewardsLimit, rewardsConverted) = DealCellGovernanceLib.approveFunding(
             dacCell,
             id,
             trancheId,
             approved,
             _approveDeadline,
+            _tokenRewardsLimit,
+            rewardsConverted,
+            rewardsLimit,
             deal,
             _fundingTranches,
             investedCapital
