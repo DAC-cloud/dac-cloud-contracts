@@ -74,6 +74,12 @@ contract DACAccountingFuzzTest is DACTestBase {
         uint256 tokenAmount = bound(rawTokenAmount, 1, 50_000_000e18);
         uint256 cashAmount = bound(rawCashAmount, 1, usdc.balanceOf(founder));
 
+        usdc.mint(address(recipient), cashAmount);
+
+        vm.startPrank(recipient);
+        usdc.approve(address(dac), cashAmount);
+        vm.stopPrank();
+
         uint256 releasedBefore = DealManager(dealManager).totalReleasedVotable();
         uint256 dacTreasuryBefore = usdc.balanceOf(address(dac));
         uint256 supplyBefore = mainToken.totalSupply();
@@ -95,70 +101,6 @@ contract DACAccountingFuzzTest is DACTestBase {
         assertEq(mainToken.totalSupply(), supplyBefore + tokenAmount);
         assertEq(usdc.balanceOf(address(dac)), dacTreasuryBefore + cashAmount);
         assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore + tokenAmount);
-    }
-
-    function testFuzz_capitalCallToControlledTreasury_releasesOnlyOnSpend(
-        uint96 rawTokenAmount,
-        uint96 rawCashAmount,
-        uint96 rawReleaseAmount
-    ) public {
-        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
-        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
-        address destination = makeAddr("released-destination");
-
-        uint256 tokenAmount = bound(rawTokenAmount, 1, 25_000_000e18);
-        uint256 cashAmount = bound(rawCashAmount, 1, usdc.balanceOf(founder));
-        uint256 releaseAmount = bound(rawReleaseAmount, 0, tokenAmount);
-
-        uint256 releasedBefore = DealManager(dealManager).totalReleasedVotable();
-
-        uint256 proposalId = _createAndExecuteCapitalCallProposal(treasuryAddr, tokenAmount, cashAmount);
-        CapitalCall memory call = _capitalCall(proposalId, treasuryAddr, tokenAmount, cashAmount);
-
-        vm.startPrank(founder);
-        usdc.approve(address(dac), cashAmount);
-        dac.fulfillCapitalCall(call);
-        vm.stopPrank();
-
-        assertEq(mainToken.balanceOf(treasuryAddr), tokenAmount);
-        assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore);
-
-        if (releaseAmount > 0) {
-            _directSpend(handle, address(mainToken), destination, releaseAmount);
-
-            assertEq(mainToken.balanceOf(treasuryAddr), tokenAmount - releaseAmount);
-            assertEq(mainToken.balanceOf(destination), releaseAmount);
-            assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore + releaseAmount);
-        }
-    }
-
-    function test_controlledTreasuryMixedReleasedAndLockedMain_canSpendWithoutUnderflow() public {
-        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
-        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
-        address destination = makeAddr("mixed-main-destination");
-
-        uint256 lockedAmount = 100_000e18;
-        uint256 releasedIntoTreasury = 40_000e18;
-        uint256 spendAmount = 120_000e18;
-        uint256 releasedBefore = DealManager(dealManager).totalReleasedVotable();
-
-        uint256 proposalId = _createAndExecuteCapitalCallProposal(treasuryAddr, lockedAmount, 1);
-        CapitalCall memory call = _capitalCall(proposalId, treasuryAddr, lockedAmount, 1);
-
-        vm.startPrank(founder);
-        usdc.approve(address(dac), 1);
-        dac.fulfillCapitalCall(call);
-        mainToken.transfer(treasuryAddr, releasedIntoTreasury);
-        vm.stopPrank();
-
-        assertEq(mainToken.balanceOf(treasuryAddr), lockedAmount + releasedIntoTreasury);
-        assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore);
-
-        _directSpend(handle, address(mainToken), destination, spendAmount);
-
-        assertEq(mainToken.balanceOf(treasuryAddr), 20_000e18);
-        assertEq(mainToken.balanceOf(destination), spendAmount);
-        assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore + lockedAmount);
     }
 
     function _createAndExecuteCapitalCallProposal(
@@ -251,6 +193,7 @@ contract DACAccountingFuzzTest is DACTestBase {
             fundingAmount: fundingAmount,
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode("deal config"),

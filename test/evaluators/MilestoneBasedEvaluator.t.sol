@@ -76,6 +76,7 @@ contract MockDealCell is IDealCell {
     function isApproved() external pure returns (bool) { return true; }
     function isClosed() external pure returns (bool) { return false; }
     function approveDeadline() external pure returns (uint256) { return 0; }
+    function evaluationDeadline() external pure returns (uint256) { return 0; }
     function dealDeadline() external pure returns (uint256) { return type(uint256).max; }
 }
 
@@ -116,6 +117,7 @@ contract MilestoneBasedEvaluatorTest is Test {
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode("deal config"),

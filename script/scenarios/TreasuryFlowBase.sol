@@ -110,6 +110,7 @@ abstract contract TreasuryFlowBase is ScenarioGovernanceBase {
             fundingAmount: config.fundingAmount,
             rewardsLimit: config.rewardsLimit,
             approveDeadline: block.timestamp + 7 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             dealConfig: abi.encode("seed treasury config"),
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,

@@ -181,6 +181,8 @@ contract DealGovernanceFlowTest is DACTestBase {
         _voteDealProposal(handle.dealAddr, permitUnstakeId, agent1, true);
         _voteDealProposal(handle.dealAddr, permitUnstakeId, agent2, true);
 
+        vm.warp(block.timestamp + 31 days);
+
         Deal(handle.dealAddr).executeStakedAgentProposal(permitUnstakeId);
 
         assertEq(StakedAgent(IDealCell(handle.dealCell).stakeToken()).balanceOf(agent1), 0);
@@ -922,6 +924,7 @@ contract DealGovernanceFlowTest is DACTestBase {
                     fundingAmount: 10_000,
                     rewardsLimit: 500e6,
                     approveDeadline: block.timestamp + 1 days,
+                    evaluationDeadline: block.timestamp + 15 days,
                     dealDeadline: block.timestamp + 30 days,
                     evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
                     dealConfig: abi.encode("deal config"),

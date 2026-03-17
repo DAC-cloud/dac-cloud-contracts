@@ -61,7 +61,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             ) {
                 quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
 
-                if (vetoEnabled) {
+                if (vetoEnabled || params.typ == AbstractDealManagementType.PERMIT_UNSTAKE) {
                     vetoRightOwner = dac;
                 }
             }

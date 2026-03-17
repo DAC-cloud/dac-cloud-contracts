@@ -151,6 +151,7 @@ contract AccountingObligationsFuzzTest is DACTestBase {
             fundingAmount: 10_000,
             rewardsLimit: REWARDS_LIMIT,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: FUZZ_MOCK_EVALUATOR_SELECTOR,
             dealConfig: abi.encode("accounting fuzz config"),

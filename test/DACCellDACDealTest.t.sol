@@ -220,6 +220,7 @@ contract DACCellDealTest is Test {
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode(dacDealConfig),

@@ -61,7 +61,8 @@ struct DealParams {
     uint256 fundingAmount;
     uint256 rewardsLimit;
     uint256 approveDeadline;
-    uint256 dealDeadline;           // The deadline before the first evaluation
+    uint256 evaluationDeadline;     // The deadline before the first evaluation
+    uint256 dealDeadline;           // The date where withdraw capital becomes possible
     bytes dealConfig;               // future-proof field for deal-specific init data (like DACConfig)
     bytes4 evaluatorSelector;       // evaluator selector. Deal factory shall confirm that the evaluator supports the deal
     bytes evaluatorConfig;          // config for evaluator (e.g. abi.encode(Milestone[]))

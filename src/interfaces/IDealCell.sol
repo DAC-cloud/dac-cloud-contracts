@@ -34,6 +34,8 @@ interface IDealCell {
     function isValidDeal() external pure returns (bool);
     function isApproved() external view returns (bool);
     function isClosed() external view returns (bool);
+
     function approveDeadline() external view returns (uint256);
+    function evaluationDeadline() external view returns (uint256);
     function dealDeadline() external view returns (uint256);
 }

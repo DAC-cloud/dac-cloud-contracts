@@ -48,6 +48,7 @@ contract DACCellGovernanceLibTest is Test {
             fundingAmount: 1000e6,
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: bytes4(keccak256("TestEvaluator")),
             dealConfig: abi.encode("deal config"),

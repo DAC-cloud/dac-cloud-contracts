@@ -387,6 +387,7 @@ contract DealEvaluationRecoveryTest is DACTestBase {
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: MOCK_EVALUATOR_SELECTOR,
             dealConfig: abi.encode("mock deal config"),

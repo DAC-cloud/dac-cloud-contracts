@@ -26,7 +26,11 @@ library DACCellCapitalLib {
         require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
 
         require(
-            IERC20(call.treasuryToken).transferFrom(msg.sender, address(this), call.cashAmount), 
+            IERC20(call.treasuryToken).transferFrom(
+                capitalCall.tokenRecipient, 
+                address(this), 
+                call.cashAmount
+            ), 
             DACErrorsLib.TransferFailed()
         );
 
@@ -37,7 +41,7 @@ library DACCellCapitalLib {
         capitalCalls[callHash].fulfilled = true;
 
         emit DACEventsLib.CapitalCallFulfilled(
-            msg.sender,
+            capitalCall.tokenRecipient,
             call.tokenRecipient,
             callHash,
             call.treasuryToken,

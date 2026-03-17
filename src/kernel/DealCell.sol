@@ -45,6 +45,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     
     uint256 public startTime;
     uint256 internal _approveDeadline;
+    uint256 internal _evaluationDeadline;
     uint256 internal _dealDeadline;
 
     // Name and description
@@ -144,6 +145,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         _tokenRewardsLimit = params.rewardsLimit;
         _approveDeadline = params.approveDeadline;
+        _evaluationDeadline = params.evaluationDeadline;
         _dealDeadline = params.dealDeadline;
 
         if (params.fundingAmount > 0) {
@@ -488,7 +490,9 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     }
 
     function approveDeadline() external view returns (uint256) { return _approveDeadline; }
+    function evaluationDeadline() external view returns (uint256) { return _evaluationDeadline; }
     function dealDeadline() external view returns (uint256) { return _dealDeadline; }
+
     function stakeToken() external view returns (address) { return address(token); }
     
     function getReturnedCapital(address _fundingToken) external view returns (uint256) { return returnedCapital[_fundingToken]; }

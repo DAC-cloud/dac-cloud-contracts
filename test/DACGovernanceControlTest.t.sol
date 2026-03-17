@@ -325,6 +325,7 @@ contract DACGovernanceControlTest is DACTestBase {
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
             approveDeadline: block.timestamp + 1 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: DAC_TEST_EVALUATOR_SELECTOR,
             dealConfig: abi.encode("module test"),

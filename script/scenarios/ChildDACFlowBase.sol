@@ -218,6 +218,7 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
             fundingAmount: config.fundingAmount,
             rewardsLimit: config.rewardsLimit,
             approveDeadline: block.timestamp + 7 days,
+            evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
             dealConfig: abi.encode(dacDealConfig),
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
