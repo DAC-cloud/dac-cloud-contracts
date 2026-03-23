@@ -22,6 +22,7 @@ contract DACFactory is IDACFactory {
     address public moduleRegistryFactory;
     address public assetControllerFactory;
     address public governanceFactory;
+    address public governanceSchemaFactory;
     address public coreModuleFactory;
     
     mapping(bytes32 => bytes32) private sleepingCells;
@@ -34,6 +35,7 @@ contract DACFactory is IDACFactory {
         address _moduleRegistryFactory,
         address _assetControllerFactory,
         address _governanceFactory,
+        address _governanceSchemaFactory,
         address _coreModuleFactory
     ) {
         mainTokenFactory = _mainTokenFactory;
@@ -43,6 +45,7 @@ contract DACFactory is IDACFactory {
         moduleRegistryFactory = _moduleRegistryFactory;
         assetControllerFactory = _assetControllerFactory;
         governanceFactory = _governanceFactory;
+        governanceSchemaFactory = _governanceSchemaFactory;
         coreModuleFactory = _coreModuleFactory;
     }
 
@@ -88,23 +91,7 @@ contract DACFactory is IDACFactory {
         require(address(dac) == dacAddr, Create2Failed());
 
         if (deferBirthRole == address(0)) {
-            dac.initializeAfterDeployment(
-                mainAddr,
-                agentAddr,
-                managerFactory,
-                moduleRegistryFactory,
-                assetControllerFactory,
-                coreModuleFactory,
-                config.dividendsEnabled,
-                config.defaultQuorum
-            );
-
-            dac.initializeRootCapitalCall(
-                config.treasuryToken,
-                config.founder,
-                config.founderAllocation,
-                config.founderCommitment
-            );
+            _initializeDAC(dac, config, mainAddr, agentAddr);
         }
         else {
             bytes32 deferInitCell = keccak256(abi.encode(deferBirthRole, address(dac)));
@@ -128,18 +115,28 @@ contract DACFactory is IDACFactory {
         bytes32 deferInitCalldata = keccak256(abi.encode(config, mainTokenAddr, agentTokenAddr));
         require(sleepingCells[deferInitCell] == deferInitCalldata, DNAMismatch());
 
-        DACCell(dacCell).initializeAfterDeployment(
+        _initializeDAC(DACCell(dacCell), config, mainTokenAddr, agentTokenAddr);
+    }
+
+    function _initializeDAC(
+        DACCell dac,
+        DACConfig calldata config,
+        address mainTokenAddr,
+        address agentTokenAddr
+    ) internal {
+        dac.initializeAfterDeployment(
             mainTokenAddr,
             agentTokenAddr,
             managerFactory,
             moduleRegistryFactory,
             assetControllerFactory,
+            governanceSchemaFactory,
             coreModuleFactory,
             config.dividendsEnabled,
             config.defaultQuorum
         );
 
-        DACCell(dacCell).initializeRootCapitalCall(
+        dac.initializeRootCapitalCall(
             config.treasuryToken,
             config.founder,
             config.founderAllocation,

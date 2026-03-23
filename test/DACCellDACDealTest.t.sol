@@ -17,6 +17,7 @@ import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DACCellFactory} from "../src/kernel/factories/DACCellFactory.sol";
 import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
+import {NativeGovernanceSchemaFactory} from "../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {Deal} from "../src/kernel/Deal.sol";
 import {IDealManager} from "../src/interfaces/IDealManager.sol";
@@ -88,7 +89,8 @@ contract DACCellDealTest is Test {
             address(new DealManagerFactory()),
             address(new ModuleRegistryFactory()),
             address(new NativeAssetControllerFactory()),
-            address(governanceFactory), 
+            address(governanceFactory),
+            address(new NativeGovernanceSchemaFactory()),
             address(coreModule)
         );
 

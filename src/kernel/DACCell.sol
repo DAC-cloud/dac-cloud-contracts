@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
+import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
@@ -17,6 +18,7 @@ import {AgentToken} from "./tokens/AgentToken.sol";
 import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
 import {ModuleRegistryFactory} from "./factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "./factories/AssetControllerFactory.sol";
+import {NativeGovernanceSchemaFactory} from "./governance/factories/NativeGovernanceSchemaFactory.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
@@ -40,9 +42,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     address private dealManager;
     address private moduleRegistry;
     address private assetController;
+    address private governanceSchema;
 
     address private proposalFactory;
-    VotingConfig private votingConfig;
 
     string public name;
     string public description;
@@ -50,10 +52,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     LegalWrapper private legalWrapper;
     
     bool private rootCapitalCallInitialized;
-
-    uint256 private nextId;
-    mapping(uint256 => address) private proposals;               // id => DACManagementProposal address
-    mapping(uint256 => bool) private executed;                   // id => proposal executed (set early)
 
     bool private dividendsEnabled;
 
@@ -69,8 +67,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         string memory _description,
         address _proposalFactory
     ) external initializer {
-        nextId = 1;
-
         name = _name;
         description = _description;
 
@@ -90,6 +86,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         address managerFactory,
         address _moduleRegistryFactory,
         address _assetControllerFactory,
+        address _governanceSchemaFactory,
         address coreModule,
         bool _dividendsEnabled,
         uint256 _quorum // 1e18 == MathLib.SCALE == 100%
@@ -103,7 +100,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
         dividendsEnabled = _dividendsEnabled;
 
-        votingConfig = VotingConfig({   // DEFAULTS — changed via governance later
+        VotingConfig memory initialVotingConfig = VotingConfig({   // DEFAULTS — changed via governance later
             quorumPercent: _quorum,
             highQuorumPercent: (MathLib.SCALE + _quorum) / 2,
             blockingPercent: (MathLib.SCALE - _quorum) / 2,
@@ -130,12 +127,20 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
         IAssetController(assetController).setDealManager(dealManager);
 
+        governanceSchema = NativeGovernanceSchemaFactory(_governanceSchemaFactory).deployNativeGovernanceSchema(
+            address(this),
+            _mainToken,
+            dealManager,
+            proposalFactory,
+            initialVotingConfig
+        );
+
         mainToken.dacInit(dealManager, assetController);
         agentToken.dacInit(dealManager);
 
         emit DACEventsLib.DACStarted(
             dealManager,
-            votingConfig,
+            IGovernanceSchema(governanceSchema).getVotingConfig(),
             dividendsEnabled,
             coreModule
         );
@@ -192,7 +197,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         (uint256 previousBalance, uint256 currentBalance) = IAssetController(assetController).syncTreasury(
             token,
             msg.sender,
-            votingConfig.qualification
+            IGovernanceSchema(governanceSchema).getVotingConfig().qualification
         );
 
         if (currentBalance > previousBalance) {
@@ -232,30 +237,27 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         nonReentrant
         returns (uint256 id)
     {
-        id = DACCellGovernanceLib.createManagementProposal(
-            nextId++,
+        address proposal;
+        (id, proposal) = IGovernanceSchema(governanceSchema).createProposal(
+            msg.sender,
             params,
-            votingConfig,
-            proposalFactory,
-            mainToken,
-            dividendsEnabled,
             IDealManager(dealManager).totalReleasedVotable(),
-            IDealManager(dealManager),
-            proposals
+            dividendsEnabled
         );
+
+        emit DACEventsLib.DACProposalCreated(id, proposal, params.typ, params.target, params.i, params.data);
     }
 
-    function executeDACProposal(uint256 id) external onlyAfterVote(id, true) nonReentrant {
-        require(!executed[id], DACErrorsLib.ProposalAlreadyExecuted());
-        executed[id] = true;
-        
-        DACManagementProposal prop = DACManagementProposal(proposals[id]);
+    function executeDACProposal(uint256 id) external nonReentrant {
+        DACManagementProposal prop = DACManagementProposal(
+            IGovernanceSchema(governanceSchema).consumeApprovedProposal(id, true)
+        );
         bytes4 typ = prop.typ();
         
         if (typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
-            votingConfig = abi.decode(prop.data(), (VotingConfig));
+            IGovernanceSchema(governanceSchema).setVotingConfig(abi.decode(prop.data(), (VotingConfig)));
 
-            emit DACEventsLib.VotingConfigUpdate(id, votingConfig);
+            emit DACEventsLib.VotingConfigUpdate(id, IGovernanceSchema(governanceSchema).getVotingConfig());
         }
         
         else if (typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER) {
@@ -407,7 +409,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function getVotingConfig() external view returns (VotingConfig memory config) {
-        config = votingConfig;
+        config = IGovernanceSchema(governanceSchema).getVotingConfig();
     }
 
     function getLegalWrapper() external view returns (LegalWrapper memory wrapper) {
@@ -447,7 +449,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {
-        return proposals[proposalId];
+        return IGovernanceSchema(governanceSchema).getProposal(proposalId);
     }
 
     function getMainToken() external view override(IDACCell, IDACCellAdapter) returns (address) {
@@ -490,11 +492,6 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         _;
     }
 
-    modifier onlyAfterVote(uint256 id, bool requiredOutcome) {
-        _onlyAfterVote(id, requiredOutcome);
-        _;
-    }
-
     function _onlyAgent() internal view {
         require(agentToken.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
     }
@@ -522,13 +519,5 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     function _onlyLegalWrapper() internal view {
         require(legalWrapper.wrapperAddr != address(0), DACErrorsLib.LegalWrapperNotSet());
         require(legalWrapper.wrapperAddr == msg.sender, DACErrorsLib.LegalWrapperExecutionExpected());
-    }
-
-    function _onlyAfterVote(uint256 id, bool requiredOutcome) internal {
-        require(
-            IVoting(proposals[id]).isResolved() &&
-            IVoting(proposals[id]).outcome() == requiredOutcome,
-            DACErrorsLib.VoteNotPassed()
-        );
     }
 }

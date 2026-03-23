@@ -26,6 +26,8 @@ struct ProtocolDeployment {
     address moduleRegistryImpl;
     address assetControllerFactory;
     address assetControllerImpl;
+    address governanceSchemaFactory;
+    address governanceSchemaImpl;
     address dacGovernanceFactory;
     address dacGovernanceImpl;
     address coreDealGovernanceFactory;

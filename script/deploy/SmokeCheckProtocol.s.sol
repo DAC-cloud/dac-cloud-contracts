@@ -10,6 +10,7 @@ import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.
 import {ModuleRegistryFactory} from "../../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../../src/kernel/factories/AssetControllerFactory.sol";
 import {DACManagementProposalFactory} from "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
+import {NativeGovernanceSchemaFactory} from "../../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
 import {CoreModuleFactory} from "../../src/modules/core/CoreModuleFactory.sol";
 import {TreasuryDealFactory} from "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
@@ -57,6 +58,11 @@ contract SmokeCheckProtocol is ManifestIO {
             deployment.assetControllerFactory
         );
         _expect(
+            "DACFactory.governanceSchemaFactory",
+            DACFactory(deployment.dacFactory).governanceSchemaFactory(),
+            deployment.governanceSchemaFactory
+        );
+        _expect(
             "DACFactory.governanceFactory",
             DACFactory(deployment.dacFactory).governanceFactory(),
             deployment.dacGovernanceFactory
@@ -101,6 +107,11 @@ contract SmokeCheckProtocol is ManifestIO {
             "NativeAssetControllerFactory.referenceImpl",
             NativeAssetControllerFactory(deployment.assetControllerFactory).referenceImpl(),
             deployment.assetControllerImpl
+        );
+        _expect(
+            "NativeGovernanceSchemaFactory.referenceImpl",
+            NativeGovernanceSchemaFactory(deployment.governanceSchemaFactory).referenceImpl(),
+            deployment.governanceSchemaImpl
         );
         _expect(
             "DACManagementProposalFactory.referenceImpl",

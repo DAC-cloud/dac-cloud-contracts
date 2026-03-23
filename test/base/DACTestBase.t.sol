@@ -26,6 +26,7 @@ import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.
 import {DealCellFactory} from "../../src/kernel/factories/DealCellFactory.sol";
 import {ModuleRegistryFactory} from "../../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../../src/kernel/factories/AssetControllerFactory.sol";
+import {NativeGovernanceSchemaFactory} from "../../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
 import {MainToken} from "../../src/kernel/tokens/MainToken.sol";
 import {AgentToken} from "../../src/kernel/tokens/AgentToken.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
@@ -96,7 +97,8 @@ abstract contract DACTestBase is Test {
             address(new DealManagerFactory()),
             address(new ModuleRegistryFactory()),
             address(new NativeAssetControllerFactory()),
-            address(governanceFactory), 
+            address(governanceFactory),
+            address(new NativeGovernanceSchemaFactory()),
             address(coreModule)
         );
 

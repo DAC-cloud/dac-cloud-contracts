@@ -11,6 +11,7 @@ import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.
 import {ModuleRegistryFactory} from "../../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../../src/kernel/factories/AssetControllerFactory.sol";
 import {DACManagementProposalFactory} from "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
+import {NativeGovernanceSchemaFactory} from "../../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
 import {CoreManagementProposalFactory} from "../../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
 import {DACDealFactory} from "../../src/modules/core/deals/factories/DACDealFactory.sol";
@@ -58,6 +59,7 @@ contract DeployProtocol is ManifestIO {
         deployment.dealManagerFactory = address(new DealManagerFactory());
         deployment.moduleRegistryFactory = address(new ModuleRegistryFactory());
         deployment.assetControllerFactory = address(new NativeAssetControllerFactory());
+        deployment.governanceSchemaFactory = address(new NativeGovernanceSchemaFactory());
         deployment.dacGovernanceFactory = address(new DACManagementProposalFactory());
         deployment.coreDealGovernanceFactory = address(new CoreManagementProposalFactory());
         deployment.dacDealFactory = address(new DACDealFactory());
@@ -82,6 +84,7 @@ contract DeployProtocol is ManifestIO {
             deployment.moduleRegistryFactory,
             deployment.assetControllerFactory,
             deployment.dacGovernanceFactory,
+            deployment.governanceSchemaFactory,
             deployment.coreModuleFactory
         ));
 
@@ -99,6 +102,8 @@ contract DeployProtocol is ManifestIO {
         deployment.dealManagerImpl = DealManagerFactory(deployment.dealManagerFactory).referenceImpl();
         deployment.moduleRegistryImpl = ModuleRegistryFactory(deployment.moduleRegistryFactory).referenceImpl();
         deployment.assetControllerImpl = NativeAssetControllerFactory(deployment.assetControllerFactory).referenceImpl();
+        deployment.governanceSchemaImpl =
+            NativeGovernanceSchemaFactory(deployment.governanceSchemaFactory).referenceImpl();
         deployment.dacGovernanceImpl = DACManagementProposalFactory(deployment.dacGovernanceFactory).referenceImpl();
         deployment.coreDealGovernanceImpl =
             CoreManagementProposalFactory(deployment.coreDealGovernanceFactory).referenceImpl();

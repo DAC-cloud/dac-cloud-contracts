@@ -17,5 +17,5 @@ interface IDealManager {
 
     function isRecoverable(uint256 id) external view returns (bool);
 
-    function totalReleasedVotable() external returns (uint256);
+    function totalReleasedVotable() external view returns (uint256);
 }
