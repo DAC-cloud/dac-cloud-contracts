@@ -7,6 +7,7 @@ import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
 import {IEvaluator} from "../../interfaces/IEvaluator.sol";
 import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
+import {IModuleRegistry} from "../../interfaces/IModuleRegistry.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
@@ -33,11 +34,11 @@ library DACCellGovernanceLib {
         uint256 nextId,
         DealParams memory params,
         VotingConfig memory votingConfig,
-        mapping(address => bool) storage moduleFactories,
+        IModuleRegistry moduleRegistry,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealRegistry
     ) public returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr) {
-        require(moduleFactories[params.moduleFactory], DACErrorsLib.ModuleNotApproved());
+        require(moduleRegistry.isModuleApproved(params.moduleFactory), DACErrorsLib.ModuleNotApproved());
 
         require(params.proposer == msg.sender, DACErrorsLib.NotAuthorized());
 

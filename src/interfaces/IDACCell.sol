@@ -11,6 +11,7 @@ interface IDACCell {
     function getAgentToken() external view returns (address);
     
     function getDealManager() external view returns (address);
+    function getModuleRegistry() external view returns (address);
 
     function getCapitalCall(bytes32 callHash) external returns (CapitalCall memory call);
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);

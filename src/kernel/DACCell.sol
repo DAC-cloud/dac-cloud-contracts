@@ -8,11 +8,13 @@ import {IVotes} from "../lib/IVotes.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
+import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
 import {CapitalCallState} from "./interfaces/Structs.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "./tokens/MainToken.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
+import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
@@ -36,6 +38,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
     // Deal manager
     address private dealManager;
+    address private moduleRegistry;
 
     address private proposalFactory;
     VotingConfig private votingConfig;
@@ -110,10 +113,12 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             qualification: 0
         });
 
+        moduleRegistry = address(new ModuleRegistry(address(this), coreModule));
+
         dealManager = DealManagerFactory(managerFactory).deployDealManager(
             _mainToken,
             _agentToken,
-            coreModule,
+            moduleRegistry,
             address(this)
         );
 
@@ -298,6 +303,25 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             );
         }
 
+        else if (typ == DACManagementProposalType.ADD_MODULE) {
+            IModuleRegistry(moduleRegistry).approveModule(prop.target());
+
+            emit DACEventsLib.ModuleAdded(address(this), prop.target());
+        }
+
+        else if (typ == DACManagementProposalType.REMOVE_MODULE) {
+            if (legalWrapper.wrapperAddr != address(0)) {
+                require(
+                    msg.sender == legalWrapper.wrapperAddr,
+                    DACErrorsLib.LegalWrapperExecutionExpected()
+                );
+            }
+
+            IModuleRegistry(moduleRegistry).removeModule(prop.target());
+
+            emit DACEventsLib.ModuleRemoved(address(this), prop.target());
+        }
+
         else if (
             typ == DACManagementProposalType.CAST_VETO_DEAL
         ) {
@@ -373,6 +397,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
     function getDealManager() external view override(IDACCell, IDACCellAdapter) returns (address) {
         return dealManager;
+    }
+
+    function getModuleRegistry() external view override returns (address) {
+        return moduleRegistry;
     }
 
     modifier onlyAgent() {

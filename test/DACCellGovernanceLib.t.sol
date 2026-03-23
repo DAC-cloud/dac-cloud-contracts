@@ -7,15 +7,36 @@ import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {DealState} from "../src/kernel/interfaces/Structs.sol";
 import {DealParams, VotingConfig} from "../src/interfaces/Structs.sol";
 import {IModuleFactory} from "../src/interfaces/IModuleFactory.sol";
+import {IModuleRegistry} from "../src/interfaces/IModuleRegistry.sol";
+
+contract MockModuleRegistry is IModuleRegistry {
+    mapping(address => bool) internal approved;
+
+    function setApproved(address moduleFactory, bool isApproved) external {
+        approved[moduleFactory] = isApproved;
+    }
+
+    function isModuleApproved(address moduleFactory) external view returns (bool) {
+        return approved[moduleFactory];
+    }
+
+    function approveModule(address moduleFactory) external {
+        approved[moduleFactory] = true;
+    }
+
+    function removeModule(address moduleFactory) external {
+        approved[moduleFactory] = false;
+    }
+}
 
 contract DACCellGovernanceLibTest is Test {
 
     event DealCreated(address dac, uint256 indexed id, uint256 indexed proposalId, address creator, bytes4 kind, address cell, address deal);
 
     // Mocked state variables (we pass these to the library)
-    mapping(address => bool) internal mockModuleFactories;
     mapping(uint256 => address) internal mockDeals;
     mapping(address => DealState) internal mockDealRegistry;
+    MockModuleRegistry internal mockRegistry;
 
     // Mock addresses
     address mockDACCell = makeAddr("dacCell");
@@ -29,7 +50,8 @@ contract DACCellGovernanceLibTest is Test {
 
     function setUp() public {
         // Set up mocks
-        mockModuleFactories[mockModuleFactory] = true;
+        mockRegistry = new MockModuleRegistry();
+        mockRegistry.setApproved(mockModuleFactory, true);
     }
 
     function test_createDealProposal() public {
@@ -91,7 +113,7 @@ contract DACCellGovernanceLibTest is Test {
             1, // nextId = 1
             params,
             votingConfig,
-            mockModuleFactories,
+            mockRegistry,
             mockDeals,
             mockDealRegistry
         );

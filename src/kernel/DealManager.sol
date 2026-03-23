@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
+import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {DealState} from "./interfaces/Structs.sol";
@@ -20,7 +21,6 @@ import {DACManagementProposalType} from "./governance/DACManagementProposals.sol
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
-import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Initializable {
     
@@ -36,8 +36,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     MainToken private mainToken;
     AgentToken private agentToken;
     
-    address private coreModuleFactory;
-    mapping(address => bool) private moduleFactories;
+    address private moduleRegistry;
 
     uint256 private nextId;
     mapping(uint256 => address) public deals;                   // id => Deal cell address
@@ -60,7 +59,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     function initialize(
         address _mainToken,
         address _agentToken,
-        address coreModule,
+        address _moduleRegistry,
         address _dacCell
     ) public initializer {
         nextId = 1;
@@ -69,9 +68,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         agentToken = AgentToken(_agentToken);
 
         dacCell = _dacCell;
-
-        coreModuleFactory = coreModule;
-        moduleFactories[coreModule] = true;
+        moduleRegistry = _moduleRegistry;
 
         controlledAddresses[_dacCell] = true;
         controlledAddresses[address(this)] = true;
@@ -89,7 +86,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             nextId++,
             params,
             votingConfig,
-            moduleFactories,
+            IModuleRegistry(moduleRegistry),
             deals,
             dealState
         );
@@ -244,28 +241,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             IDealCellAdapter(deal).messageDeal(message, data);  
         }
 
-        else if (prop.typ() == DACManagementProposalType.ADD_MODULE) {
-            moduleFactories[prop.target()] = true;
-
-            emit DACEventsLib.ModuleAdded(dacCell, prop.target());
-        } 
-
-        else if (prop.typ() == DACManagementProposalType.REMOVE_MODULE) {
-            if (IDACCell(dacCell).getLegalWrapper().wrapperAddr != address(0)) {
-                require(
-                    msgSender == IDACCell(dacCell).getLegalWrapper().wrapperAddr,
-                    DACErrorsLib.LegalWrapperExecutionExpected()
-                );
-            }
-
-            address factory = DACManagementProposal(prop).target();
-
-            require(factory != coreModuleFactory, DACErrorsLib.NotAllowed());
-
-            moduleFactories[factory] = false;
-
-            emit DACEventsLib.ModuleRemoved(dacCell, factory);
-        }
     }
 
     function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder {

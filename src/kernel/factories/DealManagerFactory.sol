@@ -15,14 +15,14 @@ contract DealManagerFactory {
     function deployDealManager(
         address mainToken,
         address agentToken,
-        address coreModule,
+        address moduleRegistry,
         address dacCell
     ) external returns (address dealManager) {
         bytes memory initData = abi.encodeWithSelector(
             DealManager.initialize.selector,
             mainToken,
             agentToken,
-            coreModule,
+            moduleRegistry,
             dacCell
         );
 
