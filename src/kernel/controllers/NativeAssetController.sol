@@ -1,0 +1,284 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IVotes} from "../../lib/IVotes.sol";
+import {IAssetController} from "../../interfaces/IAssetController.sol";
+import {CapitalCall} from "../../interfaces/Structs.sol";
+import {IDealManager} from "../../interfaces/IDealManager.sol";
+import {IDealCell} from "../../interfaces/IDealCell.sol";
+import {MainToken} from "../tokens/MainToken.sol";
+import {CapitalCallState} from "../interfaces/Structs.sol";
+import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
+
+contract NativeAssetController is IAssetController, Initializable {
+    struct DividendPayoutState {
+        address token;
+        uint256 totalPayout;
+        bytes32 merkleRoot;
+    }
+
+    address public dacCell;
+    MainToken public mainToken;
+    address public dealManager;
+
+    mapping(bytes32 => CapitalCallState) private capitalCalls;
+    mapping(address => uint256) private treasuryBalances;
+
+    mapping(uint256 => DividendPayoutState) private dividendPayouts;
+    mapping(bytes32 => bool) private dividendClaimed;
+
+    uint256 private _mainTokenObligations;
+    uint256 private unreleasedMainTokens;
+    mapping(address => uint256) private lockedMainTokens;
+    mapping(address => bool) private controlledAddresses;
+
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _dacCell, address _mainToken) external initializer {
+        require(_dacCell != address(0), DACErrorsLib.NotAllowed());
+        require(_mainToken != address(0), DACErrorsLib.NotAllowed());
+
+        dacCell = _dacCell;
+        mainToken = MainToken(_mainToken);
+
+        controlledAddresses[_dacCell] = true;
+        controlledAddresses[address(this)] = true;
+    }
+
+    function setDealManager(address _dealManager) external onlyDACCell {
+        require(_dealManager != address(0), DACErrorsLib.NotAllowed());
+        require(dealManager == address(0), DACErrorsLib.AlreadyInitialized());
+
+        dealManager = _dealManager;
+        controlledAddresses[_dealManager] = true;
+    }
+
+    function depositFrom(address from, address token, uint256 amount) external onlyDACCell {
+        require(IERC20(token).transferFrom(from, address(this), amount), DACErrorsLib.TransferFailed());
+        treasuryBalances[token] += amount;
+    }
+
+    function recordTreasuryDeposit(address token, uint256 amount) external onlyDACCell {
+        treasuryBalances[token] += amount;
+    }
+
+    function syncTreasury(address token, address holder, uint256 qualification)
+        external
+        onlyDACCell
+        returns (uint256 previousBalance, uint256 currentBalance)
+    {
+        require(mainToken.balanceOf(holder) > qualification, DACErrorsLib.InsufficientBalance());
+
+        previousBalance = treasuryBalances[token];
+        currentBalance = IERC20(token).balanceOf(address(this));
+        treasuryBalances[token] = currentBalance;
+    }
+
+    function createCapitalCall(
+        uint256 id,
+        address treasuryToken,
+        address recipient,
+        uint256 amount,
+        uint256 cashAmount
+    ) external onlyDACCell returns (bytes32 callHash) {
+        CapitalCall memory call = CapitalCall({
+            treasuryToken: treasuryToken,
+            nonce: id,
+            tokenRecipient: recipient,
+            tokenAmount: amount,
+            cashAmount: cashAmount
+        });
+
+        callHash = keccak256(abi.encode(call));
+
+        capitalCalls[callHash] = CapitalCallState({
+            call: call,
+            fulfilled: false
+        });
+    }
+
+    function fulfillCapitalCall(CapitalCall calldata call)
+        external
+        onlyDACCell
+        returns (bytes32 callHash, CapitalCall memory storedCall)
+    {
+        callHash = keccak256(abi.encode(call));
+        require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
+
+        storedCall = capitalCalls[callHash].call;
+        require(storedCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+
+        require(
+            IERC20(call.treasuryToken).transferFrom(storedCall.tokenRecipient, address(this), call.cashAmount),
+            DACErrorsLib.TransferFailed()
+        );
+
+        treasuryBalances[call.treasuryToken] += call.cashAmount;
+        mainToken.mint(call.tokenRecipient, call.tokenAmount);
+        capitalCalls[callHash].fulfilled = true;
+    }
+
+    function getCapitalCall(bytes32 callHash) external view returns (CapitalCall memory capitalCall) {
+        require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
+        capitalCall = capitalCalls[callHash].call;
+        require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+    }
+
+    function recordDividendPayout(uint256 proposalId, address token, uint256 totalPayout, bytes32 merkleRoot)
+        external
+        onlyDACCell
+    {
+        dividendPayouts[proposalId] = DividendPayoutState({
+            token: token,
+            totalPayout: totalPayout,
+            merkleRoot: merkleRoot
+        });
+    }
+
+    function claimDividend(
+        uint256 proposalId,
+        uint256 index,
+        address receiver,
+        uint256 amount,
+        bytes32[] calldata proof
+    ) external onlyDACCell returns (address token) {
+        bytes32 root = dividendPayouts[proposalId].merkleRoot;
+        require(root != bytes32(0), DACErrorsLib.NotFound());
+
+        bytes32 leaf = keccak256(abi.encodePacked(index, receiver, amount));
+        bytes32 claimedKey = keccak256(abi.encodePacked(proposalId, root, leaf));
+
+        require(!dividendClaimed[claimedKey], DACErrorsLib.DividendAlreadyClaimed(proposalId, receiver));
+        require(MerkleProof.verify(proof, root, leaf), DACErrorsLib.InvalidMerkleProof());
+
+        dividendClaimed[claimedKey] = true;
+        token = dividendPayouts[proposalId].token;
+
+        require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
+    }
+
+    function approveFunding(uint256 dealId, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
+        address dealCell = IDealManager(dealManager).deals(dealId);
+        require(dealCell != address(0), DACErrorsLib.InvalidDealId(dealId));
+
+        require(
+            IERC20(IDealCell(dealCell).stakeToken()).totalSupply() > 0,
+            DACErrorsLib.NoStake()
+        );
+
+        address fundingToken = IDealCell(dealCell).fundingTranche(trancheId).token;
+        uint256 fundingAmount = IDealCell(dealCell).fundingTranche(trancheId).amount;
+
+        require(treasuryBalances[fundingToken] >= fundingAmount, DACErrorsLib.InsufficientTreasury());
+
+        if (fundingAmount > 0) {
+            treasuryBalances[fundingToken] -= fundingAmount;
+            require(IERC20(fundingToken).transfer(dealManager, fundingAmount), DACErrorsLib.TransferFailed());
+        } else {
+            require(trancheId == 0, DACErrorsLib.InvalidTranche());
+        }
+
+        if (rewardsLimit > 0) {
+            require(
+                (mainToken.totalSupply() + _mainTokenObligations) + rewardsLimit <= mainToken.maxSupply(),
+                DACErrorsLib.InsufficientRewards()
+            );
+
+            _mainTokenObligations += rewardsLimit;
+        }
+    }
+
+    function consumeMintedRewards(uint256 amount) external onlyDealManager {
+        _mainTokenObligations -= amount;
+    }
+
+    function releaseUnusedMintRewards(uint256 amount) external onlyDealManager {
+        _mainTokenObligations -= amount;
+    }
+
+    function mintMainToTreasury(uint256 amount) external onlyDACCell {
+        mainToken.mint(address(this), amount);
+        treasuryBalances[address(mainToken)] += amount;
+    }
+
+    function burnMainFromTreasury(uint256 amount) external onlyDACCell {
+        treasuryBalances[address(mainToken)] -= amount;
+        mainToken.burn(amount);
+    }
+
+    function delegateVotes(address token, address delegatee) external onlyDACCell {
+        IVotes(token).delegate(delegatee);
+    }
+
+    function registerControlledAddress(address controlled) external onlyDealManager {
+        require(controlled != address(0), DACErrorsLib.NotAllowed());
+        require(controlled != address(mainToken), DACErrorsLib.NotAllowed());
+
+        controlledAddresses[controlled] = true;
+    }
+
+    function onMainMove(address from, address to, uint256 amount) external onlyDealManager {
+        if (from == address(0)) {
+            if (controlledAddresses[to]) {
+                lockedMainTokens[to] += amount;
+                unreleasedMainTokens += amount;
+            }
+            return;
+        }
+
+        if (controlledAddresses[from]) {
+            if (lockedMainTokens[from] < amount) {
+                amount = lockedMainTokens[from];
+            }
+
+            lockedMainTokens[from] -= amount;
+            if (controlledAddresses[to]) {
+                lockedMainTokens[to] += amount;
+            } else {
+                unreleasedMainTokens -= amount;
+            }
+        }
+    }
+
+    function onMainDelegate(address from, address to) external view onlyDealManager {
+        require(!controlledAddresses[from], DACErrorsLib.NoVotingPower());
+        require(!controlledAddresses[to], DACErrorsLib.NoVotingPower());
+    }
+
+    function totalReleasedVotable() external view returns (uint256) {
+        return (mainToken.totalSupply() - unreleasedMainTokens)
+            - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell])
+            - (mainToken.balanceOf(address(this)) - lockedMainTokens[address(this)]);
+    }
+
+    function mainTokenObligations() external view returns (uint256) {
+        return _mainTokenObligations;
+    }
+
+    function treasuryHolder() external view returns (address) {
+        return address(this);
+    }
+
+    modifier onlyDACCell() {
+        _onlyDACCell();
+        _;
+    }
+
+    modifier onlyDealManager() {
+        _onlyDealManager();
+        _;
+    }
+
+    function _onlyDACCell() internal view {
+        require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+    }
+
+    function _onlyDealManager() internal view {
+        require(msg.sender == dealManager, DACErrorsLib.NotAuthorized());
+    }
+}

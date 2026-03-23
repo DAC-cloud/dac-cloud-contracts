@@ -27,7 +27,7 @@ contract DirectAccessControlTest is DACTestBase {
     function test_tokenAdminHooks_rejectUnauthorizedCallers() public {
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
-        mainToken.dacInit(outsider);
+        mainToken.dacInit(outsider, outsider);
 
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);

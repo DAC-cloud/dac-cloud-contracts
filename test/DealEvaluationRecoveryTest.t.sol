@@ -87,9 +87,14 @@ contract MockEvaluatorModuleFactory is ModuleFactory {
     address public immutable treasuryDealFactory;
     address public immutable mockEvaluatorFactory;
 
-    constructor(address permit2) ModuleFactory(address(new DealCellFactory()), address(new StakedAgentFactory())) {
-        treasuryDealFactory = address(new TreasuryDealFactory(permit2));
-        mockEvaluatorFactory = address(new MockEvaluatorFactory());
+    constructor(
+        address dealCellFactory_,
+        address stakedAgentFactory_,
+        address treasuryDealFactory_,
+        address mockEvaluatorFactory_
+    ) ModuleFactory(dealCellFactory_, stakedAgentFactory_) {
+        treasuryDealFactory = treasuryDealFactory_;
+        mockEvaluatorFactory = mockEvaluatorFactory_;
     }
 
     function moduleId() external pure returns (bytes32) { return bytes32("mock.evaluator"); }
@@ -138,7 +143,12 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         onboardAgent(agent2);
 
         vm.prank(moduleOwner);
-        mockModule = new MockEvaluatorModuleFactory(permit2);
+        mockModule = new MockEvaluatorModuleFactory(
+            address(new DealCellFactory()),
+            address(new StakedAgentFactory()),
+            address(new TreasuryDealFactory(permit2)),
+            address(new MockEvaluatorFactory())
+        );
 
         _approveModule(address(mockModule));
     }
@@ -225,14 +235,14 @@ contract DealEvaluationRecoveryTest is DACTestBase {
     function test_forceReturnCapital_holderCanWithdrawAfterDeadline() public {
         DealHandle memory handle = _setupApprovedMockTreasuryDeal();
 
-        uint256 dacBalanceBefore = usdc.balanceOf(address(dac));
+        uint256 dacBalanceBefore = usdc.balanceOf(dac.getAssetController());
 
         vm.warp(IDealCell(handle.dealCell).dealDeadline() + 1);
         vm.prank(founder);
         DealManager(dealManager).forceReturnCapital(handle.dealId);
 
         assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), 10_000);
-        assertEq(usdc.balanceOf(address(dac)), dacBalanceBefore + 10_000);
+        assertEq(usdc.balanceOf(dac.getAssetController()), dacBalanceBefore + 10_000);
     }
 
     function test_forceReturnCapital_revertsBeforeDeadline() public {

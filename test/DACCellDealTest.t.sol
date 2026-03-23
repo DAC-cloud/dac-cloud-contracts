@@ -13,6 +13,7 @@ import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {Deal} from "../src/kernel/Deal.sol";
+import {IDACCell} from "../src/interfaces/IDACCell.sol";
 import {IDealManager} from "../src/interfaces/IDealManager.sol";
 import {IDealCell} from "../src/interfaces/IDealCell.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -101,6 +102,6 @@ contract DACCellDealTest is DACTestBase {
         vm.stopPrank();
 
         address childDac = DACDeal(handle.dealAddr).managedEntity();
-        assertEq(usdc.balanceOf(childDac), 10_000, "Balance transferred to child");
+        assertEq(usdc.balanceOf(IDACCell(childDac).getAssetController()), 10_000, "Balance transferred to child");
     }
 }

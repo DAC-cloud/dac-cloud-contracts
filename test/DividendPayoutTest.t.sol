@@ -16,6 +16,8 @@ import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/
 import {DACCellFactory} from "../src/kernel/factories/DACCellFactory.sol";
 import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol";
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
+import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
+import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
 import {MainToken} from "../src/kernel/tokens/MainToken.sol";
 import {AgentToken} from "../src/kernel/tokens/AgentToken.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../src/kernel/tokens/factories/TokenFactories.sol";
@@ -56,6 +58,8 @@ contract DividendPayoutTest is Test {
             address(new AgentTokenFactory()),
             address(new DACCellFactory()),
             address(new DealManagerFactory()),
+            address(new ModuleRegistryFactory()),
+            address(new NativeAssetControllerFactory()),
             address(governanceFactory),
             address(coreModule)
         );
@@ -88,7 +92,7 @@ contract DividendPayoutTest is Test {
 
         assertEq(usdc.balanceOf(recipient1), before1 + 3_000e6);
         assertEq(usdc.balanceOf(recipient2), before2 + 2_000e6);
-        assertEq(usdc.balanceOf(address(dac)), 15_000e6);
+        assertEq(usdc.balanceOf(dac.getAssetController()), 15_000e6);
     }
 
     function test_dividendPayout_cannotDoubleClaim() public {
@@ -187,7 +191,7 @@ contract DividendPayoutTest is Test {
         mainToken = MainToken(mainTokenAddress);
         agentToken = AgentToken(agentTokenAddress);
 
-        usdc.approve(address(dac), 20_000e6);
+        usdc.approve(dac.getAssetController(), 20_000e6);
 
         CapitalCall memory call = CapitalCall({
             treasuryToken: address(usdc),

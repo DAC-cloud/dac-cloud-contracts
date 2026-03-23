@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 
-contract ModuleRegistry is IModuleRegistry {
-    address public immutable dacCell;
-    address public immutable coreModule;
+contract ModuleRegistry is IModuleRegistry, Initializable {
+    address public dacCell;
+    address public coreModule;
 
     mapping(address => bool) private approvedModules;
 
-    constructor(address _dacCell, address _coreModule) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _dacCell, address _coreModule) external initializer {
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
         require(_coreModule != address(0), DACErrorsLib.NotAllowed());
 

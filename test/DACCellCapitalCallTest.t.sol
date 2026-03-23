@@ -11,6 +11,8 @@ import {DACManagementProposalFactory} from "../src/kernel/governance/factories/D
 import {DACCellFactory} from "../src/kernel/factories/DACCellFactory.sol";
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol";
+import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
+import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -72,6 +74,8 @@ contract DACCellCapitalCallTest is Test {
             address(new AgentTokenFactory()),
             address(new DACCellFactory()),
             address(new DealManagerFactory()),
+            address(new ModuleRegistryFactory()),
+            address(new NativeAssetControllerFactory()),
             address(governanceFactory), 
             address(coreModule)
         );
@@ -110,7 +114,7 @@ contract DACCellCapitalCallTest is Test {
     function testCapitalCall() public {
         vm.startPrank(founder);
 
-        usdc.approve(address(dac), 20_000);
+        usdc.approve(dac.getAssetController(), 20_000);
 
         CapitalCall memory call = CapitalCall({
             treasuryToken: address(usdc),

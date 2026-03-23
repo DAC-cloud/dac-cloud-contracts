@@ -117,7 +117,7 @@ contract DACDeal is Deal {
         address token = IDealCell(dealCell).fundingTranche(trancheId).token;
         uint256 amount = IDealCell(dealCell).fundingTranche(trancheId).amount;
 
-        IERC20(token).forceApprove(managedEntity, amount);
+        IERC20(token).forceApprove(IDACCell(managedEntity).getAssetController(), amount);
 
         if (trancheId == 0) {
             CapitalCall memory call = CapitalCall({
@@ -252,7 +252,7 @@ contract DACDeal is Deal {
             address token = proposal.target();
             (uint256 amount, bytes32 callHash) = abi.decode(proposal.data(), (uint256, bytes32));
 
-            IERC20(token).forceApprove(managedEntity, amount);
+            IERC20(token).forceApprove(IDACCell(managedEntity).getAssetController(), amount);
 
             CapitalCall memory call = IDACCell(managedEntity).getCapitalCall(callHash);
             IDACCell(managedEntity).fulfillCapitalCall(call);

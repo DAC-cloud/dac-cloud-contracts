@@ -63,7 +63,7 @@ contract MockDACCellForLib {
     address public dealManager;
     mapping(address => uint256) public deposited;
 
-    constructor(address manager) {
+    constructor(address manager, address) {
         dealManager = manager;
     }
 
@@ -82,6 +82,10 @@ contract MockDACCellForLib {
 
     function getDealManager() external view returns (address) {
         return dealManager;
+    }
+
+    function getAssetController() external view returns (address) {
+        return address(this);
     }
 }
 
@@ -345,7 +349,7 @@ contract DealCellGovernanceLibBranchTest is Test {
 
     function setUp() public {
         manager = new MockDealManagerForLib();
-        dacCell = new MockDACCellForLib(address(manager));
+        dacCell = new MockDACCellForLib(address(manager), makeAddr("controller"));
         caller = new CheckProposalCaller();
         harness = new DealCellGovernanceHarness(address(manager), address(dacCell));
         fundingToken = new LibTestToken("Funding Token", "FUND");

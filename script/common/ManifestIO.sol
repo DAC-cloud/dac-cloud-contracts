@@ -30,6 +30,10 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeAddress(root, "dealCellImpl", deployment.dealCellImpl);
         vm.serializeAddress(root, "dealManagerFactory", deployment.dealManagerFactory);
         vm.serializeAddress(root, "dealManagerImpl", deployment.dealManagerImpl);
+        vm.serializeAddress(root, "moduleRegistryFactory", deployment.moduleRegistryFactory);
+        vm.serializeAddress(root, "moduleRegistryImpl", deployment.moduleRegistryImpl);
+        vm.serializeAddress(root, "assetControllerFactory", deployment.assetControllerFactory);
+        vm.serializeAddress(root, "assetControllerImpl", deployment.assetControllerImpl);
         vm.serializeAddress(root, "dacGovernanceFactory", deployment.dacGovernanceFactory);
         vm.serializeAddress(root, "dacGovernanceImpl", deployment.dacGovernanceImpl);
         vm.serializeAddress(root, "coreDealGovernanceFactory", deployment.coreDealGovernanceFactory);
@@ -69,6 +73,10 @@ abstract contract ManifestIO is ScriptConfig {
         deployment.dealCellImpl = json.readAddress(".dealCellImpl");
         deployment.dealManagerFactory = json.readAddress(".dealManagerFactory");
         deployment.dealManagerImpl = json.readAddress(".dealManagerImpl");
+        deployment.moduleRegistryFactory = json.readAddress(".moduleRegistryFactory");
+        deployment.moduleRegistryImpl = json.readAddress(".moduleRegistryImpl");
+        deployment.assetControllerFactory = json.readAddress(".assetControllerFactory");
+        deployment.assetControllerImpl = json.readAddress(".assetControllerImpl");
         deployment.dacGovernanceFactory = json.readAddress(".dacGovernanceFactory");
         deployment.dacGovernanceImpl = json.readAddress(".dacGovernanceImpl");
         deployment.coreDealGovernanceFactory = json.readAddress(".coreDealGovernanceFactory");

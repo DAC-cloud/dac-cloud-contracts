@@ -39,12 +39,14 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
     }
 
     function dacInit(
-        address _dealManager
+        address _dealManager,
+        address _assetController
     ) external {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
 
         dealManager = _dealManager;
         _grantRole(MINTER_ROLE, _dealManager);
+        _grantRole(MINTER_ROLE, _assetController);
     }
 
     function _afterTokenTransfer(address from, address to, uint256 amount) private {

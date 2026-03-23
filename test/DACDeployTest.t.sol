@@ -11,6 +11,8 @@ import {DACManagementProposalFactory} from "../src/kernel/governance/factories/D
 import {DACCellFactory} from "../src/kernel/factories/DACCellFactory.sol";
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol";
+import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
+import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -58,6 +60,8 @@ contract DACDeployTest is Test {
             address(new AgentTokenFactory()),
             address(new DACCellFactory()),
             address(new DealManagerFactory()),
+            address(new ModuleRegistryFactory()),
+            address(new NativeAssetControllerFactory()),
             address(governanceFactory), 
             address(coreModule)
         );

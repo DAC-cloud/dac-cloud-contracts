@@ -62,7 +62,7 @@ contract DACAccountingFuzzTest is DACTestBase {
 
         address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
         assertEq(extraToken.balanceOf(treasuryAddr), fundingAmount);
-        assertEq(extraToken.balanceOf(address(dac)), depositAmount - fundingAmount);
+        assertEq(extraToken.balanceOf(dac.getAssetController()), depositAmount - fundingAmount);
         assertEq(IDealCell(handle.dealCell).getInvestedCapital(address(extraToken)), fundingAmount);
     }
 
@@ -77,11 +77,11 @@ contract DACAccountingFuzzTest is DACTestBase {
         usdc.mint(address(recipient), cashAmount);
 
         vm.startPrank(recipient);
-        usdc.approve(address(dac), cashAmount);
+        usdc.approve(dac.getAssetController(), cashAmount);
         vm.stopPrank();
 
         uint256 releasedBefore = DealManager(dealManager).totalReleasedVotable();
-        uint256 dacTreasuryBefore = usdc.balanceOf(address(dac));
+        uint256 dacTreasuryBefore = usdc.balanceOf(dac.getAssetController());
         uint256 supplyBefore = mainToken.totalSupply();
 
         uint256 proposalId = _createAndExecuteCapitalCallProposal(recipient, tokenAmount, cashAmount);
@@ -89,7 +89,7 @@ contract DACAccountingFuzzTest is DACTestBase {
         bytes32 callHash = keccak256(abi.encode(call));
 
         vm.startPrank(founder);
-        usdc.approve(address(dac), cashAmount);
+        usdc.approve(dac.getAssetController(), cashAmount);
         dac.fulfillCapitalCall(call);
         vm.expectRevert(DACErrorsLib.AlreadyFulfilled.selector);
         dac.fulfillCapitalCall(call);
@@ -99,7 +99,7 @@ contract DACAccountingFuzzTest is DACTestBase {
 
         assertEq(mainToken.balanceOf(recipient), tokenAmount);
         assertEq(mainToken.totalSupply(), supplyBefore + tokenAmount);
-        assertEq(usdc.balanceOf(address(dac)), dacTreasuryBefore + cashAmount);
+        assertEq(usdc.balanceOf(dac.getAssetController()), dacTreasuryBefore + cashAmount);
         assertEq(DealManager(dealManager).totalReleasedVotable(), releasedBefore + tokenAmount);
     }
 

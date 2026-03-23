@@ -3,23 +3,23 @@ pragma solidity ^0.8.20;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
-import {IVotes} from "../lib/IVotes.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
+import {IAssetController} from "../interfaces/IAssetController.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
 import {IDACCell} from "../interfaces/IDACCell.sol";
-import {CapitalCallState} from "./interfaces/Structs.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "./tokens/MainToken.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
-import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
+import {ModuleRegistryFactory} from "./factories/ModuleRegistryFactory.sol";
+import {NativeAssetControllerFactory} from "./factories/AssetControllerFactory.sol";
 import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
-import {DACCellCapitalLib} from "./libraries/DACCellCapitalLib.sol";
 import {MathLib} from "./libraries/MathLib.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
@@ -39,6 +39,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     // Deal manager
     address private dealManager;
     address private moduleRegistry;
+    address private assetController;
 
     address private proposalFactory;
     VotingConfig private votingConfig;
@@ -47,19 +48,14 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     string public description;
 
     LegalWrapper private legalWrapper;
-
-    mapping(bytes32 => CapitalCallState) private capitalCalls;
     
     bool private rootCapitalCallInitialized;
-    mapping(address => uint256) private treasuryBalances;
 
     uint256 private nextId;
     mapping(uint256 => address) private proposals;               // id => DACManagementProposal address
     mapping(uint256 => bool) private executed;                   // id => proposal executed (set early)
 
     bool private dividendsEnabled;
-    mapping(uint256 => bytes32) private dividendMerkleRoots;     // proposalId => root
-    mapping(bytes32 => bool) private dividendClaimed;            // keccak(root + leaf) => claimed
 
     constructor() {
         _disableInitializers();
@@ -92,6 +88,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         address _mainToken,
         address _agentToken,
         address managerFactory,
+        address _moduleRegistryFactory,
+        address _assetControllerFactory,
         address coreModule,
         bool _dividendsEnabled,
         uint256 _quorum // 1e18 == MathLib.SCALE == 100%
@@ -113,16 +111,26 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             qualification: 0
         });
 
-        moduleRegistry = address(new ModuleRegistry(address(this), coreModule));
+        assetController = NativeAssetControllerFactory(_assetControllerFactory).deployNativeAssetController(
+            address(this),
+            _mainToken
+        );
+        moduleRegistry = ModuleRegistryFactory(_moduleRegistryFactory).deployModuleRegistry(
+            address(this),
+            coreModule
+        );
 
         dealManager = DealManagerFactory(managerFactory).deployDealManager(
             _mainToken,
             _agentToken,
             moduleRegistry,
-            address(this)
+            address(this),
+            assetController
         );
 
-        mainToken.dacInit(dealManager);
+        IAssetController(assetController).setDealManager(dealManager);
+
+        mainToken.dacInit(dealManager, assetController);
         agentToken.dacInit(dealManager);
 
         emit DACEventsLib.DACStarted(
@@ -144,17 +152,18 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         require(!rootCapitalCallInitialized, DACErrorsLib.AlreadyInitialized());
         rootCapitalCallInitialized = true;
 
+        bytes32 callHash = IAssetController(assetController).createCapitalCall(
+            0,
+            treasuryToken,
+            recipient,
+            amount,
+            cashAmount
+        );
+
         emit DACEventsLib.CapitalCallCreated(
             0,
             recipient,
-            DACCellCapitalLib.createCapitalCall(
-                0,
-                treasuryToken,
-                recipient,
-                amount,
-                cashAmount,
-                capitalCalls
-            ),
+            callHash,
             treasuryToken,
             amount,
             cashAmount,
@@ -163,24 +172,50 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function depositTreasury(address token, uint256 amount) external nonReentrant {
-        return DACCellCapitalLib.depositTreasury(
-            token, amount, dealManager, treasuryBalances
+        require(
+            IDealManagerAdapter(dealManager).state(msg.sender).deal != address(0),
+            DACErrorsLib.NotAuthorized()
         );
+
+        IAssetController(assetController).depositFrom(msg.sender, token, amount);
+        emit DACEventsLib.TreasuryDeposit(token, amount, msg.sender);
     }
 
     function recoverTreasury(address token) external nonReentrant onlyHolderOrManager {
-        return DACCellCapitalLib.recoverTreasury(
-            token, 
-            votingConfig,
-            mainToken,
-            treasuryBalances
+        uint256 recovered = IERC20(token).balanceOf(address(this));
+        if (recovered > 0) {
+            require(IERC20(token).transfer(assetController, recovered), DACErrorsLib.TransferFailed());
+            IAssetController(assetController).recordTreasuryDeposit(token, recovered);
+            emit DACEventsLib.TreasuryDeposit(token, recovered, msg.sender);
+        }
+
+        (uint256 previousBalance, uint256 currentBalance) = IAssetController(assetController).syncTreasury(
+            token,
+            msg.sender,
+            votingConfig.qualification
         );
+
+        if (currentBalance > previousBalance) {
+            emit DACEventsLib.TreasuryDeposit(token, currentBalance - previousBalance, msg.sender);
+        } else if (currentBalance < previousBalance) {
+            emit DACEventsLib.TreasurySyncMissing(token, previousBalance - currentBalance);
+        }
     }
 
     function fulfillCapitalCall(CapitalCall calldata call) external nonReentrant returns (bool) {
-        return DACCellCapitalLib.fulfillCapitalCall(
-            call, mainToken, capitalCalls, treasuryBalances
+        (bytes32 callHash, CapitalCall memory capitalCall) = IAssetController(assetController).fulfillCapitalCall(call);
+
+        emit DACEventsLib.CapitalCallFulfilled(
+            capitalCall.tokenRecipient,
+            call.tokenRecipient,
+            callHash,
+            call.treasuryToken,
+            call.tokenAmount,
+            call.cashAmount,
+            call.nonce
         );
+
+        return true;
     }
 
     function logLegalWrapperMessage(bytes4 kind, bytes calldata message) 
@@ -243,16 +278,12 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         }
 
         else if (typ == DACManagementProposalType.MINT_MAIN_TOKENS) {
-            mainToken.mint(address(this), uint256(prop.i()));
-
-            treasuryBalances[address(mainToken)] += uint256(prop.i());
+            IAssetController(assetController).mintMainToTreasury(uint256(prop.i()));
             emit DACEventsLib.TokenMinted(id, uint256(prop.i()));
         }
 
         else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
-            mainToken.burn(uint256(prop.i()));
-
-            treasuryBalances[address(mainToken)] -= uint256(prop.i());
+            IAssetController(assetController).burnMainFromTreasury(uint256(prop.i()));
             emit DACEventsLib.TokenBurnt(id, uint256(prop.i()));
         }
 
@@ -269,7 +300,28 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         }
 
         else if (typ == DACManagementProposalType.CAPITAL_CALL) {
-            DACCellCapitalLib.executeCapitalCall(id, prop, capitalCalls);
+            (address treasuryToken, uint256 cashAmount) = abi.decode(
+                prop.data(),
+                (address, uint256)
+            );
+
+            bytes32 callHash = IAssetController(assetController).createCapitalCall(
+                id,
+                treasuryToken,
+                prop.target(),
+                uint256(prop.i()),
+                cashAmount
+            );
+
+            emit DACEventsLib.CapitalCallCreated(
+                id,
+                prop.target(),
+                callHash,
+                treasuryToken,
+                uint256(prop.i()),
+                cashAmount,
+                id
+            );
         }
 
         else if (typ == DACManagementProposalType.TOGGLE_DIVIDENDS) {
@@ -288,8 +340,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
                 DACManagementProposal(prop).data(), 
                 (address, uint256, bytes32)
             );
-            
-            dividendMerkleRoots[id] = merkleRoot;
+
+            IAssetController(assetController).recordDividendPayout(id, token, totalPayout, merkleRoot);
 
             emit DACEventsLib.DividendPayout(id, token, totalPayout, merkleRoot);
         }
@@ -298,9 +350,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             typ == DACManagementProposalType.APPROVE_DEAL || 
             typ == DACManagementProposalType.APPROVE_TRANCHE
         ) {
-            DACCellGovernanceLib.approveFunding(
-                prop, treasuryBalances, IDealManager(dealManager)
+            (uint256 dealId, uint256 trancheId, uint256 rewardsLimit) = abi.decode(
+                prop.data(),
+                (uint256, uint256, uint256)
             );
+
+            IAssetController(assetController).approveFunding(dealId, trancheId, rewardsLimit);
+            IDealManagerAdapter(dealManager).approveFunding(dealId, trancheId, rewardsLimit);
         }
 
         else if (typ == DACManagementProposalType.ADD_MODULE) {
@@ -338,7 +394,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
                 (address, address)
             );
 
-            IVotes(token).delegate(delegatee);
+            IAssetController(assetController).delegateVotes(token, delegatee);
 
             emit DACEventsLib.VotesDelegated(token, delegatee);
         }
@@ -365,22 +421,29 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         uint256 amount,
         bytes32[] calldata proof
     ) external {
-        DACCellCapitalLib.claimDividend(
+        address token = IAssetController(assetController).claimDividend(
             proposalId,
             index,
             receiver,
             amount,
-            proof,
-            proposals,
-            dividendMerkleRoots,
-            dividendClaimed
+            proof
         );
+
+        emit DACEventsLib.DividendClaimed(proposalId, token, receiver, amount);
+    }
+
+    function recoverERC20(address token) external nonReentrant onlyHolderOrManager {
+        uint256 recovered = IERC20(token).balanceOf(address(this));
+        require(recovered > 0, DACErrorsLib.NotEnoughBalance());
+
+        require(IERC20(token).transfer(assetController, recovered), DACErrorsLib.TransferFailed());
+        IAssetController(assetController).recordTreasuryDeposit(token, recovered);
+
+        emit DACEventsLib.TreasuryDeposit(token, recovered, msg.sender);
     }
 
     function getCapitalCall(bytes32 calldataHash) external view returns (CapitalCall memory capitalCall) {
-        require(!capitalCalls[calldataHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
-        capitalCall = capitalCalls[calldataHash].call;
-        require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+        capitalCall = IAssetController(assetController).getCapitalCall(calldataHash);
     }
 
     function getProposalVoting(uint256 proposalId) external view returns (address) {
@@ -401,6 +464,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
     function getModuleRegistry() external view override returns (address) {
         return moduleRegistry;
+    }
+
+    function getAssetController() external view override(IDACCell, IDACCellAdapter) returns (address) {
+        return assetController;
     }
 
     modifier onlyAgent() {

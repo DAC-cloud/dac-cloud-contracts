@@ -7,4 +7,5 @@ interface IDACCellAdapter {
     function getMainToken() external view returns (address);
     function getAgentToken() external view returns (address);
     function getDealManager() external view returns (address);
+    function getAssetController() external view returns (address);
 }

@@ -64,7 +64,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
             spent: 0
         });
 
-        uint256 tranche1 = _boundToAvailable(rawTranche1, usdc.balanceOf(address(dac)));
+        uint256 tranche1 = _boundToAvailable(rawTranche1, usdc.balanceOf(dac.getAssetController()));
         if (tranche1 > 0) {
             _requestAndApproveTranche(handle, tranche1);
             state.invested += tranche1;
@@ -85,7 +85,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
             _assertCapitalState(handle.dealCell, treasuryAddr, destination1, destination2, state);
         }
 
-        uint256 tranche2 = _boundToAvailable(rawTranche2, usdc.balanceOf(address(dac)));
+        uint256 tranche2 = _boundToAvailable(rawTranche2, usdc.balanceOf(dac.getAssetController()));
         if (tranche2 > 0) {
             _requestAndApproveTranche(handle, tranche2);
             state.invested += tranche2;
@@ -114,7 +114,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
 
         assertEq(usdc.balanceOf(treasuryAddr), 0);
         assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), state.returned);
-        assertEq(usdc.balanceOf(address(dac)), state.trackedStart - state.spent);
+        assertEq(usdc.balanceOf(dac.getAssetController()), state.trackedStart - state.spent);
         assertEq(_trackedBalance(treasuryAddr, destination1, destination2), state.trackedStart);
     }
 
@@ -146,7 +146,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
             })
         });
 
-        uint256 tranche = _boundToAvailable(rawTranche, usdc.balanceOf(address(dac)));
+        uint256 tranche = _boundToAvailable(rawTranche, usdc.balanceOf(dac.getAssetController()));
         if (tranche > 0) {
             _requestAndApproveTranche(handle, tranche);
             flow.capital.invested += tranche;
@@ -169,7 +169,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
 
         assertEq(usdc.balanceOf(treasuryAddr), 0);
         assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), flow.capital.returned);
-        assertEq(usdc.balanceOf(address(dac)), flow.capital.trackedStart - flow.capital.spent);
+        assertEq(usdc.balanceOf(dac.getAssetController()), flow.capital.trackedStart - flow.capital.spent);
         assertEq(_trackedBalance(treasuryAddr, destination, address(0)), flow.capital.trackedStart);
     }
 
@@ -396,7 +396,7 @@ contract TreasuryCapitalAccountingFuzzTest is DACTestBase {
 
     function _trackedBalance(address treasuryAddr, address destination1, address destination2) internal view returns (uint256) {
         return
-            usdc.balanceOf(address(dac)) +
+            usdc.balanceOf(dac.getAssetController()) +
             usdc.balanceOf(treasuryAddr) +
             usdc.balanceOf(destination1) +
             usdc.balanceOf(destination2);

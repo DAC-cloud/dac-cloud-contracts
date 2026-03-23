@@ -19,6 +19,8 @@ contract DACFactory is IDACFactory {
 
     address public cellFactory;
     address public managerFactory;
+    address public moduleRegistryFactory;
+    address public assetControllerFactory;
     address public governanceFactory;
     address public coreModuleFactory;
     
@@ -29,6 +31,8 @@ contract DACFactory is IDACFactory {
         address _agentTokenFactory,
         address _cellFactory,
         address _managerFactory,
+        address _moduleRegistryFactory,
+        address _assetControllerFactory,
         address _governanceFactory,
         address _coreModuleFactory
     ) {
@@ -36,6 +40,8 @@ contract DACFactory is IDACFactory {
         agentTokenFactory = _agentTokenFactory;
         cellFactory = _cellFactory;
         managerFactory = _managerFactory;
+        moduleRegistryFactory = _moduleRegistryFactory;
+        assetControllerFactory = _assetControllerFactory;
         governanceFactory = _governanceFactory;
         coreModuleFactory = _coreModuleFactory;
     }
@@ -86,6 +92,8 @@ contract DACFactory is IDACFactory {
                 mainAddr,
                 agentAddr,
                 managerFactory,
+                moduleRegistryFactory,
+                assetControllerFactory,
                 coreModuleFactory,
                 config.dividendsEnabled,
                 config.defaultQuorum
@@ -124,6 +132,8 @@ contract DACFactory is IDACFactory {
             mainTokenAddr,
             agentTokenAddr,
             managerFactory,
+            moduleRegistryFactory,
+            assetControllerFactory,
             coreModuleFactory,
             config.dividendsEnabled,
             config.defaultQuorum

@@ -7,6 +7,8 @@ import {ProtocolDeployment} from "../common/ScriptTypes.sol";
 import {DACFactory} from "../../src/kernel/DACFactory.sol";
 import {DACCellFactory} from "../../src/kernel/factories/DACCellFactory.sol";
 import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.sol";
+import {ModuleRegistryFactory} from "../../src/kernel/factories/ModuleRegistryFactory.sol";
+import {NativeAssetControllerFactory} from "../../src/kernel/factories/AssetControllerFactory.sol";
 import {DACManagementProposalFactory} from "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
 import {CoreModuleFactory} from "../../src/modules/core/CoreModuleFactory.sol";
@@ -45,6 +47,16 @@ contract SmokeCheckProtocol is ManifestIO {
             deployment.dealManagerFactory
         );
         _expect(
+            "DACFactory.moduleRegistryFactory",
+            DACFactory(deployment.dacFactory).moduleRegistryFactory(),
+            deployment.moduleRegistryFactory
+        );
+        _expect(
+            "DACFactory.assetControllerFactory",
+            DACFactory(deployment.dacFactory).assetControllerFactory(),
+            deployment.assetControllerFactory
+        );
+        _expect(
             "DACFactory.governanceFactory",
             DACFactory(deployment.dacFactory).governanceFactory(),
             deployment.dacGovernanceFactory
@@ -79,6 +91,16 @@ contract SmokeCheckProtocol is ManifestIO {
             "DealManagerFactory.referenceImpl",
             DealManagerFactory(deployment.dealManagerFactory).referenceImpl(),
             deployment.dealManagerImpl
+        );
+        _expect(
+            "ModuleRegistryFactory.referenceImpl",
+            ModuleRegistryFactory(deployment.moduleRegistryFactory).referenceImpl(),
+            deployment.moduleRegistryImpl
+        );
+        _expect(
+            "NativeAssetControllerFactory.referenceImpl",
+            NativeAssetControllerFactory(deployment.assetControllerFactory).referenceImpl(),
+            deployment.assetControllerImpl
         );
         _expect(
             "DACManagementProposalFactory.referenceImpl",

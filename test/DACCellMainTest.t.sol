@@ -11,6 +11,8 @@ import {DACManagementProposalFactory} from "../src/kernel/governance/factories/D
 import {DACCellFactory} from "../src/kernel/factories/DACCellFactory.sol";
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol";
+import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
+import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -72,6 +74,8 @@ contract DACCellMainTest is Test {
             address(new AgentTokenFactory()),
             address(new DACCellFactory()),
             address(new DealManagerFactory()),
+            address(new ModuleRegistryFactory()),
+            address(new NativeAssetControllerFactory()),
             address(governanceFactory), 
             address(coreModule)
         );
@@ -108,7 +112,7 @@ contract DACCellMainTest is Test {
 
         vm.startPrank(founder);
 
-        usdc.approve(address(dac), 20_000);
+        usdc.approve(dac.getAssetController(), 20_000);
 
         CapitalCall memory call = CapitalCall({
             treasuryToken: address(usdc),
@@ -147,7 +151,7 @@ contract DACCellMainTest is Test {
 
         vm.stopPrank();
 
-        assertEq(mainToken.balanceOf(address(dac)), 600_000_000e18, "Incorrect main token balance after mint");
+        assertEq(mainToken.balanceOf(dac.getAssetController()), 600_000_000e18, "Incorrect main token balance after mint");
 
         vm.warp(block.timestamp + 1);
 
@@ -170,7 +174,7 @@ contract DACCellMainTest is Test {
 
         vm.stopPrank();
 
-        assertEq(mainToken.balanceOf(address(dac)), 400_000_000e18, "Incorrect main token balance after revoke");
+        assertEq(mainToken.balanceOf(dac.getAssetController()), 400_000_000e18, "Incorrect main token balance after revoke");
 
         assertEq(IDealManager(dac.getDealManager()).totalReleasedVotable(), 200_000_000e18, "Incorrect main token votable after revoke");
     }
@@ -217,7 +221,7 @@ contract DACCellMainTest is Test {
 
         vm.stopPrank();
 
-        assertEq(mainToken.balanceOf(address(dac)), 600_000_000e18, "Incorrect main token balance after mint");
+        assertEq(mainToken.balanceOf(dac.getAssetController()), 600_000_000e18, "Incorrect main token balance after mint");
 
         vm.warp(block.timestamp + 1);
 

@@ -430,7 +430,7 @@ library DealCellGovernanceLib {
         address dacCell,
         mapping(address => uint256) storage returnedCapital
     ) public {
-        IERC20(_token).forceApprove(dacCell, amount);
+        IERC20(_token).forceApprove(IDACCellAdapter(dacCell).getAssetController(), amount);
 
         IDACCellAdapter(dacCell).depositTreasury(_token, amount);
         returnedCapital[_token] += amount;

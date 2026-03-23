@@ -8,6 +8,7 @@ import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.so
 import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
+import {IAssetController} from "../interfaces/IAssetController.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {DealState} from "./interfaces/Structs.sol";
@@ -37,6 +38,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     AgentToken private agentToken;
     
     address private moduleRegistry;
+    address private assetController;
 
     uint256 private nextId;
     mapping(uint256 => address) public deals;                   // id => Deal cell address
@@ -44,13 +46,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     mapping(address => DealState) public dealState;             // dealCell => Deal state
 
     mapping(bytes32 => bool) public evaluatorWhitelist;         // keccak256((dealCell,keccak256(evaluator_config))) => true
-
-    // Main token flow tracking
-    uint256 public mainTokenObligations;
-
-    uint256 private unreleasedMainTokens;
-    mapping(address => uint256) private lockedMainTokens;
-    mapping(address => bool) private controlledAddresses;
 
     constructor() {
         _disableInitializers();
@@ -60,7 +55,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         address _mainToken,
         address _agentToken,
         address _moduleRegistry,
-        address _dacCell
+        address _dacCell,
+        address _assetController
     ) public initializer {
         nextId = 1;
 
@@ -69,9 +65,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
         dacCell = _dacCell;
         moduleRegistry = _moduleRegistry;
-
-        controlledAddresses[_dacCell] = true;
-        controlledAddresses[address(this)] = true;
+        assetController = _assetController;
     }
 
     function createDealProposal(DealParams calldata params)
@@ -91,8 +85,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             dealState
         );
 
-        controlledAddresses[dealCell] = true;
-        controlledAddresses[dealAddr] = true;
+        IAssetController(assetController).registerControlledAddress(dealCell);
+        IAssetController(assetController).registerControlledAddress(dealAddr);
 
         IDealCellAdapter(dealCell).onDACInit(params, votingConfig);
     }
@@ -132,7 +126,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             dealState
         );
 
-        mainTokenObligations -= amount;
+        IAssetController(assetController).consumeMintedRewards(amount);
     }
 
     function forceReturnCapital(uint256 id) external onlyHolderOrSelf {
@@ -161,15 +155,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function approveFunding(uint256 id, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
-        if (rewardsLimit > 0) {
-            require(
-                (mainToken.totalSupply() + mainTokenObligations) + rewardsLimit <= mainToken.maxSupply(),
-                DACErrorsLib.InsufficientRewards()
-            );
-            
-            mainTokenObligations += rewardsLimit;
-        }
-        
         DACCellGovernanceLib.executeTrancheApprove(
             dacCell,
             id,
@@ -268,55 +253,25 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     function onDealClosed(uint256 dealId) external onlyDealCell {
         require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
 
-        mainTokenObligations -= (dealState[deals[dealId]].rewardsLimit - dealState[deals[dealId]].rewardsUnlocked);
+        IAssetController(assetController).releaseUnusedMintRewards(
+            dealState[deals[dealId]].rewardsLimit - dealState[deals[dealId]].rewardsUnlocked
+        );
 
         dealState[deals[dealId]].active = false;
     }
 
     function registerControlledAddress(address controlled) external onlyDealCell {
-        require(controlled != address(0), DACErrorsLib.NotAllowed());
-        require(controlled != address(mainToken), DACErrorsLib.NotAllowed());
-
-        controlledAddresses[controlled] = true;
+        IAssetController(assetController).registerControlledAddress(controlled);
     }
 
     function onMainMove(address from, address to, uint256 amount) external {
         require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
-
-        if (from == address(0)) {
-            if (controlledAddresses[to]) {
-                lockedMainTokens[to] += amount;
-                unreleasedMainTokens += amount;
-            }
-        }
-
-        else {
-            // If address contains both unreleased main tokens and free float,
-            //  the unreleased float will be released first
-
-            if (controlledAddresses[from]) {
-                // If address contains both, and transfer amount is bigger than unreleased
-                //  balance - transfering only full unreleased
-                if (lockedMainTokens[from] < amount) {
-                    amount = lockedMainTokens[from];
-                }
-
-                lockedMainTokens[from] -= amount;
-                if (controlledAddresses[to]) {
-                    lockedMainTokens[to] += amount;
-                }
-                else {
-                    unreleasedMainTokens -= amount;
-                }
-            }
-        }
+        IAssetController(assetController).onMainMove(from, to, amount);
     }
 
     function onMainDelegate(address from, address to) external view {
         require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
-
-        require(!controlledAddresses[from], DACErrorsLib.NoVotingPower());
-        require(!controlledAddresses[to], DACErrorsLib.NoVotingPower());
+        IAssetController(assetController).onMainDelegate(from, to);
     }
 
     function state(address dealCell) external view returns (DealState memory _state) {
@@ -324,7 +279,11 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function totalReleasedVotable() external view returns (uint256) {
-        return (mainToken.totalSupply() - unreleasedMainTokens) - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell]);
+        return IAssetController(assetController).totalReleasedVotable();
+    }
+
+    function mainTokenObligations() external view returns (uint256) {
+        return IAssetController(assetController).mainTokenObligations();
     }
 
     function getMainToken() external view returns (address) {

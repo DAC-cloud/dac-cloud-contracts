@@ -52,9 +52,14 @@ contract MockGovernanceModuleFactory is ModuleFactory {
     address public immutable treasuryDealFactory;
     address public immutable mockEvaluatorFactory;
 
-    constructor(address permit2) ModuleFactory(address(new DealCellFactory()), address(new StakedAgentFactory())) {
-        treasuryDealFactory = address(new TreasuryDealFactory(permit2));
-        mockEvaluatorFactory = address(new MockNoopEvaluatorFactory());
+    constructor(
+        address dealCellFactory_,
+        address stakedAgentFactory_,
+        address treasuryDealFactory_,
+        address mockEvaluatorFactory_
+    ) ModuleFactory(dealCellFactory_, stakedAgentFactory_) {
+        treasuryDealFactory = treasuryDealFactory_;
+        mockEvaluatorFactory = mockEvaluatorFactory_;
     }
 
     function moduleId() external pure returns (bytes32) { return bytes32("mock.governance"); }
@@ -106,7 +111,12 @@ contract DACGovernanceControlTest is DACTestBase {
         onboardAgent(agent1);
 
         vm.prank(moduleOwner);
-        mockModule = new MockGovernanceModuleFactory(permit2);
+        mockModule = new MockGovernanceModuleFactory(
+            address(new DealCellFactory()),
+            address(new StakedAgentFactory()),
+            address(new TreasuryDealFactory(permit2)),
+            address(new MockNoopEvaluatorFactory())
+        );
     }
 
     function test_holdersCannotCreateApproveDealProposalDirectly() public {

@@ -210,7 +210,7 @@ contract DealGovernanceFlowTest is DACTestBase {
 
         assertTrue(IDealCell(handle.dealCell).allowEarlyReturns());
 
-        uint256 dacBalanceBefore = usdc.balanceOf(address(dac));
+        uint256 dacBalanceBefore = usdc.balanceOf(dac.getAssetController());
 
         vm.startPrank(agent1);
         uint256 returnProposalId = Deal(handle.dealAddr).createStakedAgentProposal(
@@ -229,7 +229,7 @@ contract DealGovernanceFlowTest is DACTestBase {
 
         address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
         assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), 4_000);
-        assertEq(usdc.balanceOf(address(dac)), dacBalanceBefore + 4_000);
+        assertEq(usdc.balanceOf(dac.getAssetController()), dacBalanceBefore + 4_000);
         assertEq(usdc.balanceOf(treasuryAddr), 6_000);
     }
 
@@ -491,7 +491,7 @@ contract DealGovernanceFlowTest is DACTestBase {
 
         usdc.mint(handle.dealAddr, 2_500);
 
-        uint256 childUsdcBefore = usdc.balanceOf(childDac);
+        uint256 childUsdcBefore = usdc.balanceOf(IDACCell(childDac).getAssetController());
         uint256 childMainBefore = childMainToken.balanceOf(handle.dealAddr);
 
         vm.startPrank(agent1);
@@ -510,7 +510,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
         Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
 
-        assertEq(usdc.balanceOf(childDac), childUsdcBefore + 2_500);
+        assertEq(usdc.balanceOf(IDACCell(childDac).getAssetController()), childUsdcBefore + 2_500);
         assertEq(childMainToken.balanceOf(handle.dealAddr), childMainBefore + 22_222);
         assertEq(usdc.balanceOf(handle.dealAddr), 0);
     }
@@ -519,7 +519,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         DealHandle memory handle = _setupApprovedDACDealWithTwoAgents();
 
         usdc.mint(handle.dealAddr, 3_333);
-        uint256 dacBalanceBefore = usdc.balanceOf(address(dac));
+        uint256 dacBalanceBefore = usdc.balanceOf(dac.getAssetController());
 
         vm.startPrank(agent1);
         uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
@@ -537,7 +537,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
 
         assertEq(IDealCell(handle.dealCell).getReturnedCapital(address(usdc)), 3_333);
-        assertEq(usdc.balanceOf(address(dac)), dacBalanceBefore + 3_333);
+        assertEq(usdc.balanceOf(dac.getAssetController()), dacBalanceBefore + 3_333);
         assertEq(usdc.balanceOf(handle.dealAddr), 0);
     }
 

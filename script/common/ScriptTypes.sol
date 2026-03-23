@@ -22,6 +22,10 @@ struct ProtocolDeployment {
     address dealCellImpl;
     address dealManagerFactory;
     address dealManagerImpl;
+    address moduleRegistryFactory;
+    address moduleRegistryImpl;
+    address assetControllerFactory;
+    address assetControllerImpl;
     address dacGovernanceFactory;
     address dacGovernanceImpl;
     address coreDealGovernanceFactory;

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {DACTestBase} from "./base/DACTestBase.t.sol";
-import {MockEvaluatorModuleFactory, MockEvaluator} from "./DealEvaluationRecoveryTest.t.sol";
+import {MockEvaluatorModuleFactory, MockEvaluator, MockEvaluatorFactory} from "./DealEvaluationRecoveryTest.t.sol";
 import {DealParams, EvaluationResult, ProposalParams} from "../src/interfaces/Structs.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
 import {IDealCell} from "../src/interfaces/IDealCell.sol";
@@ -15,6 +15,9 @@ import {DealState} from "../src/kernel/interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../src/kernel/interfaces/IDealManagerAdapter.sol";
 import {CoreDealType} from "../src/modules/core/CoreModuleDeals.sol";
 import {StakedAgent} from "../src/kernel/tokens/StakedAgent.sol";
+import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
+import {StakedAgentFactory} from "../src/kernel/tokens/factories/TokenFactories.sol";
+import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 
 contract AccountingObligationsFuzzTest is DACTestBase {
     address public agent1 = makeAddr("agent1");
@@ -32,7 +35,12 @@ contract AccountingObligationsFuzzTest is DACTestBase {
         onboardAgent(agent2);
 
         vm.prank(moduleOwner);
-        mockModule = new MockEvaluatorModuleFactory(permit2);
+        mockModule = new MockEvaluatorModuleFactory(
+            address(new DealCellFactory()),
+            address(new StakedAgentFactory()),
+            address(new TreasuryDealFactory(permit2)),
+            address(new MockEvaluatorFactory())
+        );
 
         _approveModule(address(mockModule));
     }
