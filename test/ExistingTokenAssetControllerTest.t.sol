@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {CapitalCall} from "../src/interfaces/Structs.sol";
 import {UUPSProxy} from "../src/kernel/proxies/UUPSProxy.sol";
 import {WrappedMainToken} from "../src/kernel/tokens/WrappedMainToken.sol";
 import {ExistingTokenAssetController} from "../src/kernel/controllers/ExistingTokenAssetController.sol";
@@ -134,6 +135,25 @@ contract ExistingTokenAssetControllerTest is Test {
         vm.expectRevert();
         vm.prank(recipient);
         wrapped.delegate(holder);
+    }
+
+    function test_capitalCall_sellsWrappedTreasuryReserves() external {
+        vm.prank(dac);
+        bytes32 callHash = controller.createCapitalCall(7, address(usdc), holder, 50e18, 5_000e6);
+
+        CapitalCall memory call = controller.getCapitalCall(callHash);
+        assertEq(call.tokenAmount, 50e18);
+        assertEq(call.cashAmount, 5_000e6);
+
+        uint256 usdcBefore = controller.treasuryBalance(address(usdc));
+        uint256 wrappedBefore = controller.treasuryBalance(address(wrapped));
+
+        vm.prank(dac);
+        controller.fulfillCapitalCall(call);
+
+        assertEq(controller.treasuryBalance(address(usdc)), usdcBefore + 5_000e6);
+        assertEq(controller.treasuryBalance(address(wrapped)), wrappedBefore - 50e18);
+        assertEq(wrapped.balanceOf(holder), 150e18);
     }
 
     function _mockDeal(uint256 dealId, address dealCell) internal {

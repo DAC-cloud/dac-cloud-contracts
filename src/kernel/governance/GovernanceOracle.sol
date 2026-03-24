@@ -12,6 +12,7 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
     bytes32 public constant PUBLISHER_ROLE = keccak256("PUBLISHER_ROLE");
 
     mapping(uint256 => OracleSnapshot) private snapshots;
+    bool private active;
 
     constructor() {
         _disableInitializers();
@@ -23,6 +24,7 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         __AccessControl_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        active = true;
 
         if (initialPublisher != address(0)) {
             _grantRole(PUBLISHER_ROLE, initialPublisher);
@@ -43,12 +45,28 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         return hasRole(PUBLISHER_ROLE, publisher);
     }
 
+    function isActive() external view returns (bool) {
+        return active;
+    }
+
+    function deactivate() external {
+        require(
+            hasRole(DEFAULT_ADMIN_ROLE, msg.sender) || hasRole(PUBLISHER_ROLE, msg.sender),
+            DACErrorsLib.NotAuthorized()
+        );
+        require(active, DACErrorsLib.NotAllowed());
+
+        active = false;
+        emit DACEventsLib.GovernanceOracleDeactivated(address(this), msg.sender);
+    }
+
     function publishSnapshot(
         uint256 proposalId,
         uint256 snapshotBlock,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     ) external onlyRole(PUBLISHER_ROLE) {
+        require(active, DACErrorsLib.NotAllowed());
         require(proposalId > 0, DACErrorsLib.NotAllowed());
         require(snapshotBlock > 0, DACErrorsLib.NotAllowed());
         require(merkleRoot != bytes32(0), DACErrorsLib.InvalidMerkleProof());

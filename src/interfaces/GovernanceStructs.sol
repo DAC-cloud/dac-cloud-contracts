@@ -17,6 +17,7 @@ enum ProposalPhase {
 enum AssetCapability {
     MINT,
     BURN,
+    CAPITAL_CALL,
     WRAP,
     UNWRAP,
     RESERVE_BACKED_CLAIMS
@@ -37,6 +38,11 @@ struct GovernanceStrategyConfig {
     uint256 oraclePublishDeadline;
     uint256 fallbackWarmupDuration;
     uint256 fallbackDuration;
+}
+
+struct DealCreationConfig {
+    uint256 minAgentBalance;
+    uint256 minInitialAgentStake;
 }
 
 struct AssetControllerConfig {

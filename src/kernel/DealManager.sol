@@ -10,6 +10,7 @@ import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
+import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
 import {IManagementProposal} from "../interfaces/IManagementProposal.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
@@ -20,6 +21,7 @@ import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
+import {DealCreationConfig} from "../interfaces/GovernanceStructs.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 
@@ -74,6 +76,11 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr)
     {
         VotingConfig memory votingConfig = IDACCell(dacCell).getVotingConfig();
+        DealCreationConfig memory creationConfig =
+            IGovernanceSchema(IDACCell(dacCell).getGovernanceSchema()).getDealCreationConfig();
+
+        require(agentToken.balanceOf(msg.sender) >= creationConfig.minAgentBalance, DACErrorsLib.InsufficientBalance());
+        require(agentToken.balanceOf(msg.sender) >= creationConfig.minInitialAgentStake, DACErrorsLib.NoStake());
 
         (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
             dacCell,
@@ -87,6 +94,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
         IAssetController(assetController).registerControlledAddress(dealCell);
         IAssetController(assetController).registerControlledAddress(dealAddr);
+
+        if (creationConfig.minInitialAgentStake > 0) {
+            agentToken.forceStakeToDeal(msg.sender, dealCell, creationConfig.minInitialAgentStake);
+        }
 
         IDealCellAdapter(dealCell).onDACInit(params, votingConfig);
     }

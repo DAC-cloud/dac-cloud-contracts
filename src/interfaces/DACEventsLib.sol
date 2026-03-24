@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {EvaluationResult, DealParams, VotingConfig, LegalWrapper} from "./Structs.sol";
+import {DealCreationConfig, GovernanceStrategyConfig} from "./GovernanceStructs.sol";
 
 library DACEventsLib {
 
@@ -15,6 +16,9 @@ library DACEventsLib {
     event DACStarted(address indexed manager, VotingConfig config, bool dividendsEnabled, address coreModule);
     
     event VotingConfigUpdate(uint256 indexed id, VotingConfig config);
+    event GovernanceStrategyUpdate(uint256 indexed id, GovernanceStrategyConfig config);
+    event DealCreationConfigUpdate(uint256 indexed id, DealCreationConfig config);
+    event GovernanceOracleUpdate(uint256 indexed id, address indexed oracle);
     event LegalWrapperMessage(address indexed wrapper, bytes4 messageKind, bytes message);
     event DividendsConfigUpdate(uint256 indexed id, bool enabled);
 
@@ -137,6 +141,7 @@ library DACEventsLib {
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     );
+    event GovernanceOracleDeactivated(address indexed oracle, address indexed caller);
     event MerkleVoted(uint256 indexed id, address indexed voter, bool support, uint256 weight, uint256 index);
 
     // Events emited by abstract Deal contract

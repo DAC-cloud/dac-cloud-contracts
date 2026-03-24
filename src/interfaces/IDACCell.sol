@@ -13,6 +13,7 @@ interface IDACCell {
     function getDealManager() external view returns (address);
     function getModuleRegistry() external view returns (address);
     function getAssetController() external view returns (address);
+    function getGovernanceSchema() external view returns (address);
 
     function getCapitalCall(bytes32 callHash) external returns (CapitalCall memory call);
     function fulfillCapitalCall(CapitalCall calldata call) external returns (bool);

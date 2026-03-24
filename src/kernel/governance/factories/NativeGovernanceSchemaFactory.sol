@@ -16,6 +16,7 @@ contract NativeGovernanceSchemaFactory {
         address dacCell,
         address mainToken,
         address dealManager,
+        address assetController,
         address proposalFactory,
         VotingConfig calldata votingConfig
     ) external returns (address governanceSchema) {
@@ -24,6 +25,7 @@ contract NativeGovernanceSchemaFactory {
             dacCell,
             mainToken,
             dealManager,
+            assetController,
             proposalFactory,
             votingConfig
         );

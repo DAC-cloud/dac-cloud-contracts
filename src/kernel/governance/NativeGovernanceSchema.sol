@@ -5,9 +5,11 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
 import {IGovernanceSchema} from "../../interfaces/IGovernanceSchema.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
+import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
+import {AssetCapability, DealCreationConfig, GovernanceStrategyConfig} from "../../interfaces/GovernanceStructs.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {DACManagementProposalType} from "./DACManagementProposals.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
@@ -18,8 +20,10 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
     MainToken public mainToken;
     address public dealManager;
     address public proposalFactory;
+    address public assetController;
 
     VotingConfig private votingConfig;
+    DealCreationConfig private dealCreationConfig;
     uint256 private nextId;
     mapping(uint256 => address) private proposals;
     mapping(uint256 => bool) private executed;
@@ -32,17 +36,20 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         address _dacCell,
         address _mainToken,
         address _dealManager,
+        address _assetController,
         address _proposalFactory,
         VotingConfig calldata _votingConfig
     ) external initializer {
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
         require(_mainToken != address(0), DACErrorsLib.NotAllowed());
         require(_dealManager != address(0), DACErrorsLib.NotAllowed());
+        require(_assetController != address(0), DACErrorsLib.NotAllowed());
         require(_proposalFactory != address(0), DACErrorsLib.NotAllowed());
 
         dacCell = _dacCell;
         mainToken = MainToken(_mainToken);
         dealManager = _dealManager;
+        assetController = _assetController;
         proposalFactory = _proposalFactory;
         nextId = 1;
 
@@ -100,7 +107,19 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
                 VotingConfig memory nextVotingConfig = abi.decode(params.data, (VotingConfig));
                 _validateVotingConfig(nextVotingConfig);
             }
+            else if (params.typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY) {
+                GovernanceStrategyConfig memory nextStrategy = abi.decode(params.data, (GovernanceStrategyConfig));
+                _validateStrategyConfig(nextStrategy);
+            }
+            else if (params.typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG) {
+                _validateDealCreationConfig(abi.decode(params.data, (DealCreationConfig)));
+            }
+            else if (params.typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE) {
+                revert DACErrorsLib.UnsupportedProposal();
+            }
         }
+
+        _validateCapabilitySupport(params.typ);
 
         id = nextId++;
         proposal = IDACManagementFactory(proposalFactory).deployProposal(
@@ -135,8 +154,49 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         _setVotingConfig(config);
     }
 
+    function setDealCreationConfig(DealCreationConfig calldata config) external onlyDACCell {
+        _validateDealCreationConfig(config);
+        dealCreationConfig = config;
+    }
+
+    function setStrategyConfig(GovernanceStrategyConfig calldata config) external onlyDACCell {
+        _validateStrategyConfig(config);
+        votingConfig = VotingConfig({
+            quorumPercent: config.quorumPercent,
+            blockingPercent: config.blockingPercent,
+            highQuorumPercent: config.highQuorumPercent,
+            duration: config.duration,
+            qualification: config.qualification
+        });
+    }
+
+    function setGovernanceOracle(address) external pure {
+        revert DACErrorsLib.UnsupportedProposal();
+    }
+
     function getVotingConfig() external view returns (VotingConfig memory config) {
         config = votingConfig;
+    }
+
+    function getDealCreationConfig() external view returns (DealCreationConfig memory config) {
+        config = dealCreationConfig;
+    }
+
+    function getStrategyConfig() external view returns (GovernanceStrategyConfig memory config) {
+        config = GovernanceStrategyConfig({
+            quorumPercent: votingConfig.quorumPercent,
+            highQuorumPercent: votingConfig.highQuorumPercent,
+            blockingPercent: votingConfig.blockingPercent,
+            duration: votingConfig.duration,
+            qualification: votingConfig.qualification,
+            oraclePublishDeadline: 0,
+            fallbackWarmupDuration: 0,
+            fallbackDuration: 0
+        });
+    }
+
+    function getGovernanceOracle() external pure returns (address oracle) {
+        return address(0);
     }
 
     function getProposal(uint256 id) external view returns (address proposal) {
@@ -155,6 +215,36 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
     function _setVotingConfig(VotingConfig memory config) internal {
         _validateVotingConfig(config);
         votingConfig = config;
+    }
+
+    function _validateStrategyConfig(GovernanceStrategyConfig memory config) internal view {
+        require(config.oraclePublishDeadline == 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackWarmupDuration == 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackDuration == 0, DACErrorsLib.InvalidVotingConfig());
+        _validateVotingConfig(
+            VotingConfig({
+                quorumPercent: config.quorumPercent,
+                blockingPercent: config.blockingPercent,
+                highQuorumPercent: config.highQuorumPercent,
+                duration: config.duration,
+                qualification: config.qualification
+            })
+        );
+    }
+
+    function _validateDealCreationConfig(DealCreationConfig memory) internal pure {}
+
+    function _validateCapabilitySupport(bytes4 typ) internal view {
+        if (typ == DACManagementProposalType.MINT_MAIN_TOKENS) {
+            require(IAssetController(assetController).supportsCapability(AssetCapability.MINT), DACErrorsLib.UnsupportedProposal());
+        } else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
+            require(IAssetController(assetController).supportsCapability(AssetCapability.BURN), DACErrorsLib.UnsupportedProposal());
+        } else if (typ == DACManagementProposalType.CAPITAL_CALL) {
+            require(
+                IAssetController(assetController).supportsCapability(AssetCapability.CAPITAL_CALL),
+                DACErrorsLib.UnsupportedProposal()
+            );
+        }
     }
 
     function _validateVotingConfig(VotingConfig memory config) internal view {

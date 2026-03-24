@@ -132,6 +132,7 @@ contract DACDeployTest is Test {
             name: "Existing DAC",
             description: "existing token governance",
             underlyingToken: address(underlying),
+            treasurySeedAmount: 1_000e18,
             oracleAdmin: owner,
             initialOraclePublisher: owner,
             dividendsEnabled: false,
@@ -147,8 +148,11 @@ contract DACDeployTest is Test {
             })
         });
 
+        vm.startPrank(user);
+        underlying.approve(address(dacFactory), config.treasurySeedAmount);
         (address dacAddress, address wrappedAddress, address existingAgentToken, address oracleAddress) =
             dacFactory.deployExistingTokenDAC(abi.encode(config), bytes32("existing"));
+        vm.stopPrank();
 
         DACCell existingDac = DACCell(dacAddress);
         WrappedMainToken wrapped = WrappedMainToken(wrappedAddress);
@@ -160,6 +164,7 @@ contract DACDeployTest is Test {
         assertTrue(existingDac.getModuleRegistry() != address(0));
         assertTrue(oracleAddress != address(0));
         assertEq(existingDac.getVotingConfig().quorumPercent, MathLib.atScale(50));
+        assertEq(wrapped.balanceOf(existingDac.getAssetController()), config.treasurySeedAmount);
 
         vm.prank(user);
         underlying.approve(wrappedAddress, type(uint256).max);
@@ -179,5 +184,16 @@ contract DACDeployTest is Test {
 
         assertEq(proposalId, 1);
         assertTrue(existingDac.getProposalVoting(proposalId) != address(0));
+
+        vm.expectRevert();
+        vm.prank(user);
+        existingDac.createManagementProposal(
+            ProposalParams({
+                typ: DACManagementProposalType.MINT_MAIN_TOKENS,
+                target: address(0),
+                i: bytes32(uint256(10e18)),
+                data: bytes("")
+            })
+        );
     }
 }

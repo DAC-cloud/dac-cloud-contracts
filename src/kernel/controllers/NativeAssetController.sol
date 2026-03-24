@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {CapitalCall} from "../../interfaces/Structs.sol";
+import {AssetCapability} from "../../interfaces/GovernanceStructs.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {MainToken} from "../tokens/MainToken.sol";
@@ -26,6 +27,7 @@ contract NativeAssetController is IAssetController, Initializable {
 
     mapping(bytes32 => CapitalCallState) private capitalCalls;
     mapping(address => uint256) private treasuryBalances;
+    mapping(address => uint256) private committedBalances;
 
     mapping(uint256 => DividendPayoutState) private dividendPayouts;
     mapping(bytes32 => bool) private dividendClaimed;
@@ -133,11 +135,15 @@ contract NativeAssetController is IAssetController, Initializable {
         external
         onlyDACCell
     {
+        require(dividendPayouts[proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
+        require(_freeBalance(token) >= totalPayout, DACErrorsLib.InsufficientTreasury());
+
         dividendPayouts[proposalId] = DividendPayoutState({
             token: token,
             totalPayout: totalPayout,
             merkleRoot: merkleRoot
         });
+        committedBalances[token] += totalPayout;
     }
 
     function claimDividend(
@@ -158,6 +164,8 @@ contract NativeAssetController is IAssetController, Initializable {
 
         dividendClaimed[claimedKey] = true;
         token = dividendPayouts[proposalId].token;
+        committedBalances[token] -= amount;
+        treasuryBalances[token] -= amount;
 
         require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
     }
@@ -174,7 +182,7 @@ contract NativeAssetController is IAssetController, Initializable {
         address fundingToken = IDealCell(dealCell).fundingTranche(trancheId).token;
         uint256 fundingAmount = IDealCell(dealCell).fundingTranche(trancheId).amount;
 
-        require(treasuryBalances[fundingToken] >= fundingAmount, DACErrorsLib.InsufficientTreasury());
+        require(_freeBalance(fundingToken) >= fundingAmount, DACErrorsLib.InsufficientTreasury());
 
         if (fundingAmount > 0) {
             treasuryBalances[fundingToken] -= fundingAmount;
@@ -208,6 +216,7 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     function burnMainFromTreasury(uint256 amount) external onlyDACCell {
+        require(_freeBalance(address(mainToken)) >= amount, DACErrorsLib.InsufficientTreasury());
         treasuryBalances[address(mainToken)] -= amount;
         mainToken.burn(amount);
     }
@@ -263,6 +272,16 @@ contract NativeAssetController is IAssetController, Initializable {
 
     function treasuryHolder() external view returns (address) {
         return address(this);
+    }
+
+    function supportsCapability(AssetCapability capability) external pure returns (bool) {
+        return capability == AssetCapability.MINT
+            || capability == AssetCapability.BURN
+            || capability == AssetCapability.CAPITAL_CALL;
+    }
+
+    function _freeBalance(address token) internal view returns (uint256) {
+        return treasuryBalances[token] - committedBalances[token];
     }
 
     modifier onlyDACCell() {

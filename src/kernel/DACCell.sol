@@ -5,6 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper, ExistingDACConfig} from "../interfaces/Structs.sol";
+import {DealCreationConfig, GovernanceStrategyConfig} from "../interfaces/GovernanceStructs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
 import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
@@ -134,6 +135,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             address(this),
             _mainToken,
             dealManager,
+            assetController,
             proposalFactory,
             initialVotingConfig
         );
@@ -192,6 +194,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             address(this),
             _wrappedMainToken,
             dealManager,
+            assetController,
             proposalFactory,
             _governanceOracle,
             config.governanceStrategy
@@ -284,6 +287,15 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         return true;
     }
 
+    function recordBootstrapTreasuryDeposit(address token, uint256 amount) external {
+        require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
+        require(cellStarted, DACErrorsLib.NotInitialized());
+        require(amount > 0, DACErrorsLib.NotAllowed());
+
+        IAssetController(assetController).recordTreasuryDeposit(token, amount);
+        emit DACEventsLib.TreasuryDeposit(token, amount, msg.sender);
+    }
+
     function logLegalWrapperMessage(bytes4 kind, bytes calldata message) 
         external 
         onlyLegalWrapper 
@@ -315,6 +327,18 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         
         if (typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
             _executeVotingConfigUpdate(id, prop);
+        }
+
+        else if (typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY) {
+            _executeGovernanceStrategyUpdate(id, prop);
+        }
+
+        else if (typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG) {
+            _executeDealCreationConfigUpdate(id, prop);
+        }
+
+        else if (typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE) {
+            _executeGovernanceOracleUpdate(id, prop);
         }
         
         else if (typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER) {
@@ -428,6 +452,21 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     function _executeVotingConfigUpdate(uint256 id, IManagementProposal prop) internal {
         IGovernanceSchema(governanceSchema).setVotingConfig(abi.decode(prop.data(), (VotingConfig)));
         emit DACEventsLib.VotingConfigUpdate(id, IGovernanceSchema(governanceSchema).getVotingConfig());
+    }
+
+    function _executeGovernanceStrategyUpdate(uint256 id, IManagementProposal prop) internal {
+        IGovernanceSchema(governanceSchema).setStrategyConfig(abi.decode(prop.data(), (GovernanceStrategyConfig)));
+        emit DACEventsLib.GovernanceStrategyUpdate(id, IGovernanceSchema(governanceSchema).getStrategyConfig());
+    }
+
+    function _executeDealCreationConfigUpdate(uint256 id, IManagementProposal prop) internal {
+        IGovernanceSchema(governanceSchema).setDealCreationConfig(abi.decode(prop.data(), (DealCreationConfig)));
+        emit DACEventsLib.DealCreationConfigUpdate(id, IGovernanceSchema(governanceSchema).getDealCreationConfig());
+    }
+
+    function _executeGovernanceOracleUpdate(uint256 id, IManagementProposal prop) internal {
+        IGovernanceSchema(governanceSchema).setGovernanceOracle(prop.target());
+        emit DACEventsLib.GovernanceOracleUpdate(id, IGovernanceSchema(governanceSchema).getGovernanceOracle());
     }
 
     function _executeLegalWrapperUpdate(uint256 id, IManagementProposal prop) internal {
@@ -555,6 +594,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
 
     function getAssetController() external view override(IDACCell, IDACCellAdapter) returns (address) {
         return assetController;
+    }
+
+    function getGovernanceSchema() external view override returns (address) {
+        return governanceSchema;
     }
 
     modifier onlyAgent() {

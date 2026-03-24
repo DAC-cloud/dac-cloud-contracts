@@ -3,6 +3,9 @@ pragma solidity ^0.8.20;
 
 interface IDACManagementProposals {
     function updateVotingConfig() external pure returns (bytes4);
+    function updateGovernanceStrategy() external pure returns (bytes4);
+    function updateDealCreationConfig() external pure returns (bytes4);
+    function updateGovernanceOracle() external pure returns (bytes4);
 
     function updateLegalWrapper() external pure returns (bytes4);
     function approveOffchainAction() external pure returns (bytes4);
@@ -36,6 +39,9 @@ interface IDACManagementProposals {
 
 library DACManagementProposalType {
     bytes4 public constant UPDATE_VOTING_CONFIG     = IDACManagementProposals.updateVotingConfig.selector;      // High quorum
+    bytes4 public constant UPDATE_GOVERNANCE_STRATEGY = IDACManagementProposals.updateGovernanceStrategy.selector; // High quorum
+    bytes4 public constant UPDATE_DEAL_CREATION_CONFIG = IDACManagementProposals.updateDealCreationConfig.selector; // High quorum
+    bytes4 public constant UPDATE_GOVERNANCE_ORACLE = IDACManagementProposals.updateGovernanceOracle.selector; // High quorum
     bytes4 public constant UPDATE_LEGAL_WRAPPER     = IDACManagementProposals.updateLegalWrapper.selector;      // High quorum
     bytes4 public constant APPROVE_OFFCHAIN_ACTION  = IDACManagementProposals.approveOffchainAction.selector;   // Default quorum, blocking allowed
 

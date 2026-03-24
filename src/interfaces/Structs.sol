@@ -21,6 +21,7 @@ struct ExistingDACConfig {
     string name;
     string description;
     address underlyingToken;
+    uint256 treasurySeedAmount;
     address oracleAdmin;
     address initialOraclePublisher;
     bool dividendsEnabled;

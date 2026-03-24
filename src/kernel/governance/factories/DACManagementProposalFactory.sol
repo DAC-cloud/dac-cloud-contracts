@@ -29,6 +29,9 @@ contract DACManagementProposalFactory is IDACManagementFactory {
 
         if (
             proposalParams.typ == DACManagementProposalType.MINT_MAIN_TOKENS ||
+            proposalParams.typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY ||
+            proposalParams.typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG ||
+            proposalParams.typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE ||
             proposalParams.typ == DACManagementProposalType.UPDATE_VOTING_CONFIG ||
             proposalParams.typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER || 
             proposalParams.typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
@@ -49,7 +52,8 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.APPROVE_DEAL ||
             proposalParams.typ == DACManagementProposalType.APPROVE_TRANCHE ||
             proposalParams.typ == DACManagementProposalType.ADD_EVALUATOR ||
-            proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS
+            proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS ||
+            proposalParams.typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
         ) {
             blockingQuorum = MathLib.mul(totalVotingSupply, votingConfig.blockingPercent);
         }

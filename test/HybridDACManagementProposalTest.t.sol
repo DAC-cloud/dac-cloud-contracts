@@ -172,6 +172,51 @@ contract HybridDACManagementProposalTest is Test {
         oracle.publishSnapshot(999, 1, keccak256("root"), 1);
     }
 
+    function test_oracleDeactivation_resetsPrimaryFlowIntoFallbackWarmup() external {
+        vm.roll(30);
+
+        vm.prank(wrappedHolder);
+        wrapped.wrap(100e18);
+
+        vm.roll(31);
+
+        proposal.initialize(
+            3,
+            address(this),
+            address(wrapped),
+            address(oracle),
+            ProposalParams({
+                typ: bytes4(keccak256("TEST_EMERGENCY")),
+                target: address(0),
+                i: bytes32(0),
+                data: bytes("")
+            }),
+            _strategyConfig(),
+            false,
+            false,
+            address(0)
+        );
+
+        vm.prank(publisher);
+        oracle.publishSnapshot(3, 30, keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18))), 200e18);
+
+        proposal.activatePrimaryVoting();
+
+        vm.prank(wrappedHolder);
+        proposal.voteWrapped(true);
+        assertEq(proposal.yesVotes(), 100e18);
+
+        vm.prank(publisher);
+        oracle.deactivate();
+
+        proposal.triggerEmergencyFallback();
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
+        assertEq(proposal.yesVotes(), 0);
+        assertEq(proposal.noVotes(), 0);
+        assertEq(proposal.totalVotingPower(), 0);
+    }
+
     function _strategyConfig() internal pure returns (GovernanceStrategyConfig memory config) {
         config = GovernanceStrategyConfig({
             quorumPercent: 5e17,

@@ -7,7 +7,8 @@ import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
 import {IGovernanceSchema} from "../../interfaces/IGovernanceSchema.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
-import {GovernanceStrategyConfig} from "../../interfaces/GovernanceStructs.sol";
+import {IAssetController} from "../../interfaces/IAssetController.sol";
+import {AssetCapability, DealCreationConfig, GovernanceStrategyConfig} from "../../interfaces/GovernanceStructs.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACManagementProposalType} from "./DACManagementProposals.sol";
 import {HybridDACManagementProposalFactory} from "./factories/HybridDACManagementProposalFactory.sol";
@@ -17,10 +18,12 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     address public dacCell;
     IERC20 public wrappedMainToken;
     address public dealManager;
+    address public assetController;
     address public proposalFactory;
     address public governanceOracle;
 
     GovernanceStrategyConfig private strategyConfig;
+    DealCreationConfig private dealCreationConfig;
     uint256 private nextId;
     mapping(uint256 => address) private proposals;
     mapping(uint256 => bool) private executed;
@@ -33,6 +36,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         address _dacCell,
         address _wrappedMainToken,
         address _dealManager,
+        address _assetController,
         address _proposalFactory,
         address _governanceOracle,
         GovernanceStrategyConfig calldata _strategyConfig
@@ -40,12 +44,14 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
         require(_wrappedMainToken != address(0), DACErrorsLib.NotAllowed());
         require(_dealManager != address(0), DACErrorsLib.NotAllowed());
+        require(_assetController != address(0), DACErrorsLib.NotAllowed());
         require(_proposalFactory != address(0), DACErrorsLib.NotAllowed());
         require(_governanceOracle != address(0), DACErrorsLib.NotAllowed());
 
         dacCell = _dacCell;
         wrappedMainToken = IERC20(_wrappedMainToken);
         dealManager = _dealManager;
+        assetController = _assetController;
         proposalFactory = _proposalFactory;
         governanceOracle = _governanceOracle;
         nextId = 1;
@@ -104,7 +110,19 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
                 VotingConfig memory nextVotingConfig = abi.decode(params.data, (VotingConfig));
                 _validateVotingConfig(nextVotingConfig);
             }
+            else if (params.typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY) {
+                GovernanceStrategyConfig memory nextStrategy = abi.decode(params.data, (GovernanceStrategyConfig));
+                _validateStrategyConfig(nextStrategy);
+            }
+            else if (params.typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG) {
+                _validateDealCreationConfig(abi.decode(params.data, (DealCreationConfig)));
+            }
+            else if (params.typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE) {
+                require(params.target != address(0), DACErrorsLib.NotAllowed());
+            }
         }
+
+        _validateCapabilitySupport(params.typ);
 
         id = nextId++;
         proposal = HybridDACManagementProposalFactory(proposalFactory).deployProposal(
@@ -147,6 +165,20 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         strategyConfig.qualification = config.qualification;
     }
 
+    function setDealCreationConfig(DealCreationConfig calldata config) external onlyDACCell {
+        _validateDealCreationConfig(config);
+        dealCreationConfig = config;
+    }
+
+    function setStrategyConfig(GovernanceStrategyConfig calldata config) external onlyDACCell {
+        _setStrategyConfig(config);
+    }
+
+    function setGovernanceOracle(address oracle) external onlyDACCell {
+        require(oracle != address(0), DACErrorsLib.NotAllowed());
+        governanceOracle = oracle;
+    }
+
     function getVotingConfig() external view returns (VotingConfig memory config) {
         config = VotingConfig({
             quorumPercent: strategyConfig.quorumPercent,
@@ -157,6 +189,10 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         });
     }
 
+    function getDealCreationConfig() external view returns (DealCreationConfig memory config) {
+        config = dealCreationConfig;
+    }
+
     function getProposal(uint256 id) external view returns (address proposal) {
         proposal = proposals[id];
     }
@@ -165,12 +201,21 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         config = strategyConfig;
     }
 
+    function getGovernanceOracle() external view returns (address oracle) {
+        oracle = governanceOracle;
+    }
+
     modifier onlyDACCell() {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
         _;
     }
 
     function _setStrategyConfig(GovernanceStrategyConfig memory config) internal {
+        _validateStrategyConfig(config);
+        strategyConfig = config;
+    }
+
+    function _validateStrategyConfig(GovernanceStrategyConfig memory config) internal view {
         _validateVotingConfig(
             VotingConfig({
                 quorumPercent: config.quorumPercent,
@@ -183,7 +228,6 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.oraclePublishDeadline > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
-        strategyConfig = config;
     }
 
     function _validateVotingConfig(VotingConfig memory config) internal view {
@@ -201,9 +245,27 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         );
     }
 
+    function _validateDealCreationConfig(DealCreationConfig memory) internal pure {}
+
+    function _validateCapabilitySupport(bytes4 typ) internal view {
+        if (typ == DACManagementProposalType.MINT_MAIN_TOKENS) {
+            require(IAssetController(assetController).supportsCapability(AssetCapability.MINT), DACErrorsLib.UnsupportedProposal());
+        } else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
+            require(IAssetController(assetController).supportsCapability(AssetCapability.BURN), DACErrorsLib.UnsupportedProposal());
+        } else if (typ == DACManagementProposalType.CAPITAL_CALL) {
+            require(
+                IAssetController(assetController).supportsCapability(AssetCapability.CAPITAL_CALL),
+                DACErrorsLib.UnsupportedProposal()
+            );
+        }
+    }
+
     function _isHighQuorum(bytes4 typ) internal pure returns (bool) {
         return (
             typ == DACManagementProposalType.MINT_MAIN_TOKENS ||
+            typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY ||
+            typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG ||
+            typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE ||
             typ == DACManagementProposalType.UPDATE_VOTING_CONFIG ||
             typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER ||
             typ == DACManagementProposalType.DIVIDEND_PAYOUT ||

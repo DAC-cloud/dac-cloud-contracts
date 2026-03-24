@@ -16,6 +16,7 @@ contract HybridGovernanceSchemaFactory {
         address dacCell,
         address wrappedMainToken,
         address dealManager,
+        address assetController,
         address proposalFactory,
         address governanceOracle,
         GovernanceStrategyConfig calldata strategyConfig
@@ -25,6 +26,7 @@ contract HybridGovernanceSchemaFactory {
             dacCell,
             wrappedMainToken,
             dealManager,
+            assetController,
             proposalFactory,
             governanceOracle,
             strategyConfig

@@ -30,13 +30,10 @@ contract SeedExistingTokenDAC is ManifestIO {
         seed.treasurySeedAmount = config.treasurySeedAmount;
         seed.dividendsEnabled = config.dividendsEnabled;
 
-        if (config.treasurySeedAmount > config.wrapAmount) {
-            revert InvalidTreasurySeedAmount();
-        }
+        if (config.treasurySeedAmount == 0) revert InvalidTreasurySeedAmount();
 
         if (config.wrapAmount != 0) {
-            uint256 retained = config.wrapAmount - config.treasurySeedAmount;
-            if (retained <= config.qualification) revert InsufficientRetainedWrappedBalance();
+            if (config.wrapAmount <= config.qualification) revert InsufficientRetainedWrappedBalance();
         }
 
         vm.startBroadcast(founderPk);
@@ -57,6 +54,7 @@ contract SeedExistingTokenDAC is ManifestIO {
             name: config.name,
             description: config.description,
             underlyingToken: config.underlyingToken,
+            treasurySeedAmount: config.treasurySeedAmount,
             oracleAdmin: config.oracleAdmin,
             initialOraclePublisher: config.oraclePublisher,
             dividendsEnabled: config.dividendsEnabled,
@@ -72,6 +70,7 @@ contract SeedExistingTokenDAC is ManifestIO {
             })
         });
 
+        IERC20(config.underlyingToken).approve(protocol.dacFactory, config.treasurySeedAmount);
         bytes32 salt = keccak256(abi.encode(config.label, seed.founder, block.chainid, protocol.dacFactory));
         (seed.dac, seed.mainToken, seed.agentToken, seed.governanceOracle) =
             DACFactory(protocol.dacFactory).deployExistingTokenDAC(abi.encode(dacConfig), salt);
@@ -83,14 +82,6 @@ contract SeedExistingTokenDAC is ManifestIO {
         if (config.wrapAmount > 0) {
             IERC20(config.underlyingToken).approve(seed.mainToken, config.wrapAmount);
             WrappedMainToken(seed.mainToken).wrap(config.wrapAmount);
-        }
-
-        if (config.treasurySeedAmount > 0) {
-            require(
-                WrappedMainToken(seed.mainToken).transfer(seed.assetController, config.treasurySeedAmount),
-                "wrapped transfer failed"
-            );
-            DACCell(seed.dac).recoverTreasury(seed.mainToken);
         }
 
         seed.blockNumber = block.number;

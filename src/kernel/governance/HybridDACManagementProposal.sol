@@ -118,6 +118,7 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
     function activatePrimaryVoting() external {
         require(phase == ProposalPhase.AwaitingOracleSnapshot, DACErrorsLib.NotAllowed());
         require(block.timestamp <= oracleSnapshotDeadline, DACErrorsLib.NotAllowed());
+        require(IGovernanceOracle(governanceOracle).isActive(), DACErrorsLib.NotAllowed());
 
         OracleSnapshot memory snapshot = IGovernanceOracle(governanceOracle).getSnapshot(id);
         require(snapshot.merkleRoot != bytes32(0), DACErrorsLib.NotFound());
@@ -136,7 +137,42 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
 
     function beginFallbackWarmup() external {
         require(phase == ProposalPhase.AwaitingOracleSnapshot, DACErrorsLib.NotAllowed());
-        require(block.timestamp > oracleSnapshotDeadline, DACErrorsLib.NotAllowed());
+        require(
+            block.timestamp > oracleSnapshotDeadline || !IGovernanceOracle(governanceOracle).isActive(),
+            DACErrorsLib.NotAllowed()
+        );
+
+        phase = ProposalPhase.FallbackWarmup;
+        phaseStartTime = block.timestamp;
+        phaseEndTime = block.timestamp + strategy.fallbackWarmupDuration;
+
+        emit DACEventsLib.ProposalPhaseTransition(
+            id,
+            uint8(phase),
+            primarySnapshotBlock,
+            phaseStartTime,
+            phaseEndTime,
+            0,
+            0,
+            0
+        );
+    }
+
+    function triggerEmergencyFallback() external {
+        require(
+            phase == ProposalPhase.AwaitingOracleSnapshot || phase == ProposalPhase.PrimaryVoting,
+            DACErrorsLib.NotAllowed()
+        );
+        require(!proposalResolved, DACErrorsLib.NotAllowed());
+        require(!IGovernanceOracle(governanceOracle).isActive(), DACErrorsLib.NotAllowed());
+
+        yesVotes = 0;
+        noVotes = 0;
+        totalVotingPower = 0;
+        quorum = 0;
+        blockingQuorum = 0;
+        oracleMerkleRoot = bytes32(0);
+        totalUnderlyingVotingPower = 0;
 
         phase = ProposalPhase.FallbackWarmup;
         phaseStartTime = block.timestamp;

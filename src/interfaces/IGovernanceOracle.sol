@@ -8,6 +8,8 @@ interface IGovernanceOracle {
 
     function setPublisher(address publisher, bool allowed) external;
     function isPublisher(address publisher) external view returns (bool);
+    function isActive() external view returns (bool);
+    function deactivate() external;
 
     function publishSnapshot(
         uint256 proposalId,

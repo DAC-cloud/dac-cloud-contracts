@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {DACConfig, ExistingDACConfig} from "../interfaces/Structs.sol";
 import {IDACFactory} from "../interfaces/IDACFactory.sol";
 import {DACCellFactory} from "./factories/DACCellFactory.sol";
@@ -9,9 +11,11 @@ import {DACDeployment} from "./libraries/DACDeployment.sol";
 import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 import {MainTokenFactory, AgentTokenFactory} from "./tokens/factories/TokenFactories.sol";
 import {WrappedMainTokenFactory} from "./tokens/factories/WrappedMainTokenFactory.sol";
+import {WrappedMainToken} from "./tokens/WrappedMainToken.sol";
 import {GovernanceOracleFactory} from "./governance/factories/GovernanceOracleFactory.sol";
 
 contract DACFactory is IDACFactory {
+    using SafeERC20 for IERC20;
     error Create2Failed();
     error SleepingCellNotFound();
     error DNAMismatch();
@@ -118,6 +122,7 @@ contract DACFactory is IDACFactory {
         ExistingDACConfig memory config = abi.decode(encodedConfig, (ExistingDACConfig));
 
         require(config.underlyingToken != address(0));
+        require(config.treasurySeedAmount > 0);
         require(config.oracleAdmin != address(0));
 
         dacAddr = _predictExistingDACAddress(config, salt);
@@ -130,6 +135,7 @@ contract DACFactory is IDACFactory {
         require(address(dac) == dacAddr, Create2Failed());
 
         _initializeExistingDAC(dac, config, wrappedMainTokenAddr, agentTokenAddr, governanceOracleAddr);
+        _seedExistingDACTreasury(config, wrappedMainTokenAddr, dacAddr);
 
         emit DACEventsLib.DACDeployed(dacAddr, wrappedMainTokenAddr, agentTokenAddr, true);
     }
@@ -254,5 +260,17 @@ contract DACFactory is IDACFactory {
                 hybridProposalFactory
             )
         );
+    }
+
+    function _seedExistingDACTreasury(
+        ExistingDACConfig memory config,
+        address wrappedMainTokenAddr,
+        address dacAddr
+    ) internal {
+        IERC20(config.underlyingToken).safeTransferFrom(msg.sender, address(this), config.treasurySeedAmount);
+        IERC20(config.underlyingToken).forceApprove(wrappedMainTokenAddr, config.treasurySeedAmount);
+        WrappedMainToken(wrappedMainTokenAddr).wrapTo(address(this), config.treasurySeedAmount);
+        WrappedMainToken(wrappedMainTokenAddr).transfer(DACCell(dacAddr).getAssetController(), config.treasurySeedAmount);
+        DACCell(dacAddr).recordBootstrapTreasuryDeposit(wrappedMainTokenAddr, config.treasurySeedAmount);
     }
 }

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {CapitalCall} from "./Structs.sol";
+import {AssetCapability} from "./GovernanceStructs.sol";
 
 interface IAssetController {
     function initialize(address _dacCell, address _mainToken) external;
@@ -52,4 +53,5 @@ interface IAssetController {
     function totalReleasedVotable() external view returns (uint256);
     function mainTokenObligations() external view returns (uint256);
     function treasuryHolder() external view returns (address);
+    function supportsCapability(AssetCapability capability) external view returns (bool);
 }

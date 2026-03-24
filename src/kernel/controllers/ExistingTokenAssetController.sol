@@ -7,9 +7,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {CapitalCall} from "../../interfaces/Structs.sol";
+import {AssetCapability} from "../../interfaces/GovernanceStructs.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {WrappedMainToken} from "../tokens/WrappedMainToken.sol";
+import {CapitalCallState} from "../interfaces/Structs.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract ExistingTokenAssetController is IAssetController, Initializable {
@@ -24,6 +26,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     IERC20 public underlyingToken;
     address public dealManager;
 
+    mapping(bytes32 => CapitalCallState) private capitalCalls;
     mapping(address => uint256) private treasuryBalances;
     mapping(address => uint256) private committedBalances;
 
@@ -80,25 +83,58 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     }
 
     function createCapitalCall(
-        uint256,
-        address,
-        address,
-        uint256,
-        uint256
-    ) external pure returns (bytes32) {
-        revert DACErrorsLib.NotAllowed();
+        uint256 id,
+        address treasuryToken,
+        address recipient,
+        uint256 amount,
+        uint256 cashAmount
+    ) external onlyDACCell returns (bytes32 callHash) {
+        require(_freeBalance(address(mainToken)) >= amount, DACErrorsLib.InsufficientTreasury());
+
+        CapitalCall memory call = CapitalCall({
+            treasuryToken: treasuryToken,
+            nonce: id,
+            tokenRecipient: recipient,
+            tokenAmount: amount,
+            cashAmount: cashAmount
+        });
+
+        callHash = keccak256(abi.encode(call));
+
+        capitalCalls[callHash] = CapitalCallState({
+            call: call,
+            fulfilled: false
+        });
     }
 
-    function fulfillCapitalCall(CapitalCall calldata)
+    function fulfillCapitalCall(CapitalCall calldata call)
         external
-        pure
-        returns (bytes32, CapitalCall memory)
+        onlyDACCell
+        returns (bytes32 callHash, CapitalCall memory storedCall)
     {
-        revert DACErrorsLib.NotAllowed();
+        callHash = keccak256(abi.encode(call));
+        require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
+
+        storedCall = capitalCalls[callHash].call;
+        require(storedCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+        require(_freeBalance(address(mainToken)) >= storedCall.tokenAmount, DACErrorsLib.InsufficientTreasury());
+
+        require(
+            IERC20(storedCall.treasuryToken).transferFrom(storedCall.tokenRecipient, address(this), storedCall.cashAmount),
+            DACErrorsLib.TransferFailed()
+        );
+
+        treasuryBalances[storedCall.treasuryToken] += storedCall.cashAmount;
+        treasuryBalances[address(mainToken)] -= storedCall.tokenAmount;
+
+        require(IERC20(address(mainToken)).transfer(storedCall.tokenRecipient, storedCall.tokenAmount), DACErrorsLib.TransferFailed());
+        capitalCalls[callHash].fulfilled = true;
     }
 
-    function getCapitalCall(bytes32) external pure returns (CapitalCall memory) {
-        revert DACErrorsLib.NotAllowed();
+    function getCapitalCall(bytes32 callHash) external view returns (CapitalCall memory capitalCall) {
+        require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
+        capitalCall = capitalCalls[callHash].call;
+        require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
     }
 
     function recordDividendPayout(uint256 proposalId, address token, uint256 totalPayout, bytes32 merkleRoot)
@@ -226,6 +262,13 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
     function treasuryHolder() external view returns (address) {
         return address(this);
+    }
+
+    function supportsCapability(AssetCapability capability) external pure returns (bool) {
+        return capability == AssetCapability.WRAP
+            || capability == AssetCapability.UNWRAP
+            || capability == AssetCapability.RESERVE_BACKED_CLAIMS
+            || capability == AssetCapability.CAPITAL_CALL;
     }
 
     function treasuryBalance(address token) external view returns (uint256) {
