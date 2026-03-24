@@ -287,13 +287,14 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         return true;
     }
 
-    function recordBootstrapTreasuryDeposit(address token, uint256 amount) external {
+    function recordBootstrapTreasuryDeposit(address token, uint256 amount, address depositor) external {
         require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
         require(cellStarted, DACErrorsLib.NotInitialized());
         require(amount > 0, DACErrorsLib.NotAllowed());
+        require(depositor != address(0), DACErrorsLib.NotAllowed());
 
         IAssetController(assetController).recordTreasuryDeposit(token, amount);
-        emit DACEventsLib.TreasuryDeposit(token, amount, msg.sender);
+        emit DACEventsLib.TreasuryDeposit(token, amount, depositor);
     }
 
     function logLegalWrapperMessage(bytes4 kind, bytes calldata message) 

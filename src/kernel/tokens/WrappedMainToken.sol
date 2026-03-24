@@ -8,6 +8,7 @@ import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/
 import {ERC20VotesUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
 contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable {
     IERC20 public underlying;
@@ -47,6 +48,8 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
         _mint(recipient, amount);
         _autoDelegate(recipient);
 
+        emit DACEventsLib.Wrapped(msg.sender, recipient, amount);
+
         return amount;
     }
 
@@ -60,6 +63,8 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
 
         _burn(msg.sender, amount);
         require(underlying.transfer(recipient, amount), DACErrorsLib.TransferFailed());
+
+        emit DACEventsLib.Unwrapped(msg.sender, recipient, amount);
 
         return amount;
     }

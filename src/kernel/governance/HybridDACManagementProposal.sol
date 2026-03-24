@@ -369,8 +369,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
             emit DACEventsLib.ProposalResolved(
                 yesVotes,
                 noVotes,
-                resolvedOutcome,
-                false
+                resolvedOutcome
             );
 
             emit DACEventsLib.ProposalPhaseTransition(

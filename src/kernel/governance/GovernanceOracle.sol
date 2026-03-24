@@ -28,6 +28,7 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
 
         if (initialPublisher != address(0)) {
             _grantRole(PUBLISHER_ROLE, initialPublisher);
+            emit DACEventsLib.GovernanceOraclePublisherUpdated(address(this), initialPublisher, true);
         }
     }
 
@@ -39,6 +40,8 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         } else {
             _revokeRole(PUBLISHER_ROLE, publisher);
         }
+
+        emit DACEventsLib.GovernanceOraclePublisherUpdated(address(this), publisher, allowed);
     }
 
     function isPublisher(address publisher) external view returns (bool) {

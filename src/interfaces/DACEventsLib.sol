@@ -9,6 +9,16 @@ library DACEventsLib {
     // DAC Factory Events
 
     event DACDeployed(address indexed dac, address mainToken, address agentToken, bool init);
+    event ExistingTokenDACDeployed(
+        address indexed dac,
+        address indexed underlyingToken,
+        address indexed wrappedToken,
+        address governanceOracle,
+        address agentToken,
+        address assetController,
+        address creator,
+        uint256 treasurySeedAmount
+    );
 
     // DAC Cell Events
 
@@ -116,15 +126,13 @@ library DACEventsLib {
         uint256 totalPower, 
         uint256 quorum, 
         uint256 blockingQuorum, 
-        uint256 snapshotTime,
+        uint256 snapshotReference,
         uint256 endTime,
-        bool vetoRight
+        bool challengeable
     );
 
     event Voted(address indexed voter, bool support, uint256 weight);
-    event VetoCasted();
-
-    event ProposalResolved(uint256 yesVotes, uint256 noVotes, bool passed, bool vetoed);
+    event ProposalResolved(uint256 yesVotes, uint256 noVotes, bool passed);
     event ProposalPhaseTransition(
         uint256 indexed id,
         uint8 indexed phase,
@@ -141,6 +149,7 @@ library DACEventsLib {
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     );
+    event GovernanceOraclePublisherUpdated(address indexed oracle, address indexed publisher, bool allowed);
     event GovernanceOracleDeactivated(address indexed oracle, address indexed caller);
     event MerkleVoted(uint256 indexed id, address indexed voter, bool support, uint256 weight, uint256 index);
 
@@ -152,7 +161,7 @@ library DACEventsLib {
     
     event EarlyReturnsToggled(uint256 indexed id, bool enabled);
     event WhitelistToggled(uint256 indexed id, bool enabled);
-    event VetoRightEnabled(uint256 indexed id);
+    event DealChallengeEnabled(uint256 indexed id);
 
     event DealManagementProposalCreated(
         address indexed cell,
@@ -240,4 +249,9 @@ library DACEventsLib {
     event StakesSlashed(address indexed dac, uint256 indexed id, address indexed deal, uint256 slashAmount);
     
     event RewardsClaimed(address indexed dac, address indexed agent, address indexed deal, uint256 amount);
+
+    // Wrapped main token events
+
+    event Wrapped(address indexed caller, address indexed recipient, uint256 amount);
+    event Unwrapped(address indexed caller, address indexed recipient, uint256 amount);
 }

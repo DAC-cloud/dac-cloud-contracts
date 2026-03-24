@@ -176,8 +176,7 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
             emit DACEventsLib.ProposalResolved(
                 yesVotes,
                 noVotes,
-                resolvedOutcome,
-                false
+                resolvedOutcome
             );
         }
     }

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 import {ProposalParams} from "../src/interfaces/Structs.sol";
 import {GovernanceStrategyConfig, ProposalPhase} from "../src/interfaces/GovernanceStructs.sol";
 import {GovernanceOracle} from "../src/kernel/governance/GovernanceOracle.sol";
@@ -168,6 +169,18 @@ contract HybridDACManagementProposalTest is Test {
 
         vm.prank(publisher);
         oracle.publishSnapshot(999, 1, keccak256("root"), 1);
+    }
+
+    function test_oraclePublisherUpdate_emitsEvent() external {
+        address nextPublisher = makeAddr("next-publisher");
+
+        vm.expectEmit(true, true, false, true, address(oracle));
+        emit DACEventsLib.GovernanceOraclePublisherUpdated(address(oracle), nextPublisher, true);
+        oracle.setPublisher(nextPublisher, true);
+
+        vm.expectEmit(true, true, false, true, address(oracle));
+        emit DACEventsLib.GovernanceOraclePublisherUpdated(address(oracle), nextPublisher, false);
+        oracle.setPublisher(nextPublisher, false);
     }
 
     function test_oracleDeactivation_resetsPrimaryFlowIntoFallbackWarmup() external {

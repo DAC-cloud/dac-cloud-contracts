@@ -455,7 +455,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             if (!vetoEnabled) {
                 vetoEnabled = true;
 
-                emit DACEventsLib.VetoRightEnabled(id);
+                emit DACEventsLib.DealChallengeEnabled(id);
             }
         }
 

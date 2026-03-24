@@ -138,6 +138,16 @@ contract DACFactory is IDACFactory {
         _seedExistingDACTreasury(config, wrappedMainTokenAddr, dacAddr);
 
         emit DACEventsLib.DACDeployed(dacAddr, wrappedMainTokenAddr, agentTokenAddr, true);
+        emit DACEventsLib.ExistingTokenDACDeployed(
+            dacAddr,
+            config.underlyingToken,
+            wrappedMainTokenAddr,
+            governanceOracleAddr,
+            agentTokenAddr,
+            dac.getAssetController(),
+            msg.sender,
+            config.treasurySeedAmount
+        );
     }
 
     function startDAC(
@@ -271,6 +281,6 @@ contract DACFactory is IDACFactory {
         IERC20(config.underlyingToken).forceApprove(wrappedMainTokenAddr, config.treasurySeedAmount);
         WrappedMainToken(wrappedMainTokenAddr).wrapTo(address(this), config.treasurySeedAmount);
         WrappedMainToken(wrappedMainTokenAddr).transfer(DACCell(dacAddr).getAssetController(), config.treasurySeedAmount);
-        DACCell(dacAddr).recordBootstrapTreasuryDeposit(wrappedMainTokenAddr, config.treasurySeedAmount);
+        DACCell(dacAddr).recordBootstrapTreasuryDeposit(wrappedMainTokenAddr, config.treasurySeedAmount, msg.sender);
     }
 }

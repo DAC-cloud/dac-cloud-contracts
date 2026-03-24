@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 import {WrappedMainToken} from "../src/kernel/tokens/WrappedMainToken.sol";
 import {UUPSProxy} from "../src/kernel/proxies/UUPSProxy.sol";
 
@@ -45,6 +46,8 @@ contract WrappedMainTokenTest is Test {
     }
 
     function test_wrapAutoDelegatesAndUnwrapsOneToOne() external {
+        vm.expectEmit(true, true, false, true, address(wrapped));
+        emit DACEventsLib.Wrapped(alice, alice, 100e18);
         vm.prank(alice);
         wrapped.wrap(100e18);
 
@@ -53,6 +56,8 @@ contract WrappedMainTokenTest is Test {
         assertEq(wrapped.getVotes(alice), 100e18);
         assertEq(wrapped.delegates(alice), alice);
 
+        vm.expectEmit(true, true, false, true, address(wrapped));
+        emit DACEventsLib.Unwrapped(alice, alice, 40e18);
         vm.prank(alice);
         wrapped.unwrap(40e18);
 
@@ -61,6 +66,8 @@ contract WrappedMainTokenTest is Test {
     }
 
     function test_wrapToDelegatesRecipient() external {
+        vm.expectEmit(true, true, false, true, address(wrapped));
+        emit DACEventsLib.Wrapped(alice, bob, 55e18);
         vm.prank(alice);
         wrapped.wrapTo(bob, 55e18);
 

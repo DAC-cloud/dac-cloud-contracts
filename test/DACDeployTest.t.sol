@@ -151,8 +151,10 @@ contract DACDeployTest is Test {
 
         vm.startPrank(user);
         underlying.approve(address(dacFactory), config.treasurySeedAmount);
+        vm.recordLogs();
         (address dacAddress, address wrappedAddress, address existingAgentToken, address oracleAddress) =
             dacFactory.deployExistingTokenDAC(abi.encode(config), bytes32("existing"));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.stopPrank();
 
         DACCell existingDac = DACCell(dacAddress);
@@ -196,5 +198,50 @@ contract DACDeployTest is Test {
                 data: bytes("")
             })
         );
+
+        _assertExistingTokenDeployEvents(
+            logs,
+            config,
+            dacAddress,
+            wrappedAddress
+        );
+    }
+
+    function _assertExistingTokenDeployEvents(
+        Vm.Log[] memory logs,
+        ExistingDACConfig memory config,
+        address dacAddress,
+        address wrappedToken
+    ) internal view {
+        bytes32 deploySig =
+            keccak256("ExistingTokenDACDeployed(address,address,address,address,address,address,address,uint256)");
+        bytes32 treasurySig = keccak256("TreasuryDeposit(address,uint256,address)");
+
+        bool sawDeploy;
+        bool sawTreasuryDeposit;
+
+        for (uint256 i = 0; i < logs.length; ++i) {
+            Vm.Log memory log = logs[i];
+
+            if (log.topics.length > 0 && log.topics[0] == deploySig) {
+                sawDeploy = true;
+                assertEq(address(uint160(uint256(log.topics[1]))), dacAddress);
+                assertEq(address(uint160(uint256(log.topics[2]))), config.underlyingToken);
+                assertEq(address(uint160(uint256(log.topics[3]))), wrappedToken);
+            }
+
+            if (log.topics.length > 0 && log.topics[0] == treasurySig) {
+                address token = address(uint160(uint256(log.topics[1])));
+                address from = address(uint160(uint256(log.topics[2])));
+                uint256 amount = abi.decode(log.data, (uint256));
+
+                if (token == wrappedToken && from == user && amount == config.treasurySeedAmount) {
+                    sawTreasuryDeposit = true;
+                }
+            }
+        }
+
+        assertTrue(sawDeploy, "missing existing token deploy event");
+        assertTrue(sawTreasuryDeposit, "missing bootstrap treasury deposit event");
     }
 }
