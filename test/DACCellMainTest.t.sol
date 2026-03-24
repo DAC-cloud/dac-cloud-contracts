@@ -13,7 +13,12 @@ import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol";
 import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
+import {ExistingTokenAssetControllerFactory} from "../src/kernel/factories/ExistingTokenAssetControllerFactory.sol";
 import {NativeGovernanceSchemaFactory} from "../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
+import {HybridGovernanceSchemaFactory} from "../src/kernel/governance/factories/HybridGovernanceSchemaFactory.sol";
+import {GovernanceOracleFactory} from "../src/kernel/governance/factories/GovernanceOracleFactory.sol";
+import {HybridDACManagementProposalFactory} from "../src/kernel/governance/factories/HybridDACManagementProposalFactory.sol";
+import {WrappedMainTokenFactory} from "../src/kernel/tokens/factories/WrappedMainTokenFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -71,15 +76,24 @@ contract DACCellMainTest is Test {
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
-            address(new MainTokenFactory()),
-            address(new AgentTokenFactory()),
-            address(new DACCellFactory()),
-            address(new DealManagerFactory()),
-            address(new ModuleRegistryFactory()),
-            address(new NativeAssetControllerFactory()),
-            address(governanceFactory),
-            address(new NativeGovernanceSchemaFactory()),
-            address(coreModule)
+            [
+                address(new MainTokenFactory()),
+                address(new AgentTokenFactory()),
+                address(new DACCellFactory()),
+                address(new DealManagerFactory()),
+                address(new ModuleRegistryFactory()),
+                address(new NativeAssetControllerFactory()),
+                address(governanceFactory),
+                address(new NativeGovernanceSchemaFactory()),
+                address(coreModule)
+            ],
+            [
+                address(new ExistingTokenAssetControllerFactory()),
+                address(new HybridDACManagementProposalFactory()),
+                address(new HybridGovernanceSchemaFactory()),
+                address(new WrappedMainTokenFactory()),
+                address(new GovernanceOracleFactory())
+            ]
         );
 
         vm.stopPrank();

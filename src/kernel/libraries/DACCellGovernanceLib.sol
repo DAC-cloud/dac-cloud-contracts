@@ -13,9 +13,9 @@ import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
 import {DealState} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
+import {IManagementProposal} from "../../interfaces/IManagementProposal.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {AgentToken} from "../tokens/AgentToken.sol";
-import {DACManagementProposal} from "../governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "../governance/DACManagementProposals.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
@@ -151,7 +151,7 @@ library DACCellGovernanceLib {
     }
 
     function approveFunding(
-        DACManagementProposal prop,
+        IManagementProposal prop,
         mapping(address => uint256) storage treasuryBalances,
         IDealManager dealManager
     ) public {
@@ -189,11 +189,11 @@ library DACCellGovernanceLib {
     }
 
     function castVeto(
-        DACManagementProposal prop,
+        IManagementProposal prop,
         IDealManager dealManager
     ) public {
         (uint256 dealId, uint256 proposalId) = abi.decode(
-            DACManagementProposal(prop).data(), 
+            prop.data(), 
             (uint256, uint256)
         );
         
@@ -298,7 +298,6 @@ library DACCellGovernanceLib {
         uint256 evaluatorId,
         address to, 
         uint256 amount,
-        MainToken mainToken,
         mapping(address => DealState) storage dealState
     ) public {
         require(msg.sender == dealCell, DACErrorsLib.InvalidDeal(msg.sender));
@@ -322,8 +321,6 @@ library DACCellGovernanceLib {
         );
 
         dealState[dealCell].rewardsPaid += amount;
-
-        mainToken.mint(to, amount);
     }
 
     function _performTransformation(

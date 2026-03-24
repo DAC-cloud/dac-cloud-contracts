@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IVotes} from "../lib/IVotes.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {DealParams, VotingConfig, ProposalParams} from "../interfaces/Structs.sol";
@@ -9,15 +10,14 @@ import {IDACCell} from "../interfaces/IDACCell.sol";
 import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
+import {IManagementProposal} from "../interfaces/IManagementProposal.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {DealState} from "./interfaces/Structs.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
-import {MainToken} from "./tokens/MainToken.sol";
 import {AgentToken} from "./tokens/AgentToken.sol";
-import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {AbstractDealManagementType} from "./governance/AbstractDealManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
@@ -34,7 +34,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     address private dacCell;
 
     // Tokens for chickens and pigs
-    MainToken private mainToken;
+    IERC20 private mainToken;
     AgentToken private agentToken;
     
     address private moduleRegistry;
@@ -60,7 +60,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     ) public initializer {
         nextId = 1;
 
-        mainToken = MainToken(_mainToken);
+        mainToken = IERC20(_mainToken);
         agentToken = AgentToken(_agentToken);
 
         dacCell = _dacCell;
@@ -122,11 +122,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             evaluatorId,
             to, 
             amount, 
-            mainToken, 
             dealState
         );
 
-        IAssetController(assetController).consumeMintedRewards(amount);
+        IAssetController(assetController).settleMainRewardClaim(to, amount);
     }
 
     function forceReturnCapital(uint256 id) external onlyHolderOrSelf {
@@ -165,10 +164,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         );
     }
 
-    function executeProp(address msgSender, DACManagementProposal prop) external onlyDACCell {
+    function executeProp(address msgSender, IManagementProposal prop) external onlyDACCell {
         if (prop.typ() == DACManagementProposalType.ADD_EVALUATOR) {
             (uint256 dealId, bytes memory evaluatorConfig) = abi.decode(
-                DACManagementProposal(prop).data(),
+                prop.data(),
                 (uint256, bytes)
             );
 
@@ -217,7 +216,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
         else if (prop.typ() == DACManagementProposalType.DEAL_MESSAGE) {
             (uint256 dealId, bytes4 message, bytes memory data) = abi.decode(
-                DACManagementProposal(prop).data(),
+                prop.data(),
                 (uint256, bytes4, bytes)
             );
 

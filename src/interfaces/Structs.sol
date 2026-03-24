@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {GovernanceStrategyConfig} from "./GovernanceStructs.sol";
+
 struct DACConfig {
     string symbol;
     string name;
@@ -12,6 +14,17 @@ struct DACConfig {
     address treasuryToken;
     uint256 founderCommitment;
     bool dividendsEnabled;
+}
+
+struct ExistingDACConfig {
+    string symbol;
+    string name;
+    string description;
+    address underlyingToken;
+    address oracleAdmin;
+    address initialOraclePublisher;
+    bool dividendsEnabled;
+    GovernanceStrategyConfig governanceStrategy;
 }
 
 // Quorum configuration - i.e. "what are the quorum requirements for a proposal type" 

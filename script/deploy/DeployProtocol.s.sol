@@ -10,10 +10,15 @@ import {DealCellFactory} from "../../src/kernel/factories/DealCellFactory.sol";
 import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.sol";
 import {ModuleRegistryFactory} from "../../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../../src/kernel/factories/AssetControllerFactory.sol";
+import {ExistingTokenAssetControllerFactory} from "../../src/kernel/factories/ExistingTokenAssetControllerFactory.sol";
 import {DACManagementProposalFactory} from "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import {NativeGovernanceSchemaFactory} from "../../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
+import {HybridGovernanceSchemaFactory} from "../../src/kernel/governance/factories/HybridGovernanceSchemaFactory.sol";
+import {GovernanceOracleFactory} from "../../src/kernel/governance/factories/GovernanceOracleFactory.sol";
+import {HybridDACManagementProposalFactory} from "../../src/kernel/governance/factories/HybridDACManagementProposalFactory.sol";
 import {CoreManagementProposalFactory} from "../../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
+import {WrappedMainTokenFactory} from "../../src/kernel/tokens/factories/WrappedMainTokenFactory.sol";
 import {DACDealFactory} from "../../src/modules/core/deals/factories/DACDealFactory.sol";
 import {TreasuryDealFactory} from "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {MilestoneEvaluatorFactory} from "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
@@ -59,8 +64,13 @@ contract DeployProtocol is ManifestIO {
         deployment.dealManagerFactory = address(new DealManagerFactory());
         deployment.moduleRegistryFactory = address(new ModuleRegistryFactory());
         deployment.assetControllerFactory = address(new NativeAssetControllerFactory());
+        deployment.existingAssetControllerFactory = address(new ExistingTokenAssetControllerFactory());
         deployment.governanceSchemaFactory = address(new NativeGovernanceSchemaFactory());
+        deployment.hybridGovernanceSchemaFactory = address(new HybridGovernanceSchemaFactory());
         deployment.dacGovernanceFactory = address(new DACManagementProposalFactory());
+        deployment.hybridProposalFactory = address(new HybridDACManagementProposalFactory());
+        deployment.governanceOracleFactory = address(new GovernanceOracleFactory());
+        deployment.wrappedMainTokenFactory = address(new WrappedMainTokenFactory());
         deployment.coreDealGovernanceFactory = address(new CoreManagementProposalFactory());
         deployment.dacDealFactory = address(new DACDealFactory());
         deployment.treasuryDealFactory = address(new TreasuryDealFactory(config.permit2));
@@ -77,15 +87,24 @@ contract DeployProtocol is ManifestIO {
         ));
 
         deployment.dacFactory = address(new DACFactory(
-            deployment.mainTokenFactory,
-            deployment.agentTokenFactory,
-            deployment.dacCellFactory,
-            deployment.dealManagerFactory,
-            deployment.moduleRegistryFactory,
-            deployment.assetControllerFactory,
-            deployment.dacGovernanceFactory,
-            deployment.governanceSchemaFactory,
-            deployment.coreModuleFactory
+            [
+                deployment.mainTokenFactory,
+                deployment.agentTokenFactory,
+                deployment.dacCellFactory,
+                deployment.dealManagerFactory,
+                deployment.moduleRegistryFactory,
+                deployment.assetControllerFactory,
+                deployment.dacGovernanceFactory,
+                deployment.governanceSchemaFactory,
+                deployment.coreModuleFactory
+            ],
+            [
+                deployment.existingAssetControllerFactory,
+                deployment.hybridProposalFactory,
+                deployment.hybridGovernanceSchemaFactory,
+                deployment.wrappedMainTokenFactory,
+                deployment.governanceOracleFactory
+            ]
         ));
 
         return deployment;
@@ -102,9 +121,19 @@ contract DeployProtocol is ManifestIO {
         deployment.dealManagerImpl = DealManagerFactory(deployment.dealManagerFactory).referenceImpl();
         deployment.moduleRegistryImpl = ModuleRegistryFactory(deployment.moduleRegistryFactory).referenceImpl();
         deployment.assetControllerImpl = NativeAssetControllerFactory(deployment.assetControllerFactory).referenceImpl();
+        deployment.existingAssetControllerImpl =
+            ExistingTokenAssetControllerFactory(deployment.existingAssetControllerFactory).referenceImpl();
         deployment.governanceSchemaImpl =
             NativeGovernanceSchemaFactory(deployment.governanceSchemaFactory).referenceImpl();
+        deployment.hybridGovernanceSchemaImpl =
+            HybridGovernanceSchemaFactory(deployment.hybridGovernanceSchemaFactory).referenceImpl();
         deployment.dacGovernanceImpl = DACManagementProposalFactory(deployment.dacGovernanceFactory).referenceImpl();
+        deployment.hybridProposalImpl =
+            HybridDACManagementProposalFactory(deployment.hybridProposalFactory).referenceImpl();
+        deployment.governanceOracleImpl =
+            GovernanceOracleFactory(deployment.governanceOracleFactory).referenceImpl();
+        deployment.wrappedMainTokenImpl =
+            WrappedMainTokenFactory(deployment.wrappedMainTokenFactory).referenceImpl();
         deployment.coreDealGovernanceImpl =
             CoreManagementProposalFactory(deployment.coreDealGovernanceFactory).referenceImpl();
 

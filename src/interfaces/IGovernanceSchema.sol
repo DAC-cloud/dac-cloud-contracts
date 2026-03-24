@@ -4,14 +4,6 @@ pragma solidity ^0.8.20;
 import {ProposalParams, VotingConfig} from "./Structs.sol";
 
 interface IGovernanceSchema {
-    function initialize(
-        address _dacCell,
-        address _mainToken,
-        address _dealManager,
-        address _proposalFactory,
-        VotingConfig calldata _votingConfig
-    ) external;
-
     function createProposal(
         address creator,
         ProposalParams calldata params,

@@ -9,9 +9,14 @@ import {DACCellFactory} from "../../src/kernel/factories/DACCellFactory.sol";
 import {DealManagerFactory} from "../../src/kernel/factories/DealManagerFactory.sol";
 import {ModuleRegistryFactory} from "../../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../../src/kernel/factories/AssetControllerFactory.sol";
+import {ExistingTokenAssetControllerFactory} from "../../src/kernel/factories/ExistingTokenAssetControllerFactory.sol";
 import {DACManagementProposalFactory} from "../../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import {NativeGovernanceSchemaFactory} from "../../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
+import {HybridGovernanceSchemaFactory} from "../../src/kernel/governance/factories/HybridGovernanceSchemaFactory.sol";
+import {GovernanceOracleFactory} from "../../src/kernel/governance/factories/GovernanceOracleFactory.sol";
+import {HybridDACManagementProposalFactory} from "../../src/kernel/governance/factories/HybridDACManagementProposalFactory.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src/kernel/tokens/factories/TokenFactories.sol";
+import {WrappedMainTokenFactory} from "../../src/kernel/tokens/factories/WrappedMainTokenFactory.sol";
 import {CoreModuleFactory} from "../../src/modules/core/CoreModuleFactory.sol";
 import {TreasuryDealFactory} from "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 
@@ -63,6 +68,31 @@ contract SmokeCheckProtocol is ManifestIO {
             deployment.governanceSchemaFactory
         );
         _expect(
+            "DACFactory.existingAssetControllerFactory",
+            DACFactory(deployment.dacFactory).existingAssetControllerFactory(),
+            deployment.existingAssetControllerFactory
+        );
+        _expect(
+            "DACFactory.hybridProposalFactory",
+            DACFactory(deployment.dacFactory).hybridProposalFactory(),
+            deployment.hybridProposalFactory
+        );
+        _expect(
+            "DACFactory.hybridGovernanceSchemaFactory",
+            DACFactory(deployment.dacFactory).hybridGovernanceSchemaFactory(),
+            deployment.hybridGovernanceSchemaFactory
+        );
+        _expect(
+            "DACFactory.wrappedMainTokenFactory",
+            DACFactory(deployment.dacFactory).wrappedMainTokenFactory(),
+            deployment.wrappedMainTokenFactory
+        );
+        _expect(
+            "DACFactory.governanceOracleFactory",
+            DACFactory(deployment.dacFactory).governanceOracleFactory(),
+            deployment.governanceOracleFactory
+        );
+        _expect(
             "DACFactory.governanceFactory",
             DACFactory(deployment.dacFactory).governanceFactory(),
             deployment.dacGovernanceFactory
@@ -109,14 +139,39 @@ contract SmokeCheckProtocol is ManifestIO {
             deployment.assetControllerImpl
         );
         _expect(
+            "ExistingTokenAssetControllerFactory.referenceImpl",
+            ExistingTokenAssetControllerFactory(deployment.existingAssetControllerFactory).referenceImpl(),
+            deployment.existingAssetControllerImpl
+        );
+        _expect(
             "NativeGovernanceSchemaFactory.referenceImpl",
             NativeGovernanceSchemaFactory(deployment.governanceSchemaFactory).referenceImpl(),
             deployment.governanceSchemaImpl
         );
         _expect(
+            "HybridGovernanceSchemaFactory.referenceImpl",
+            HybridGovernanceSchemaFactory(deployment.hybridGovernanceSchemaFactory).referenceImpl(),
+            deployment.hybridGovernanceSchemaImpl
+        );
+        _expect(
             "DACManagementProposalFactory.referenceImpl",
             DACManagementProposalFactory(deployment.dacGovernanceFactory).referenceImpl(),
             deployment.dacGovernanceImpl
+        );
+        _expect(
+            "HybridDACManagementProposalFactory.referenceImpl",
+            HybridDACManagementProposalFactory(deployment.hybridProposalFactory).referenceImpl(),
+            deployment.hybridProposalImpl
+        );
+        _expect(
+            "GovernanceOracleFactory.referenceImpl",
+            GovernanceOracleFactory(deployment.governanceOracleFactory).referenceImpl(),
+            deployment.governanceOracleImpl
+        );
+        _expect(
+            "WrappedMainTokenFactory.referenceImpl",
+            WrappedMainTokenFactory(deployment.wrappedMainTokenFactory).referenceImpl(),
+            deployment.wrappedMainTokenImpl
         );
 
         _expect(

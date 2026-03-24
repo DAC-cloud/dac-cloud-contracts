@@ -9,11 +9,10 @@ import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {CapitalCall} from "../../interfaces/Structs.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
-import {MainToken} from "../tokens/MainToken.sol";
-import {CapitalCallState} from "../interfaces/Structs.sol";
+import {WrappedMainToken} from "../tokens/WrappedMainToken.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
-contract NativeAssetController is IAssetController, Initializable {
+contract ExistingTokenAssetController is IAssetController, Initializable {
     struct DividendPayoutState {
         address token;
         uint256 totalPayout;
@@ -21,30 +20,31 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     address public dacCell;
-    MainToken public mainToken;
+    WrappedMainToken public mainToken;
+    IERC20 public underlyingToken;
     address public dealManager;
 
-    mapping(bytes32 => CapitalCallState) private capitalCalls;
     mapping(address => uint256) private treasuryBalances;
+    mapping(address => uint256) private committedBalances;
 
     mapping(uint256 => DividendPayoutState) private dividendPayouts;
     mapping(bytes32 => bool) private dividendClaimed;
 
     uint256 private _mainTokenObligations;
-    uint256 private unreleasedMainTokens;
-    mapping(address => uint256) private lockedMainTokens;
     mapping(address => bool) private controlledAddresses;
+    uint256 private controlledWrappedBalance;
 
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(address _dacCell, address _mainToken) external initializer {
+    function initialize(address _dacCell, address _wrappedMainToken) external initializer {
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
-        require(_mainToken != address(0), DACErrorsLib.NotAllowed());
+        require(_wrappedMainToken != address(0), DACErrorsLib.NotAllowed());
 
         dacCell = _dacCell;
-        mainToken = MainToken(_mainToken);
+        mainToken = WrappedMainToken(_wrappedMainToken);
+        underlyingToken = IERC20(mainToken.underlying());
 
         controlledAddresses[_dacCell] = true;
         controlledAddresses[address(this)] = true;
@@ -80,64 +80,40 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     function createCapitalCall(
-        uint256 id,
-        address treasuryToken,
-        address recipient,
-        uint256 amount,
-        uint256 cashAmount
-    ) external onlyDACCell returns (bytes32 callHash) {
-        CapitalCall memory call = CapitalCall({
-            treasuryToken: treasuryToken,
-            nonce: id,
-            tokenRecipient: recipient,
-            tokenAmount: amount,
-            cashAmount: cashAmount
-        });
-
-        callHash = keccak256(abi.encode(call));
-
-        capitalCalls[callHash] = CapitalCallState({
-            call: call,
-            fulfilled: false
-        });
+        uint256,
+        address,
+        address,
+        uint256,
+        uint256
+    ) external pure returns (bytes32) {
+        revert DACErrorsLib.NotAllowed();
     }
 
-    function fulfillCapitalCall(CapitalCall calldata call)
+    function fulfillCapitalCall(CapitalCall calldata)
         external
-        onlyDACCell
-        returns (bytes32 callHash, CapitalCall memory storedCall)
+        pure
+        returns (bytes32, CapitalCall memory)
     {
-        callHash = keccak256(abi.encode(call));
-        require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
-
-        storedCall = capitalCalls[callHash].call;
-        require(storedCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
-
-        require(
-            IERC20(call.treasuryToken).transferFrom(storedCall.tokenRecipient, address(this), call.cashAmount),
-            DACErrorsLib.TransferFailed()
-        );
-
-        treasuryBalances[call.treasuryToken] += call.cashAmount;
-        mainToken.mint(call.tokenRecipient, call.tokenAmount);
-        capitalCalls[callHash].fulfilled = true;
+        revert DACErrorsLib.NotAllowed();
     }
 
-    function getCapitalCall(bytes32 callHash) external view returns (CapitalCall memory capitalCall) {
-        require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
-        capitalCall = capitalCalls[callHash].call;
-        require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+    function getCapitalCall(bytes32) external pure returns (CapitalCall memory) {
+        revert DACErrorsLib.NotAllowed();
     }
 
     function recordDividendPayout(uint256 proposalId, address token, uint256 totalPayout, bytes32 merkleRoot)
         external
         onlyDACCell
     {
+        require(dividendPayouts[proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
+        require(_freeBalance(token) >= totalPayout, DACErrorsLib.InsufficientTreasury());
+
         dividendPayouts[proposalId] = DividendPayoutState({
             token: token,
             totalPayout: totalPayout,
             merkleRoot: merkleRoot
         });
+        committedBalances[token] += totalPayout;
     }
 
     function claimDividend(
@@ -158,6 +134,8 @@ contract NativeAssetController is IAssetController, Initializable {
 
         dividendClaimed[claimedKey] = true;
         token = dividendPayouts[proposalId].token;
+        committedBalances[token] -= amount;
+        treasuryBalances[token] -= amount;
 
         require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
     }
@@ -174,7 +152,7 @@ contract NativeAssetController is IAssetController, Initializable {
         address fundingToken = IDealCell(dealCell).fundingTranche(trancheId).token;
         uint256 fundingAmount = IDealCell(dealCell).fundingTranche(trancheId).amount;
 
-        require(treasuryBalances[fundingToken] >= fundingAmount, DACErrorsLib.InsufficientTreasury());
+        require(_freeBalance(fundingToken) >= fundingAmount, DACErrorsLib.InsufficientTreasury());
 
         if (fundingAmount > 0) {
             treasuryBalances[fundingToken] -= fundingAmount;
@@ -184,32 +162,32 @@ contract NativeAssetController is IAssetController, Initializable {
         }
 
         if (rewardsLimit > 0) {
-            require(
-                (mainToken.totalSupply() + _mainTokenObligations) + rewardsLimit <= mainToken.maxSupply(),
-                DACErrorsLib.InsufficientRewards()
-            );
-
+            require(_freeBalance(address(mainToken)) >= rewardsLimit, DACErrorsLib.InsufficientRewards());
+            committedBalances[address(mainToken)] += rewardsLimit;
             _mainTokenObligations += rewardsLimit;
         }
     }
 
     function settleMainRewardClaim(address to, uint256 amount) external onlyDealManager {
+        committedBalances[address(mainToken)] -= amount;
+        treasuryBalances[address(mainToken)] -= amount;
         _mainTokenObligations -= amount;
-        mainToken.mint(to, amount);
+
+        require(IERC20(address(mainToken)).transfer(to, amount), DACErrorsLib.TransferFailed());
     }
 
     function releaseUnusedMintRewards(uint256 amount) external onlyDealManager {
+        committedBalances[address(mainToken)] -= amount;
         _mainTokenObligations -= amount;
     }
 
-    function mintMainToTreasury(uint256 amount) external onlyDACCell {
-        mainToken.mint(address(this), amount);
-        treasuryBalances[address(mainToken)] += amount;
+    function mintMainToTreasury(uint256) external pure {
+        revert DACErrorsLib.NotAllowed();
     }
 
-    function burnMainFromTreasury(uint256 amount) external onlyDACCell {
-        treasuryBalances[address(mainToken)] -= amount;
-        mainToken.burn(amount);
+    function burnMainFromTreasury(uint256 amount) external view onlyDACCell {
+        require(_freeBalance(address(mainToken)) >= amount, DACErrorsLib.InsufficientTreasury());
+        revert DACErrorsLib.NotAllowed();
     }
 
     function delegateVotes(address token, address delegatee) external onlyDACCell {
@@ -219,42 +197,27 @@ contract NativeAssetController is IAssetController, Initializable {
     function registerControlledAddress(address controlled) external onlyDealManager {
         require(controlled != address(0), DACErrorsLib.NotAllowed());
         require(controlled != address(mainToken), DACErrorsLib.NotAllowed());
-
+        if (controlledAddresses[controlled]) return;
         controlledAddresses[controlled] = true;
+        controlledWrappedBalance += IERC20(address(mainToken)).balanceOf(controlled);
     }
 
-    function onMainMove(address from, address to, uint256 amount) external onlyDealManager {
-        if (from == address(0)) {
-            if (controlledAddresses[to]) {
-                lockedMainTokens[to] += amount;
-                unreleasedMainTokens += amount;
-            }
-            return;
+    function onMainMove(address from, address to, uint256 amount) external onlyWrappedMainToken {
+        if (from != address(0) && controlledAddresses[from]) {
+            controlledWrappedBalance -= amount;
         }
-
-        if (controlledAddresses[from]) {
-            if (lockedMainTokens[from] < amount) {
-                amount = lockedMainTokens[from];
-            }
-
-            lockedMainTokens[from] -= amount;
-            if (controlledAddresses[to]) {
-                lockedMainTokens[to] += amount;
-            } else {
-                unreleasedMainTokens -= amount;
-            }
+        if (to != address(0) && controlledAddresses[to]) {
+            controlledWrappedBalance += amount;
         }
     }
 
-    function onMainDelegate(address from, address to) external view onlyDealManager {
+    function onMainDelegate(address from, address to) external view onlyWrappedMainToken {
         require(!controlledAddresses[from], DACErrorsLib.NoVotingPower());
         require(!controlledAddresses[to], DACErrorsLib.NoVotingPower());
     }
 
     function totalReleasedVotable() external view returns (uint256) {
-        return (mainToken.totalSupply() - unreleasedMainTokens)
-            - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell])
-            - (mainToken.balanceOf(address(this)) - lockedMainTokens[address(this)]);
+        return IERC20(address(mainToken)).totalSupply() - controlledWrappedBalance;
     }
 
     function mainTokenObligations() external view returns (uint256) {
@@ -265,21 +228,34 @@ contract NativeAssetController is IAssetController, Initializable {
         return address(this);
     }
 
+    function treasuryBalance(address token) external view returns (uint256) {
+        return treasuryBalances[token];
+    }
+
+    function committedBalance(address token) external view returns (uint256) {
+        return committedBalances[token];
+    }
+
+    function freeBalance(address token) external view returns (uint256) {
+        return _freeBalance(token);
+    }
+
+    function _freeBalance(address token) internal view returns (uint256) {
+        return treasuryBalances[token] - committedBalances[token];
+    }
+
     modifier onlyDACCell() {
-        _onlyDACCell();
+        require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
         _;
     }
 
     modifier onlyDealManager() {
-        _onlyDealManager();
+        require(msg.sender == dealManager, DACErrorsLib.NotAuthorized());
         _;
     }
 
-    function _onlyDACCell() internal view {
-        require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
-    }
-
-    function _onlyDealManager() internal view {
-        require(msg.sender == dealManager, DACErrorsLib.NotAuthorized());
+    modifier onlyWrappedMainToken() {
+        require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
+        _;
     }
 }

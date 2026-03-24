@@ -8,6 +8,7 @@ import {Deal} from "../src/kernel/Deal.sol";
 import {DealCell} from "../src/kernel/DealCell.sol";
 import {DealManager} from "../src/kernel/DealManager.sol";
 import {DACManagementProposal} from "../src/kernel/governance/DACManagementProposal.sol";
+import {IManagementProposal} from "../src/interfaces/IManagementProposal.sol";
 
 contract DirectAccessControlTest is DACTestBase {
     address public agent1 = makeAddr("agent1");
@@ -131,7 +132,7 @@ contract DirectAccessControlTest is DACTestBase {
 
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
-        DealManager(dealManager).executeProp(outsider, DACManagementProposal(address(0)));
+        DealManager(dealManager).executeProp(outsider, IManagementProposal(address(0)));
 
         vm.prank(outsider);
         vm.expectRevert();

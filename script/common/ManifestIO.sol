@@ -3,7 +3,14 @@ pragma solidity ^0.8.20;
 
 import {stdJson} from "forge-std/StdJson.sol";
 import {ScriptConfig} from "./ScriptConfig.sol";
-import {BasicDACSeed, ChildDACFlowSeed, ProtocolDeployment, TreasuryFlowSeed} from "./ScriptTypes.sol";
+import {
+    BasicDACSeed,
+    ChildDACFlowSeed,
+    ExistingDACSeed,
+    ExistingGovernanceFlowSeed,
+    ProtocolDeployment,
+    TreasuryFlowSeed
+} from "./ScriptTypes.sol";
 
 abstract contract ManifestIO is ScriptConfig {
     using stdJson for string;
@@ -34,10 +41,20 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeAddress(root, "moduleRegistryImpl", deployment.moduleRegistryImpl);
         vm.serializeAddress(root, "assetControllerFactory", deployment.assetControllerFactory);
         vm.serializeAddress(root, "assetControllerImpl", deployment.assetControllerImpl);
+        vm.serializeAddress(root, "existingAssetControllerFactory", deployment.existingAssetControllerFactory);
+        vm.serializeAddress(root, "existingAssetControllerImpl", deployment.existingAssetControllerImpl);
         vm.serializeAddress(root, "governanceSchemaFactory", deployment.governanceSchemaFactory);
         vm.serializeAddress(root, "governanceSchemaImpl", deployment.governanceSchemaImpl);
+        vm.serializeAddress(root, "hybridGovernanceSchemaFactory", deployment.hybridGovernanceSchemaFactory);
+        vm.serializeAddress(root, "hybridGovernanceSchemaImpl", deployment.hybridGovernanceSchemaImpl);
         vm.serializeAddress(root, "dacGovernanceFactory", deployment.dacGovernanceFactory);
         vm.serializeAddress(root, "dacGovernanceImpl", deployment.dacGovernanceImpl);
+        vm.serializeAddress(root, "hybridProposalFactory", deployment.hybridProposalFactory);
+        vm.serializeAddress(root, "hybridProposalImpl", deployment.hybridProposalImpl);
+        vm.serializeAddress(root, "governanceOracleFactory", deployment.governanceOracleFactory);
+        vm.serializeAddress(root, "governanceOracleImpl", deployment.governanceOracleImpl);
+        vm.serializeAddress(root, "wrappedMainTokenFactory", deployment.wrappedMainTokenFactory);
+        vm.serializeAddress(root, "wrappedMainTokenImpl", deployment.wrappedMainTokenImpl);
         vm.serializeAddress(root, "coreDealGovernanceFactory", deployment.coreDealGovernanceFactory);
         vm.serializeAddress(root, "coreDealGovernanceImpl", deployment.coreDealGovernanceImpl);
         vm.serializeAddress(root, "dacDealFactory", deployment.dacDealFactory);
@@ -79,10 +96,20 @@ abstract contract ManifestIO is ScriptConfig {
         deployment.moduleRegistryImpl = json.readAddress(".moduleRegistryImpl");
         deployment.assetControllerFactory = json.readAddress(".assetControllerFactory");
         deployment.assetControllerImpl = json.readAddress(".assetControllerImpl");
+        deployment.existingAssetControllerFactory = json.readAddress(".existingAssetControllerFactory");
+        deployment.existingAssetControllerImpl = json.readAddress(".existingAssetControllerImpl");
         deployment.governanceSchemaFactory = json.readAddress(".governanceSchemaFactory");
         deployment.governanceSchemaImpl = json.readAddress(".governanceSchemaImpl");
+        deployment.hybridGovernanceSchemaFactory = json.readAddress(".hybridGovernanceSchemaFactory");
+        deployment.hybridGovernanceSchemaImpl = json.readAddress(".hybridGovernanceSchemaImpl");
         deployment.dacGovernanceFactory = json.readAddress(".dacGovernanceFactory");
         deployment.dacGovernanceImpl = json.readAddress(".dacGovernanceImpl");
+        deployment.hybridProposalFactory = json.readAddress(".hybridProposalFactory");
+        deployment.hybridProposalImpl = json.readAddress(".hybridProposalImpl");
+        deployment.governanceOracleFactory = json.readAddress(".governanceOracleFactory");
+        deployment.governanceOracleImpl = json.readAddress(".governanceOracleImpl");
+        deployment.wrappedMainTokenFactory = json.readAddress(".wrappedMainTokenFactory");
+        deployment.wrappedMainTokenImpl = json.readAddress(".wrappedMainTokenImpl");
         deployment.coreDealGovernanceFactory = json.readAddress(".coreDealGovernanceFactory");
         deployment.coreDealGovernanceImpl = json.readAddress(".coreDealGovernanceImpl");
         deployment.dacDealFactory = json.readAddress(".dacDealFactory");
@@ -142,6 +169,133 @@ abstract contract ManifestIO is ScriptConfig {
         seed.founderCommitment = json.readUint(".founderCommitment");
         seed.dividendsEnabled = json.readBool(".dividendsEnabled");
         seed.usedMockTreasuryToken = json.readBool(".usedMockTreasuryToken");
+    }
+
+    function writeExistingDACSeedManifest(ExistingDACSeed memory seed) internal returns (string memory path) {
+        string memory root = "existingDac";
+
+        vm.createDir(deploymentsRoot(), true);
+        vm.createDir(chainDeploymentsRoot(), true);
+
+        vm.serializeUint(root, "chainId", seed.chainId);
+        vm.serializeUint(root, "blockNumber", seed.blockNumber);
+        vm.serializeString(root, "label", seed.label);
+        vm.serializeAddress(root, "broadcaster", seed.broadcaster);
+        vm.serializeAddress(root, "founder", seed.founder);
+        vm.serializeAddress(root, "dacFactory", seed.dacFactory);
+        vm.serializeAddress(root, "dac", seed.dac);
+        vm.serializeAddress(root, "mainToken", seed.mainToken);
+        vm.serializeAddress(root, "agentToken", seed.agentToken);
+        vm.serializeAddress(root, "dealManager", seed.dealManager);
+        vm.serializeAddress(root, "assetController", seed.assetController);
+        vm.serializeAddress(root, "underlyingToken", seed.underlyingToken);
+        vm.serializeAddress(root, "governanceOracle", seed.governanceOracle);
+        vm.serializeUint(root, "wrapAmount", seed.wrapAmount);
+        vm.serializeUint(root, "treasurySeedAmount", seed.treasurySeedAmount);
+        vm.serializeBool(root, "dividendsEnabled", seed.dividendsEnabled);
+        string memory json = vm.serializeBool(root, "usedMockUnderlyingToken", seed.usedMockUnderlyingToken);
+
+        path = existingDACSeedManifestPath(seed.label);
+        vm.writeJson(json, path);
+    }
+
+    function loadExistingDACSeedManifest(string memory label) internal view returns (ExistingDACSeed memory seed) {
+        string memory json = vm.readFile(existingDACSeedManifestPath(label));
+
+        seed.chainId = json.readUint(".chainId");
+        seed.blockNumber = json.readUint(".blockNumber");
+        seed.label = json.readString(".label");
+        seed.broadcaster = json.readAddress(".broadcaster");
+        seed.founder = json.readAddress(".founder");
+        seed.dacFactory = json.readAddress(".dacFactory");
+        seed.dac = json.readAddress(".dac");
+        seed.mainToken = json.readAddress(".mainToken");
+        seed.agentToken = json.readAddress(".agentToken");
+        seed.dealManager = json.readAddress(".dealManager");
+        seed.assetController = json.readAddress(".assetController");
+        seed.underlyingToken = json.readAddress(".underlyingToken");
+        seed.governanceOracle = json.readAddress(".governanceOracle");
+        seed.wrapAmount = json.readUint(".wrapAmount");
+        seed.treasurySeedAmount = json.readUint(".treasurySeedAmount");
+        seed.dividendsEnabled = json.readBool(".dividendsEnabled");
+        seed.usedMockUnderlyingToken = json.readBool(".usedMockUnderlyingToken");
+    }
+
+    function writeExistingGovernanceFlowManifest(ExistingGovernanceFlowSeed memory seed)
+        internal
+        returns (string memory path)
+    {
+        string memory root = "existingGovernanceFlow";
+
+        vm.createDir(deploymentsRoot(), true);
+        vm.createDir(chainDeploymentsRoot(), true);
+
+        vm.serializeUint(root, "chainId", seed.chainId);
+        vm.serializeUint(root, "blockNumber", seed.blockNumber);
+        vm.serializeString(root, "label", seed.label);
+        vm.serializeString(root, "existingDACLabel", seed.existingDACLabel);
+        vm.serializeAddress(root, "founder", seed.founder);
+        vm.serializeAddress(root, "recipient", seed.recipient);
+        vm.serializeAddress(root, "dac", seed.dac);
+        vm.serializeAddress(root, "mainToken", seed.mainToken);
+        vm.serializeAddress(root, "agentToken", seed.agentToken);
+        vm.serializeAddress(root, "underlyingToken", seed.underlyingToken);
+        vm.serializeAddress(root, "governanceOracle", seed.governanceOracle);
+        vm.serializeUint(root, "primaryProposalId", seed.primaryProposalId);
+        vm.serializeAddress(root, "primaryProposal", seed.primaryProposal);
+        vm.serializeUint(root, "primarySnapshotBlock", seed.primarySnapshotBlock);
+        vm.serializeBytes32(root, "primaryMerkleRoot", seed.primaryMerkleRoot);
+        vm.serializeUint(root, "primaryUnderlyingAmount", seed.primaryUnderlyingAmount);
+        vm.serializeBool(root, "primaryPublished", seed.primaryPublished);
+        vm.serializeBool(root, "primaryActivated", seed.primaryActivated);
+        vm.serializeBool(root, "primaryVoted", seed.primaryVoted);
+        vm.serializeBool(root, "primaryExecuted", seed.primaryExecuted);
+        vm.serializeUint(root, "fallbackProposalId", seed.fallbackProposalId);
+        vm.serializeAddress(root, "fallbackProposal", seed.fallbackProposal);
+        vm.serializeUint(root, "fallbackSnapshotBlock", seed.fallbackSnapshotBlock);
+        vm.serializeBool(root, "fallbackWarmupStarted", seed.fallbackWarmupStarted);
+        vm.serializeBool(root, "fallbackActivated", seed.fallbackActivated);
+        vm.serializeBool(root, "fallbackVoted", seed.fallbackVoted);
+        string memory json = vm.serializeBool(root, "fallbackExecuted", seed.fallbackExecuted);
+
+        path = existingGovernanceFlowManifestPath(seed.label);
+        vm.writeJson(json, path);
+    }
+
+    function loadExistingGovernanceFlowManifest(string memory label)
+        internal
+        view
+        returns (ExistingGovernanceFlowSeed memory seed)
+    {
+        string memory json = vm.readFile(existingGovernanceFlowManifestPath(label));
+
+        seed.chainId = json.readUint(".chainId");
+        seed.blockNumber = json.readUint(".blockNumber");
+        seed.label = json.readString(".label");
+        seed.existingDACLabel = json.readString(".existingDACLabel");
+        seed.founder = json.readAddress(".founder");
+        seed.recipient = json.readAddress(".recipient");
+        seed.dac = json.readAddress(".dac");
+        seed.mainToken = json.readAddress(".mainToken");
+        seed.agentToken = json.readAddress(".agentToken");
+        seed.underlyingToken = json.readAddress(".underlyingToken");
+        seed.governanceOracle = json.readAddress(".governanceOracle");
+        seed.primaryProposalId = json.readUint(".primaryProposalId");
+        seed.primaryProposal = json.readAddress(".primaryProposal");
+        seed.primarySnapshotBlock = json.readUint(".primarySnapshotBlock");
+        seed.primaryMerkleRoot = json.readBytes32(".primaryMerkleRoot");
+        seed.primaryUnderlyingAmount = json.readUint(".primaryUnderlyingAmount");
+        seed.primaryPublished = json.readBool(".primaryPublished");
+        seed.primaryActivated = json.readBool(".primaryActivated");
+        seed.primaryVoted = json.readBool(".primaryVoted");
+        seed.primaryExecuted = json.readBool(".primaryExecuted");
+        seed.fallbackProposalId = json.readUint(".fallbackProposalId");
+        seed.fallbackProposal = json.readAddress(".fallbackProposal");
+        seed.fallbackSnapshotBlock = json.readUint(".fallbackSnapshotBlock");
+        seed.fallbackWarmupStarted = json.readBool(".fallbackWarmupStarted");
+        seed.fallbackActivated = json.readBool(".fallbackActivated");
+        seed.fallbackVoted = json.readBool(".fallbackVoted");
+        seed.fallbackExecuted = json.readBool(".fallbackExecuted");
     }
 
     function writeTreasuryFlowManifest(TreasuryFlowSeed memory seed) internal returns (string memory path) {

@@ -88,6 +88,8 @@ The deployment flow is split into two layers:
 
 - `script/scenarios/ScenarioGovernanceBase.sol`
   Shared DAC and deal proposal create/vote/execute helpers.
+- `script/scenarios/ExistingGovernanceFlowBase.sol`
+  Shared existing-token DAC hybrid-governance helpers.
 - `script/scenarios/TreasuryFlowBase.sol`
   Shared treasury-flow setup helpers.
 - `script/scenarios/ChildDACFlowBase.sol`
@@ -131,6 +133,37 @@ The deployment flow is split into two layers:
 - `BASIC_DAC_FOUNDER_ALLOCATION`
 - `BASIC_DAC_FOUNDER_COMMITMENT`
 - `BASIC_DAC_DIVIDENDS_ENABLED`
+
+### Existing-token DAC seed config
+
+- `EXISTING_DAC_LABEL`
+- `EXISTING_DAC_SYMBOL`
+- `EXISTING_DAC_NAME`
+- `EXISTING_DAC_DESCRIPTION`
+- `EXISTING_DAC_DIVIDENDS_ENABLED`
+- `EXISTING_DAC_UNDERLYING_TOKEN_ADDRESS`
+- `EXISTING_DAC_MOCK_TOKEN_DECIMALS`
+- `EXISTING_DAC_MOCK_TOKEN_MINT`
+- `EXISTING_DAC_WRAP_AMOUNT`
+- `EXISTING_DAC_TREASURY_SEED`
+- `EXISTING_DAC_ORACLE_ADMIN_ADDRESS`
+- `EXISTING_DAC_ORACLE_PUBLISHER_ADDRESS`
+- `EXISTING_DAC_DEFAULT_QUORUM`
+- `EXISTING_DAC_HIGH_QUORUM`
+- `EXISTING_DAC_BLOCKING_QUORUM`
+- `EXISTING_DAC_DURATION`
+- `EXISTING_DAC_QUALIFICATION`
+- `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
+- `EXISTING_DAC_FALLBACK_WARMUP`
+- `EXISTING_DAC_FALLBACK_DURATION`
+
+### Existing governance flow config
+
+- `EXISTING_GOV_FLOW_LABEL`
+- `EXISTING_GOV_FLOW_EXISTING_DAC_LABEL`
+- `EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT`
+- `EXISTING_GOV_FLOW_MERKLE_INDEX`
+- `EXISTING_GOV_FLOW_MERKLE_AMOUNT`
 
 ### Treasury flow config
 
@@ -177,6 +210,18 @@ Basic DAC seed:
 
 ```text
 deployments/<chainid>/basic-dac-<label>.json
+```
+
+Existing-token DAC seed:
+
+```text
+deployments/<chainid>/existing-dac-<label>.json
+```
+
+Existing governance flow seed:
+
+```text
+deployments/<chainid>/existing-governance-flow-<label>.json
 ```
 
 Treasury flow seed:
@@ -270,6 +315,100 @@ forge script \
   --rpc-url http://127.0.0.1:8545 \
   --broadcast
 ```
+
+### Existing-token DAC
+
+`SeedExistingTokenDAC.s.sol` creates a DAC around an existing token, deploys the wrapped governance token and governance oracle, optionally wraps founder inventory, and can pre-seed wrapped treasury reserves into the asset controller.
+
+Useful environment variables for this mode:
+
+- `EXISTING_DAC_LABEL`
+- `EXISTING_DAC_SYMBOL`
+- `EXISTING_DAC_NAME`
+- `EXISTING_DAC_DESCRIPTION`
+- `EXISTING_DAC_DIVIDENDS_ENABLED`
+- `EXISTING_DAC_UNDERLYING_TOKEN_ADDRESS`
+- `EXISTING_DAC_MOCK_TOKEN_DECIMALS`
+- `EXISTING_DAC_MOCK_TOKEN_MINT`
+- `EXISTING_DAC_WRAP_AMOUNT`
+- `EXISTING_DAC_TREASURY_SEED`
+- `EXISTING_DAC_ORACLE_ADMIN_ADDRESS`
+- `EXISTING_DAC_ORACLE_PUBLISHER_ADDRESS`
+- `EXISTING_DAC_DEFAULT_QUORUM`
+- `EXISTING_DAC_HIGH_QUORUM`
+- `EXISTING_DAC_BLOCKING_QUORUM`
+- `EXISTING_DAC_DURATION`
+- `EXISTING_DAC_QUALIFICATION`
+- `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
+- `EXISTING_DAC_FALLBACK_WARMUP`
+- `EXISTING_DAC_FALLBACK_DURATION`
+
+Run:
+
+```bash
+export FOUNDER_PRIVATE_KEY="$PRIVATE_KEY"
+
+forge script \
+  script/scenarios/SeedExistingTokenDAC.s.sol:SeedExistingTokenDAC \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast
+```
+
+Notes:
+
+- If `EXISTING_DAC_UNDERLYING_TOKEN_ADDRESS` is not provided, the script deploys a mock underlying token and mints it to the broadcaster.
+- `EXISTING_DAC_TREASURY_SEED` cannot exceed `EXISTING_DAC_WRAP_AMOUNT`.
+- The founder must retain more wrapped tokens than the configured qualification, otherwise the script refuses to move too much wrapped balance into treasury and strand proposer rights.
+
+### Existing-token DAC governance flow
+
+The hybrid-governance scenario is intentionally staged to reflect live-chain role and timing boundaries:
+
+- `SeedExistingGovernanceCreatePrimary.s.sol`
+- `SeedExistingGovernancePublishPrimary.s.sol`
+- `SeedExistingGovernanceVotePrimary.s.sol`
+- `SeedExistingGovernanceExecutePrimary.s.sol`
+- `SeedExistingGovernanceCreateFallback.s.sol`
+- `SeedExistingGovernanceBeginFallbackWarmup.s.sol`
+- `SeedExistingGovernanceActivateFallback.s.sol`
+- `SeedExistingGovernanceVoteFallback.s.sol`
+- `SeedExistingGovernanceExecuteFallback.s.sol`
+
+Primary mode uses a single-leaf Merkle snapshot by default:
+
+- account: founder
+- index: `EXISTING_GOV_FLOW_MERKLE_INDEX`
+- amount: `EXISTING_GOV_FLOW_MERKLE_AMOUNT`, or the founder's current unwrapped underlying balance if omitted
+
+That keeps local and early testnet seeding simple while still exercising the real hybrid path: oracle publish, primary activation, wrapped voting, Merkle voting, and proposal execution.
+
+Example primary sequence:
+
+```bash
+forge script script/scenarios/SeedExistingTokenDAC.s.sol:SeedExistingTokenDAC --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceCreatePrimary.s.sol:SeedExistingGovernanceCreatePrimary --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernancePublishPrimary.s.sol:SeedExistingGovernancePublishPrimary --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceVotePrimary.s.sol:SeedExistingGovernanceVotePrimary --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceExecutePrimary.s.sol:SeedExistingGovernanceExecutePrimary --rpc-url <rpc> --broadcast
+```
+
+Example fallback sequence:
+
+```bash
+forge script script/scenarios/SeedExistingGovernanceCreateFallback.s.sol:SeedExistingGovernanceCreateFallback --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceBeginFallbackWarmup.s.sol:SeedExistingGovernanceBeginFallbackWarmup --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceActivateFallback.s.sol:SeedExistingGovernanceActivateFallback --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceVoteFallback.s.sol:SeedExistingGovernanceVoteFallback --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingGovernanceExecuteFallback.s.sol:SeedExistingGovernanceExecuteFallback --rpc-url <rpc> --broadcast
+```
+
+Role note:
+
+- `SeedExistingGovernancePublishPrimary` must be run by an address that has publisher rights on the governance oracle.
+
+Local timing note:
+
+- for fallback validation on Anvil, advance time between proposal creation and warmup start, and again between warmup start and fallback activation.
 
 ### Treasury flow
 

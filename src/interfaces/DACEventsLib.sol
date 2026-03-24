@@ -121,6 +121,23 @@ library DACEventsLib {
     event VetoCasted();
 
     event ProposalResolved(uint256 yesVotes, uint256 noVotes, bool passed, bool vetoed);
+    event ProposalPhaseTransition(
+        uint256 indexed id,
+        uint8 indexed phase,
+        uint256 snapshotBlock,
+        uint256 startTime,
+        uint256 endTime,
+        uint256 totalPower,
+        uint256 quorum,
+        uint256 blockingQuorum
+    );
+    event OracleSnapshotPublished(
+        uint256 indexed id,
+        uint256 snapshotBlock,
+        bytes32 merkleRoot,
+        uint256 totalUnderlyingVotingPower
+    );
+    event MerkleVoted(uint256 indexed id, address indexed voter, bool support, uint256 weight, uint256 index);
 
     // Events emited by abstract Deal contract
     

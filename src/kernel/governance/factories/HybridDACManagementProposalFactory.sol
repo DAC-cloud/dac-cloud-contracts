@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {ProposalParams} from "../../../interfaces/Structs.sol";
+import {GovernanceStrategyConfig} from "../../../interfaces/GovernanceStructs.sol";
+import {HybridDACManagementProposal} from "../HybridDACManagementProposal.sol";
+import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
+
+contract HybridDACManagementProposalFactory {
+    address public immutable referenceImpl;
+
+    constructor() {
+        referenceImpl = address(new HybridDACManagementProposal());
+    }
+
+    function deployProposal(
+        uint256 id,
+        address dacCell,
+        address wrappedToken,
+        address governanceOracle,
+        ProposalParams memory params,
+        GovernanceStrategyConfig memory strategy,
+        bool highQuorum,
+        bool blockingEnabled,
+        address vetoRightOwner
+    ) external returns (address proposal) {
+        bytes memory initData = abi.encodeWithSelector(
+            HybridDACManagementProposal.initialize.selector,
+            id,
+            dacCell,
+            wrappedToken,
+            governanceOracle,
+            params,
+            strategy,
+            highQuorum,
+            blockingEnabled,
+            vetoRightOwner
+        );
+
+        proposal = address(new UUPSProxy(referenceImpl, initData));
+    }
+}

@@ -4,10 +4,11 @@ pragma solidity ^0.8.20;
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper} from "../interfaces/Structs.sol";
+import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper, ExistingDACConfig} from "../interfaces/Structs.sol";
 import {IVoting} from "../interfaces/IVoting.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
 import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
+import {IManagementProposal} from "../interfaces/IManagementProposal.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IModuleRegistry} from "../interfaces/IModuleRegistry.sol";
@@ -18,8 +19,10 @@ import {AgentToken} from "./tokens/AgentToken.sol";
 import {DealManagerFactory} from "./factories/DealManagerFactory.sol";
 import {ModuleRegistryFactory} from "./factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "./factories/AssetControllerFactory.sol";
+import {ExistingTokenAssetControllerFactory} from "./factories/ExistingTokenAssetControllerFactory.sol";
 import {NativeGovernanceSchemaFactory} from "./governance/factories/NativeGovernanceSchemaFactory.sol";
-import {DACManagementProposal} from "./governance/DACManagementProposal.sol";
+import {HybridGovernanceSchemaFactory} from "./governance/factories/HybridGovernanceSchemaFactory.sol";
+import {WrappedMainToken} from "./tokens/WrappedMainToken.sol";
 import {DACManagementProposalType} from "./governance/DACManagementProposals.sol";
 import {DACCellGovernanceLib} from "./libraries/DACCellGovernanceLib.sol";
 import {MathLib} from "./libraries/MathLib.sol";
@@ -35,7 +38,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     address private deployer;
 
     // Tokens for chickens and pigs
-    MainToken private mainToken;
+    IERC20 private mainToken;
     AgentToken private agentToken;
 
     // Deal manager
@@ -95,7 +98,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         require(!cellStarted, DACErrorsLib.AlreadyInitialized());
         cellStarted = true;
 
-        mainToken = MainToken(_mainToken);
+        mainToken = IERC20(_mainToken);
         agentToken = AgentToken(_agentToken);
 
         dividendsEnabled = _dividendsEnabled;
@@ -135,7 +138,65 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             initialVotingConfig
         );
 
-        mainToken.dacInit(dealManager, assetController);
+        MainToken(_mainToken).dacInit(dealManager, assetController);
+        agentToken.dacInit(dealManager);
+
+        emit DACEventsLib.DACStarted(
+            dealManager,
+            IGovernanceSchema(governanceSchema).getVotingConfig(),
+            dividendsEnabled,
+            coreModule
+        );
+    }
+
+    function initializeExistingTokenAfterDeployment(
+        address _wrappedMainToken,
+        address _agentToken,
+        address managerFactory,
+        address _moduleRegistryFactory,
+        address _assetControllerFactory,
+        address _governanceSchemaFactory,
+        address _governanceOracle,
+        address coreModule,
+        ExistingDACConfig calldata config
+    ) external {
+        require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
+        require(!cellStarted, DACErrorsLib.AlreadyInitialized());
+        cellStarted = true;
+
+        mainToken = IERC20(_wrappedMainToken);
+        agentToken = AgentToken(_agentToken);
+        dividendsEnabled = config.dividendsEnabled;
+
+        assetController = ExistingTokenAssetControllerFactory(_assetControllerFactory).deployExistingTokenAssetController(
+            address(this),
+            _wrappedMainToken
+        );
+        moduleRegistry = ModuleRegistryFactory(_moduleRegistryFactory).deployModuleRegistry(
+            address(this),
+            coreModule
+        );
+
+        dealManager = DealManagerFactory(managerFactory).deployDealManager(
+            _wrappedMainToken,
+            _agentToken,
+            moduleRegistry,
+            address(this),
+            assetController
+        );
+
+        IAssetController(assetController).setDealManager(dealManager);
+        WrappedMainToken(_wrappedMainToken).setController(assetController);
+
+        governanceSchema = HybridGovernanceSchemaFactory(_governanceSchemaFactory).deployHybridGovernanceSchema(
+            address(this),
+            _wrappedMainToken,
+            dealManager,
+            proposalFactory,
+            _governanceOracle,
+            config.governanceStrategy
+        );
+
         agentToken.dacInit(dealManager);
 
         emit DACEventsLib.DACStarted(
@@ -249,135 +310,62 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function executeDACProposal(uint256 id) external nonReentrant {
-        DACManagementProposal prop = DACManagementProposal(
-            IGovernanceSchema(governanceSchema).consumeApprovedProposal(id, true)
-        );
+        IManagementProposal prop = IManagementProposal(IGovernanceSchema(governanceSchema).consumeApprovedProposal(id, true));
         bytes4 typ = prop.typ();
         
         if (typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
-            IGovernanceSchema(governanceSchema).setVotingConfig(abi.decode(prop.data(), (VotingConfig)));
-
-            emit DACEventsLib.VotingConfigUpdate(id, IGovernanceSchema(governanceSchema).getVotingConfig());
+            _executeVotingConfigUpdate(id, prop);
         }
         
         else if (typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER) {
-            legalWrapper = abi.decode(prop.data(), (LegalWrapper));
-
-            emit DACEventsLib.LegalWrapperSet(id, legalWrapper);
+            _executeLegalWrapperUpdate(id, prop);
         }
 
         else if (typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION) {
-            (bytes4 selector, bytes memory data) = abi.decode(
-                prop.data(), 
-                (bytes4, bytes)
-            );
-
-            emit DACEventsLib.OffchainActionApproved(
-                id, 
-                selector, 
-                data
-            );
+            _executeOffchainActionApprove(id, prop);
         }
 
         else if (typ == DACManagementProposalType.MINT_MAIN_TOKENS) {
-            IAssetController(assetController).mintMainToTreasury(uint256(prop.i()));
-            emit DACEventsLib.TokenMinted(id, uint256(prop.i()));
+            _executeMintMain(id, prop);
         }
 
         else if (typ == DACManagementProposalType.BURN_MAIN_TOKENS) {
-            IAssetController(assetController).burnMainFromTreasury(uint256(prop.i()));
-            emit DACEventsLib.TokenBurnt(id, uint256(prop.i()));
+            _executeBurnMain(id, prop);
         }
 
         else if (typ == DACManagementProposalType.MINT_AGENT_TOKENS) {
-            agentToken.mint(address(prop.target()), uint256(prop.i()));
-
-            emit DACEventsLib.AgentTokenMinted(id, prop.target(), uint256(prop.i()));
+            _executeMintAgent(id, prop);
         }
 
         else if (typ == DACManagementProposalType.REVOKE_AGENT_TOKENS) {
-            agentToken.burnFrom(prop.target(), uint256(prop.i()));
-
-            emit DACEventsLib.AgentTokenRevoked(id, prop.target(), uint256(prop.i()));
+            _executeRevokeAgent(id, prop);
         }
 
         else if (typ == DACManagementProposalType.CAPITAL_CALL) {
-            (address treasuryToken, uint256 cashAmount) = abi.decode(
-                prop.data(),
-                (address, uint256)
-            );
-
-            bytes32 callHash = IAssetController(assetController).createCapitalCall(
-                id,
-                treasuryToken,
-                prop.target(),
-                uint256(prop.i()),
-                cashAmount
-            );
-
-            emit DACEventsLib.CapitalCallCreated(
-                id,
-                prop.target(),
-                callHash,
-                treasuryToken,
-                uint256(prop.i()),
-                cashAmount,
-                id
-            );
+            _executeCapitalCall(id, prop);
         }
 
         else if (typ == DACManagementProposalType.TOGGLE_DIVIDENDS) {
-            require(
-                msg.sender == legalWrapper.wrapperAddr, 
-                DACErrorsLib.LegalWrapperExecutionExpected()
-            );
-
-            dividendsEnabled = abi.decode(prop.data(), (bool));
-
-            emit DACEventsLib.DividendsConfigUpdate(id, dividendsEnabled);
+            _executeToggleDividends(id, prop);
         }
 
         else if (typ == DACManagementProposalType.DIVIDEND_PAYOUT) {
-            (address token, uint256 totalPayout, bytes32 merkleRoot) = abi.decode(
-                DACManagementProposal(prop).data(), 
-                (address, uint256, bytes32)
-            );
-
-            IAssetController(assetController).recordDividendPayout(id, token, totalPayout, merkleRoot);
-
-            emit DACEventsLib.DividendPayout(id, token, totalPayout, merkleRoot);
+            _executeDividendPayout(id, prop);
         }
 
         else if (
             typ == DACManagementProposalType.APPROVE_DEAL || 
             typ == DACManagementProposalType.APPROVE_TRANCHE
         ) {
-            (uint256 dealId, uint256 trancheId, uint256 rewardsLimit) = abi.decode(
-                prop.data(),
-                (uint256, uint256, uint256)
-            );
-
-            IAssetController(assetController).approveFunding(dealId, trancheId, rewardsLimit);
-            IDealManagerAdapter(dealManager).approveFunding(dealId, trancheId, rewardsLimit);
+            _executeFundingApproval(prop);
         }
 
         else if (typ == DACManagementProposalType.ADD_MODULE) {
-            IModuleRegistry(moduleRegistry).approveModule(prop.target());
-
-            emit DACEventsLib.ModuleAdded(address(this), prop.target());
+            _executeAddModule(prop);
         }
 
         else if (typ == DACManagementProposalType.REMOVE_MODULE) {
-            if (legalWrapper.wrapperAddr != address(0)) {
-                require(
-                    msg.sender == legalWrapper.wrapperAddr,
-                    DACErrorsLib.LegalWrapperExecutionExpected()
-                );
-            }
-
-            IModuleRegistry(moduleRegistry).removeModule(prop.target());
-
-            emit DACEventsLib.ModuleRemoved(address(this), prop.target());
+            _executeRemoveModule(prop);
         }
 
         else if (
@@ -391,14 +379,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         else if (
             typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
         ) {
-            (address token, address delegatee) = abi.decode(
-                DACManagementProposal(prop).data(), 
-                (address, address)
-            );
-
-            IAssetController(assetController).delegateVotes(token, delegatee);
-
-            emit DACEventsLib.VotesDelegated(token, delegatee);
+            _executeVoteDelegation(prop);
         }
 
         else {
@@ -442,6 +423,110 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         IAssetController(assetController).recordTreasuryDeposit(token, recovered);
 
         emit DACEventsLib.TreasuryDeposit(token, recovered, msg.sender);
+    }
+
+    function _executeVotingConfigUpdate(uint256 id, IManagementProposal prop) internal {
+        IGovernanceSchema(governanceSchema).setVotingConfig(abi.decode(prop.data(), (VotingConfig)));
+        emit DACEventsLib.VotingConfigUpdate(id, IGovernanceSchema(governanceSchema).getVotingConfig());
+    }
+
+    function _executeLegalWrapperUpdate(uint256 id, IManagementProposal prop) internal {
+        legalWrapper = abi.decode(prop.data(), (LegalWrapper));
+        emit DACEventsLib.LegalWrapperSet(id, legalWrapper);
+    }
+
+    function _executeOffchainActionApprove(uint256 id, IManagementProposal prop) internal {
+        (bytes4 selector, bytes memory data) = abi.decode(prop.data(), (bytes4, bytes));
+        emit DACEventsLib.OffchainActionApproved(id, selector, data);
+    }
+
+    function _executeMintMain(uint256 id, IManagementProposal prop) internal {
+        uint256 amount = uint256(prop.i());
+        IAssetController(assetController).mintMainToTreasury(amount);
+        emit DACEventsLib.TokenMinted(id, amount);
+    }
+
+    function _executeBurnMain(uint256 id, IManagementProposal prop) internal {
+        uint256 amount = uint256(prop.i());
+        IAssetController(assetController).burnMainFromTreasury(amount);
+        emit DACEventsLib.TokenBurnt(id, amount);
+    }
+
+    function _executeMintAgent(uint256 id, IManagementProposal prop) internal {
+        uint256 amount = uint256(prop.i());
+        address recipient = prop.target();
+        agentToken.mint(recipient, amount);
+        emit DACEventsLib.AgentTokenMinted(id, recipient, amount);
+    }
+
+    function _executeRevokeAgent(uint256 id, IManagementProposal prop) internal {
+        uint256 amount = uint256(prop.i());
+        address holder = prop.target();
+        agentToken.burnFrom(holder, amount);
+        emit DACEventsLib.AgentTokenRevoked(id, holder, amount);
+    }
+
+    function _executeCapitalCall(uint256 id, IManagementProposal prop) internal {
+        (address treasuryToken, uint256 cashAmount) = abi.decode(prop.data(), (address, uint256));
+        bytes32 callHash = IAssetController(assetController).createCapitalCall(
+            id,
+            treasuryToken,
+            prop.target(),
+            uint256(prop.i()),
+            cashAmount
+        );
+        emit DACEventsLib.CapitalCallCreated(
+            id,
+            prop.target(),
+            callHash,
+            treasuryToken,
+            uint256(prop.i()),
+            cashAmount,
+            id
+        );
+    }
+
+    function _executeToggleDividends(uint256 id, IManagementProposal prop) internal {
+        require(msg.sender == legalWrapper.wrapperAddr, DACErrorsLib.LegalWrapperExecutionExpected());
+        dividendsEnabled = abi.decode(prop.data(), (bool));
+        emit DACEventsLib.DividendsConfigUpdate(id, dividendsEnabled);
+    }
+
+    function _executeDividendPayout(uint256 id, IManagementProposal prop) internal {
+        (address token, uint256 totalPayout, bytes32 merkleRoot) = abi.decode(
+            prop.data(),
+            (address, uint256, bytes32)
+        );
+        IAssetController(assetController).recordDividendPayout(id, token, totalPayout, merkleRoot);
+        emit DACEventsLib.DividendPayout(id, token, totalPayout, merkleRoot);
+    }
+
+    function _executeFundingApproval(IManagementProposal prop) internal {
+        (uint256 dealId, uint256 trancheId, uint256 rewardsLimit) = abi.decode(
+            prop.data(),
+            (uint256, uint256, uint256)
+        );
+        IAssetController(assetController).approveFunding(dealId, trancheId, rewardsLimit);
+        IDealManagerAdapter(dealManager).approveFunding(dealId, trancheId, rewardsLimit);
+    }
+
+    function _executeAddModule(IManagementProposal prop) internal {
+        IModuleRegistry(moduleRegistry).approveModule(prop.target());
+        emit DACEventsLib.ModuleAdded(address(this), prop.target());
+    }
+
+    function _executeRemoveModule(IManagementProposal prop) internal {
+        if (legalWrapper.wrapperAddr != address(0)) {
+            require(msg.sender == legalWrapper.wrapperAddr, DACErrorsLib.LegalWrapperExecutionExpected());
+        }
+        IModuleRegistry(moduleRegistry).removeModule(prop.target());
+        emit DACEventsLib.ModuleRemoved(address(this), prop.target());
+    }
+
+    function _executeVoteDelegation(IManagementProposal prop) internal {
+        (address token, address delegatee) = abi.decode(prop.data(), (address, address));
+        IAssetController(assetController).delegateVotes(token, delegatee);
+        emit DACEventsLib.VotesDelegated(token, delegatee);
     }
 
     function getCapitalCall(bytes32 calldataHash) external view returns (CapitalCall memory capitalCall) {

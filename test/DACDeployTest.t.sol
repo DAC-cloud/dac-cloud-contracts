@@ -6,6 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {DACCell} from "../src/kernel/DACCell.sol";
 import {MainToken} from "../src/kernel/tokens/MainToken.sol";
 import {AgentToken} from "../src/kernel/tokens/AgentToken.sol";
+import {WrappedMainToken} from "../src/kernel/tokens/WrappedMainToken.sol";
 import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../src/kernel/tokens/factories/TokenFactories.sol";
 import {DACManagementProposalFactory} from "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import {DACCellFactory} from "../src/kernel/factories/DACCellFactory.sol";
@@ -13,19 +14,33 @@ import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {DealManagerFactory} from "../src/kernel/factories/DealManagerFactory.sol";
 import {ModuleRegistryFactory} from "../src/kernel/factories/ModuleRegistryFactory.sol";
 import {NativeAssetControllerFactory} from "../src/kernel/factories/AssetControllerFactory.sol";
+import {ExistingTokenAssetControllerFactory} from "../src/kernel/factories/ExistingTokenAssetControllerFactory.sol";
 import {NativeGovernanceSchemaFactory} from "../src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol";
+import {HybridGovernanceSchemaFactory} from "../src/kernel/governance/factories/HybridGovernanceSchemaFactory.sol";
+import {GovernanceOracleFactory} from "../src/kernel/governance/factories/GovernanceOracleFactory.sol";
+import {HybridDACManagementProposalFactory} from "../src/kernel/governance/factories/HybridDACManagementProposalFactory.sol";
+import {WrappedMainTokenFactory} from "../src/kernel/tokens/factories/WrappedMainTokenFactory.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
 import {IDACFactory} from "../src/interfaces/IDACFactory.sol";
 import {IDealManager} from "../src/interfaces/IDealManager.sol";
-import {DACConfig, CapitalCall, ProposalParams, DealParams} from "../src/interfaces/Structs.sol";
+import {DACConfig, CapitalCall, ProposalParams, DealParams, ExistingDACConfig} from "../src/interfaces/Structs.sol";
+import {GovernanceStrategyConfig} from "../src/interfaces/GovernanceStructs.sol";
 import {CoreModuleFactory} from "../src/modules/core/CoreModuleFactory.sol";
 import {DACDealFactory} from "../src/modules/core/deals/factories/DACDealFactory.sol";
 import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {MilestoneEvaluatorFactory} from "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 import {DACManagementProposalType} from "../src/kernel/governance/DACManagementProposals.sol";
+
+contract MockUnderlyingToken is ERC20 {
+    constructor() ERC20("Underlying", "UND") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
 
 contract DACDeployTest is Test {
     DACCell dac;
@@ -57,15 +72,24 @@ contract DACDeployTest is Test {
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
-            address(new MainTokenFactory()),
-            address(new AgentTokenFactory()),
-            address(new DACCellFactory()),
-            address(new DealManagerFactory()),
-            address(new ModuleRegistryFactory()),
-            address(new NativeAssetControllerFactory()),
-            address(governanceFactory),
-            address(new NativeGovernanceSchemaFactory()),
-            address(coreModule)
+            [
+                address(new MainTokenFactory()),
+                address(new AgentTokenFactory()),
+                address(new DACCellFactory()),
+                address(new DealManagerFactory()),
+                address(new ModuleRegistryFactory()),
+                address(new NativeAssetControllerFactory()),
+                address(governanceFactory),
+                address(new NativeGovernanceSchemaFactory()),
+                address(coreModule)
+            ],
+            [
+                address(new ExistingTokenAssetControllerFactory()),
+                address(new HybridDACManagementProposalFactory()),
+                address(new HybridGovernanceSchemaFactory()),
+                address(new WrappedMainTokenFactory()),
+                address(new GovernanceOracleFactory())
+            ]
         );
 
         vm.stopPrank();
@@ -97,5 +121,63 @@ contract DACDeployTest is Test {
 
     function testDeployment() public {
         assertEq(dac.getMainToken(), address(mainToken), "Wrong main token");
+    }
+
+    function testDeployExistingTokenDAC() public {
+        MockUnderlyingToken underlying = new MockUnderlyingToken();
+        underlying.mint(user, 1_000_000e18);
+
+        ExistingDACConfig memory config = ExistingDACConfig({
+            symbol: "EXIST",
+            name: "Existing DAC",
+            description: "existing token governance",
+            underlyingToken: address(underlying),
+            oracleAdmin: owner,
+            initialOraclePublisher: owner,
+            dividendsEnabled: false,
+            governanceStrategy: GovernanceStrategyConfig({
+                quorumPercent: MathLib.atScale(50),
+                highQuorumPercent: MathLib.atScale(75),
+                blockingPercent: MathLib.atScale(20),
+                duration: 7 days,
+                qualification: 0,
+                oraclePublishDeadline: 1 days,
+                fallbackWarmupDuration: 1 days,
+                fallbackDuration: 3 days
+            })
+        });
+
+        (address dacAddress, address wrappedAddress, address existingAgentToken, address oracleAddress) =
+            dacFactory.deployExistingTokenDAC(abi.encode(config), bytes32("existing"));
+
+        DACCell existingDac = DACCell(dacAddress);
+        WrappedMainToken wrapped = WrappedMainToken(wrappedAddress);
+
+        assertEq(existingDac.getMainToken(), wrappedAddress);
+        assertEq(existingDac.getAgentToken(), existingAgentToken);
+        assertTrue(existingDac.getDealManager() != address(0));
+        assertTrue(existingDac.getAssetController() != address(0));
+        assertTrue(existingDac.getModuleRegistry() != address(0));
+        assertTrue(oracleAddress != address(0));
+        assertEq(existingDac.getVotingConfig().quorumPercent, MathLib.atScale(50));
+
+        vm.prank(user);
+        underlying.approve(wrappedAddress, type(uint256).max);
+
+        vm.prank(user);
+        wrapped.wrap(100e18);
+
+        vm.prank(user);
+        uint256 proposalId = existingDac.createManagementProposal(
+            ProposalParams({
+                typ: DACManagementProposalType.MINT_AGENT_TOKENS,
+                target: user,
+                i: bytes32(uint256(10e18)),
+                data: bytes("")
+            })
+        );
+
+        assertEq(proposalId, 1);
+        assertTrue(existingDac.getProposalVoting(proposalId) != address(0));
     }
 }

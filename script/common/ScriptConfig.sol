@@ -2,7 +2,14 @@
 pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
-import {BasicDACSeedConfig, ChildDACFlowSeedConfig, ProtocolConfig, TreasuryFlowSeedConfig} from "./ScriptTypes.sol";
+import {
+    BasicDACSeedConfig,
+    ChildDACFlowSeedConfig,
+    ExistingDACSeedConfig,
+    ExistingGovernanceFlowSeedConfig,
+    ProtocolConfig,
+    TreasuryFlowSeedConfig
+} from "./ScriptTypes.sol";
 
 abstract contract ScriptConfig is Script {
     error MissingEnv(string key);
@@ -21,6 +28,31 @@ abstract contract ScriptConfig is Script {
     string internal constant BASIC_DAC_FOUNDER_ALLOCATION_ENV = "BASIC_DAC_FOUNDER_ALLOCATION";
     string internal constant BASIC_DAC_FOUNDER_COMMITMENT_ENV = "BASIC_DAC_FOUNDER_COMMITMENT";
     string internal constant BASIC_DAC_DIVIDENDS_ENV = "BASIC_DAC_DIVIDENDS_ENABLED";
+    string internal constant EXISTING_DAC_LABEL_ENV = "EXISTING_DAC_LABEL";
+    string internal constant EXISTING_DAC_SYMBOL_ENV = "EXISTING_DAC_SYMBOL";
+    string internal constant EXISTING_DAC_NAME_ENV = "EXISTING_DAC_NAME";
+    string internal constant EXISTING_DAC_DESCRIPTION_ENV = "EXISTING_DAC_DESCRIPTION";
+    string internal constant EXISTING_DAC_DIVIDENDS_ENV = "EXISTING_DAC_DIVIDENDS_ENABLED";
+    string internal constant EXISTING_DAC_UNDERLYING_ENV = "EXISTING_DAC_UNDERLYING_TOKEN_ADDRESS";
+    string internal constant EXISTING_DAC_MOCK_TOKEN_DECIMALS_ENV = "EXISTING_DAC_MOCK_TOKEN_DECIMALS";
+    string internal constant EXISTING_DAC_MOCK_TOKEN_MINT_ENV = "EXISTING_DAC_MOCK_TOKEN_MINT";
+    string internal constant EXISTING_DAC_WRAP_AMOUNT_ENV = "EXISTING_DAC_WRAP_AMOUNT";
+    string internal constant EXISTING_DAC_TREASURY_SEED_ENV = "EXISTING_DAC_TREASURY_SEED";
+    string internal constant EXISTING_DAC_ORACLE_ADMIN_ENV = "EXISTING_DAC_ORACLE_ADMIN_ADDRESS";
+    string internal constant EXISTING_DAC_ORACLE_PUBLISHER_ENV = "EXISTING_DAC_ORACLE_PUBLISHER_ADDRESS";
+    string internal constant EXISTING_DAC_QUORUM_ENV = "EXISTING_DAC_DEFAULT_QUORUM";
+    string internal constant EXISTING_DAC_HIGH_QUORUM_ENV = "EXISTING_DAC_HIGH_QUORUM";
+    string internal constant EXISTING_DAC_BLOCKING_QUORUM_ENV = "EXISTING_DAC_BLOCKING_QUORUM";
+    string internal constant EXISTING_DAC_DURATION_ENV = "EXISTING_DAC_DURATION";
+    string internal constant EXISTING_DAC_QUALIFICATION_ENV = "EXISTING_DAC_QUALIFICATION";
+    string internal constant EXISTING_DAC_ORACLE_DEADLINE_ENV = "EXISTING_DAC_ORACLE_PUBLISH_DEADLINE";
+    string internal constant EXISTING_DAC_FALLBACK_WARMUP_ENV = "EXISTING_DAC_FALLBACK_WARMUP";
+    string internal constant EXISTING_DAC_FALLBACK_DURATION_ENV = "EXISTING_DAC_FALLBACK_DURATION";
+    string internal constant EXISTING_GOV_FLOW_LABEL_ENV = "EXISTING_GOV_FLOW_LABEL";
+    string internal constant EXISTING_GOV_FLOW_DAC_LABEL_ENV = "EXISTING_GOV_FLOW_EXISTING_DAC_LABEL";
+    string internal constant EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT_ENV = "EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT";
+    string internal constant EXISTING_GOV_FLOW_MERKLE_INDEX_ENV = "EXISTING_GOV_FLOW_MERKLE_INDEX";
+    string internal constant EXISTING_GOV_FLOW_MERKLE_AMOUNT_ENV = "EXISTING_GOV_FLOW_MERKLE_AMOUNT";
     string internal constant TREASURY_TOKEN_ENV = "TREASURY_TOKEN_ADDRESS";
     string internal constant BASIC_DAC_MOCK_TOKEN_DECIMALS_ENV = "BASIC_DAC_MOCK_TOKEN_DECIMALS";
     string internal constant BASIC_DAC_MOCK_TOKEN_MINT_ENV = "BASIC_DAC_MOCK_TOKEN_MINT";
@@ -111,6 +143,14 @@ abstract contract ScriptConfig is Script {
         return string.concat(chainDeploymentsRoot(), "/basic-dac-", label, ".json");
     }
 
+    function existingDACSeedManifestPath(string memory label) internal view returns (string memory) {
+        return string.concat(chainDeploymentsRoot(), "/existing-dac-", label, ".json");
+    }
+
+    function existingGovernanceFlowManifestPath(string memory label) internal view returns (string memory) {
+        return string.concat(chainDeploymentsRoot(), "/existing-governance-flow-", label, ".json");
+    }
+
     function treasuryFlowManifestPath(string memory label) internal view returns (string memory) {
         return string.concat(chainDeploymentsRoot(), "/treasury-flow-", label, ".json");
     }
@@ -146,6 +186,52 @@ abstract contract ScriptConfig is Script {
         }
     }
 
+    function loadExistingDACSeedConfig() internal view returns (ExistingDACSeedConfig memory config) {
+        config.label = vm.envOr(EXISTING_DAC_LABEL_ENV, string("existing"));
+        config.symbol = vm.envOr(EXISTING_DAC_SYMBOL_ENV, string("WDAC"));
+        config.name = vm.envOr(EXISTING_DAC_NAME_ENV, string("Existing Token DAC"));
+        config.description = vm.envOr(
+            EXISTING_DAC_DESCRIPTION_ENV,
+            string("Existing-token DAC seeded for hybrid oracle plus wrapper governance flows")
+        );
+        config.dividendsEnabled = vm.envOr(EXISTING_DAC_DIVIDENDS_ENV, false);
+        config.mockUnderlyingDecimals = uint8(vm.envOr(EXISTING_DAC_MOCK_TOKEN_DECIMALS_ENV, uint256(18)));
+        config.mockUnderlyingMint = vm.envOr(EXISTING_DAC_MOCK_TOKEN_MINT_ENV, uint256(1_000_000e18));
+        config.wrapAmount = vm.envOr(EXISTING_DAC_WRAP_AMOUNT_ENV, uint256(250_000e18));
+        config.treasurySeedAmount = vm.envOr(EXISTING_DAC_TREASURY_SEED_ENV, uint256(100_000e18));
+        config.quorumPercent = vm.envOr(EXISTING_DAC_QUORUM_ENV, uint256(5e17));
+        config.highQuorumPercent = vm.envOr(EXISTING_DAC_HIGH_QUORUM_ENV, uint256(75e16));
+        config.blockingPercent = vm.envOr(EXISTING_DAC_BLOCKING_QUORUM_ENV, uint256(2e17));
+        config.duration = vm.envOr(EXISTING_DAC_DURATION_ENV, uint256(7 days));
+        config.qualification = vm.envOr(EXISTING_DAC_QUALIFICATION_ENV, uint256(0));
+        config.oraclePublishDeadline = vm.envOr(EXISTING_DAC_ORACLE_DEADLINE_ENV, uint256(1 days));
+        config.fallbackWarmupDuration = vm.envOr(EXISTING_DAC_FALLBACK_WARMUP_ENV, uint256(1 days));
+        config.fallbackDuration = vm.envOr(EXISTING_DAC_FALLBACK_DURATION_ENV, uint256(3 days));
+
+        if (vm.envExists(EXISTING_DAC_UNDERLYING_ENV)) {
+            config.underlyingToken = vm.envAddress(EXISTING_DAC_UNDERLYING_ENV);
+            if (config.underlyingToken == address(0)) revert InvalidAddress(EXISTING_DAC_UNDERLYING_ENV);
+            config.deployMockUnderlyingToken = false;
+        } else {
+            config.underlyingToken = address(0);
+            config.deployMockUnderlyingToken = true;
+        }
+
+        if (vm.envExists(EXISTING_DAC_ORACLE_ADMIN_ENV)) {
+            config.oracleAdmin = vm.envAddress(EXISTING_DAC_ORACLE_ADMIN_ENV);
+            if (config.oracleAdmin == address(0)) revert InvalidAddress(EXISTING_DAC_ORACLE_ADMIN_ENV);
+        } else {
+            config.oracleAdmin = vm.addr(founderKey());
+        }
+
+        if (vm.envExists(EXISTING_DAC_ORACLE_PUBLISHER_ENV)) {
+            config.oraclePublisher = vm.envAddress(EXISTING_DAC_ORACLE_PUBLISHER_ENV);
+            if (config.oraclePublisher == address(0)) revert InvalidAddress(EXISTING_DAC_ORACLE_PUBLISHER_ENV);
+        } else {
+            config.oraclePublisher = config.oracleAdmin;
+        }
+    }
+
     function loadTreasuryFlowSeedConfig() internal view returns (TreasuryFlowSeedConfig memory config) {
         config.label = vm.envOr(TREASURY_FLOW_LABEL_ENV, string("treasury"));
         config.basicDACLabel = vm.envOr(TREASURY_FLOW_BASIC_DAC_LABEL_ENV, vm.envOr(BASIC_DAC_LABEL_ENV, string("seed")));
@@ -160,6 +246,19 @@ abstract contract ScriptConfig is Script {
         config.agentSpendTotalAmount = uint160(vm.envOr(TREASURY_FLOW_AGENT_SPEND_TOTAL_ENV, uint256(4_000e6)));
         config.agentSpendSingleTxAmount = uint160(vm.envOr(TREASURY_FLOW_AGENT_SPEND_SINGLE_ENV, uint256(2_000e6)));
         config.agentSpendDuration = vm.envOr(TREASURY_FLOW_AGENT_SPEND_DURATION_ENV, uint256(1 days));
+    }
+
+    function loadExistingGovernanceFlowSeedConfig()
+        internal
+        view
+        returns (ExistingGovernanceFlowSeedConfig memory config)
+    {
+        config.label = vm.envOr(EXISTING_GOV_FLOW_LABEL_ENV, string("hybrid-governance"));
+        config.existingDACLabel =
+            vm.envOr(EXISTING_GOV_FLOW_DAC_LABEL_ENV, vm.envOr(EXISTING_DAC_LABEL_ENV, string("existing")));
+        config.agentMintAmount = vm.envOr(EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT_ENV, uint256(12_345));
+        config.merkleIndex = vm.envOr(EXISTING_GOV_FLOW_MERKLE_INDEX_ENV, uint256(0));
+        config.merkleAmountOverride = vm.envOr(EXISTING_GOV_FLOW_MERKLE_AMOUNT_ENV, uint256(0));
     }
 
     function loadChildDACFlowSeedConfig() internal view returns (ChildDACFlowSeedConfig memory config) {

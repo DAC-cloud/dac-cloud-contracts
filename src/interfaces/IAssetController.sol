@@ -38,7 +38,7 @@ interface IAssetController {
 
     function approveFunding(uint256 dealId, uint256 trancheId, uint256 rewardsLimit) external;
 
-    function consumeMintedRewards(uint256 amount) external;
+    function settleMainRewardClaim(address to, uint256 amount) external;
     function releaseUnusedMintRewards(uint256 amount) external;
 
     function mintMainToTreasury(uint256 amount) external;
