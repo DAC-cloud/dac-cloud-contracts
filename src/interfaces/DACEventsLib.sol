@@ -165,6 +165,7 @@ library DACEventsLib {
     );
 
     event DealManagementProposalExecuted(address indexed cell, uint256 indexed id, bytes4 indexed typ);
+    event DealProposalChallenged(address indexed deal, uint256 indexed id, address indexed dacProposal);
     event VotingConfigUpdate(address indexed cell, uint256 indexed id, VotingConfig config);
 
     event VotesDelegated(address indexed treasuryToken, address delegatee);

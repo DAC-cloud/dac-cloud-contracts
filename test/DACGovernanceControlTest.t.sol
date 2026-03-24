@@ -139,7 +139,8 @@ contract DACGovernanceControlTest is DACTestBase {
             blockingPercent: 0,
             highQuorumPercent: 1,
             duration: 7 days,
-            qualification: 0
+            qualification: 0,
+            executionValidityDuration: 1 days
         });
 
         vm.startPrank(founder);

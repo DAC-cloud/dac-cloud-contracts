@@ -88,8 +88,7 @@ contract HybridDACManagementProposalTest is Test {
             }),
             _strategyConfig(),
             false,
-            false,
-            address(0)
+            false
         );
 
         assertEq(proposal.primarySnapshotBlock(), 10);
@@ -135,8 +134,7 @@ contract HybridDACManagementProposalTest is Test {
             }),
             _strategyConfig(),
             false,
-            false,
-            address(0)
+            false
         );
 
         vm.warp(block.timestamp + 2 days + 1);
@@ -193,8 +191,7 @@ contract HybridDACManagementProposalTest is Test {
             }),
             _strategyConfig(),
             false,
-            false,
-            address(0)
+            false
         );
 
         vm.prank(publisher);
@@ -224,6 +221,7 @@ contract HybridDACManagementProposalTest is Test {
             blockingPercent: 2e17,
             duration: 7 days,
             qualification: 0,
+            executionValidityDuration: 1 days,
             oraclePublishDeadline: 2 days,
             fallbackWarmupDuration: 1 days,
             fallbackDuration: 3 days

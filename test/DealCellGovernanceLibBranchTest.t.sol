@@ -361,7 +361,8 @@ contract DealCellGovernanceLibBranchTest is Test {
             blockingPercent: MathLib.atScale(25),
             highQuorumPercent: MathLib.atScale(80),
             duration: 7 days,
-            qualification: 10
+            qualification: 10,
+            executionValidityDuration: 1 days
         });
 
         harness.setApproved(true);
@@ -445,6 +446,9 @@ contract DealCellGovernanceLibBranchTest is Test {
     function test_checkProposal_unapprovedDealRejectsRequestTranche() public {
         harness.setApproved(false);
         harness.mintStake(agent, 100);
+        address stakeToken = harness.stakeToken();
+        vm.prank(agent);
+        StakedAgent(stakeToken).delegate(agent);
 
         ProposalParams memory params = ProposalParams({
             typ: AbstractDealManagementType.REQUEST_TRANCHE,
@@ -460,13 +464,17 @@ contract DealCellGovernanceLibBranchTest is Test {
 
     function test_checkProposal_rejectsInvalidVotingConfig() public {
         harness.mintStake(agent, 100);
+        address stakeToken = harness.stakeToken();
+        vm.prank(agent);
+        StakedAgent(stakeToken).delegate(agent);
 
         VotingConfig memory invalidConfig = VotingConfig({
             quorumPercent: MathLib.SCALE + 1,
             blockingPercent: MathLib.atScale(25),
             highQuorumPercent: MathLib.atScale(80),
             duration: 7 days,
-            qualification: 10
+            qualification: 10,
+            executionValidityDuration: 1 days
         });
 
         ProposalParams memory params = ProposalParams({

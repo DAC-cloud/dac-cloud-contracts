@@ -82,7 +82,8 @@ contract DACCellGovernanceLibTest is Test {
             blockingPercent: MathLib.atScale(25),
             highQuorumPercent: MathLib.atScale(80),
             duration: 1 days,
-            qualification: 1e6
+            qualification: 1e6,
+            executionValidityDuration: 1 days
         });
 
         // Mock external calls

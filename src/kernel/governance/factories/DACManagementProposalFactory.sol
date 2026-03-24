@@ -65,6 +65,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             token, 
             proposalParams, 
             votingConfig.duration,
+            votingConfig.executionValidityDuration,
             totalVotingSupply,
             quorum,
             blockingQuorum

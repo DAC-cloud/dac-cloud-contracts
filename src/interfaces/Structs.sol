@@ -37,6 +37,7 @@ struct VotingConfig {
     uint256 highQuorumPercent;      // Quorum percent for operations requiring "unanimous" approve
     uint256 duration;               // Voting duration in seconds
     uint256 qualification;          // Min amount of LP tokens needed to create a proposal
+    uint256 executionValidityDuration; // Time window after becoming executable when execution remains valid
 }
 
 struct LegalWrapper {

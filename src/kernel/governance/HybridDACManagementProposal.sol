@@ -5,6 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IVoting} from "../../interfaces/IVoting.sol";
+import {IExecutableProposal} from "../../interfaces/IExecutableProposal.sol";
 import {IGovernanceOracle} from "../../interfaces/IGovernanceOracle.sol";
 import {ProposalParams} from "../../interfaces/Structs.sol";
 import {GovernanceStrategyConfig, OracleSnapshot, ProposalPhase} from "../../interfaces/GovernanceStructs.sol";
@@ -13,7 +14,7 @@ import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 
-contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable {
+contract HybridDACManagementProposal is IVoting, IExecutableProposal, ReentrancyGuard, Initializable {
     uint256 public id;
     address public dacCell;
     address public wrappedToken;
@@ -39,12 +40,10 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
     bool public highQuorum;
     bool public blockingEnabled;
 
-    bool public vetoRight;
-    address public vetoRightOwner;
-    bool public vetoCasted;
-
     bool private proposalResolved;
     bool private resolvedOutcome;
+    uint256 public resolutionTime;
+    bool private proposalExecuted;
 
     bytes32 public oracleMerkleRoot;
     uint256 public totalUnderlyingVotingPower;
@@ -65,14 +64,14 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         ProposalParams memory _proposal,
         GovernanceStrategyConfig memory _strategy,
         bool _highQuorum,
-        bool _blockingEnabled,
-        address _vetoRightOwner
+        bool _blockingEnabled
     ) external initializer {
         require(block.number > 0, DACErrorsLib.NotAllowed());
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
         require(_wrappedToken != address(0), DACErrorsLib.NotAllowed());
         require(_governanceOracle != address(0), DACErrorsLib.NotAllowed());
         require(_strategy.duration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(_strategy.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.oraclePublishDeadline > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
@@ -89,11 +88,6 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         oracleSnapshotDeadline = block.timestamp + _strategy.oraclePublishDeadline;
         phase = ProposalPhase.AwaitingOracleSnapshot;
 
-        if (_vetoRightOwner != address(0)) {
-            vetoRight = true;
-            vetoRightOwner = _vetoRightOwner;
-        }
-
         emit DACEventsLib.ProposalCreated(
             wrappedToken,
             0,
@@ -101,7 +95,7 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
             0,
             primarySnapshotBlock,
             oracleSnapshotDeadline,
-            vetoRight
+            false
         );
         emit DACEventsLib.ProposalPhaseTransition(
             id,
@@ -213,32 +207,6 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         _voteWrapped(msg.sender, support);
     }
 
-    function _voteWrapped(address voter, bool support) internal {
-        require(
-            phase == ProposalPhase.PrimaryVoting || phase == ProposalPhase.FallbackVoting,
-            DACErrorsLib.NotAllowed()
-        );
-
-        uint256 snapshotBlock = phase == ProposalPhase.PrimaryVoting ? primarySnapshotBlock : fallbackSnapshotBlock;
-        require(block.timestamp <= phaseEndTime, DACErrorsLib.VotingEnded());
-
-        if (phase == ProposalPhase.PrimaryVoting) {
-            require(!primaryWrappedVoted[voter], DACErrorsLib.AlreadyVoted());
-            primaryWrappedVoted[voter] = true;
-        } else {
-            require(!fallbackWrappedVoted[voter], DACErrorsLib.AlreadyVoted());
-            fallbackWrappedVoted[voter] = true;
-        }
-
-        uint256 weight = IVotes(wrappedToken).getPastVotes(voter, snapshotBlock);
-        require(weight > 0, DACErrorsLib.NoVotingPower());
-        _countVote(support, weight);
-
-        emit DACEventsLib.Voted(voter, support, weight);
-
-        _checkAndEmitResolution();
-    }
-
     function voteMerkle(bool support, uint256 index, uint256 amount, bytes32[] calldata proof) external nonReentrant {
         require(phase == ProposalPhase.PrimaryVoting, DACErrorsLib.NotAllowed());
         require(block.timestamp <= phaseEndTime, DACErrorsLib.VotingEnded());
@@ -251,18 +219,6 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         _countVote(support, amount);
 
         emit DACEventsLib.MerkleVoted(id, msg.sender, support, amount, index);
-
-        _checkAndEmitResolution();
-    }
-
-    function castVeto() external {
-        require(vetoRight, DACErrorsLib.VetoNotEnabled());
-        require(msg.sender == vetoRightOwner, DACErrorsLib.NotAuthorized());
-        require(!proposalResolved, DACErrorsLib.ProposalAlreadyExecuted());
-
-        vetoCasted = true;
-
-        emit DACEventsLib.VetoCasted();
 
         _checkAndEmitResolution();
     }
@@ -280,6 +236,36 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         }
 
         return _outcome();
+    }
+
+    function consumeExecution(bool requiredOutcome) external nonReentrant {
+        _checkAndEmitResolution();
+
+        require(proposalResolved && resolvedOutcome == requiredOutcome, DACErrorsLib.VoteNotPassed());
+        require(!proposalExecuted, DACErrorsLib.ProposalAlreadyExecuted());
+        require(_isExecutableNow(), DACErrorsLib.ProposalNotExecutable());
+
+        proposalExecuted = true;
+    }
+
+    function isExecutableNow() external returns (bool executable) {
+        _checkAndEmitResolution();
+        executable = _isExecutableNow();
+    }
+
+    function isExecutionExpired() external returns (bool expired) {
+        _checkAndEmitResolution();
+        uint256 deadline = _executionDeadline();
+        expired = deadline != 0 && block.timestamp > deadline;
+    }
+
+    function isExecuted() external view returns (bool executed) {
+        executed = proposalExecuted;
+    }
+
+    function executionDeadline() external returns (uint256 deadline) {
+        _checkAndEmitResolution();
+        deadline = _executionDeadline();
     }
 
     function getStrategy() external view returns (GovernanceStrategyConfig memory config) {
@@ -330,6 +316,32 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         );
     }
 
+    function _voteWrapped(address voter, bool support) internal {
+        require(
+            phase == ProposalPhase.PrimaryVoting || phase == ProposalPhase.FallbackVoting,
+            DACErrorsLib.NotAllowed()
+        );
+
+        uint256 snapshotBlock = phase == ProposalPhase.PrimaryVoting ? primarySnapshotBlock : fallbackSnapshotBlock;
+        require(block.timestamp <= phaseEndTime, DACErrorsLib.VotingEnded());
+
+        if (phase == ProposalPhase.PrimaryVoting) {
+            require(!primaryWrappedVoted[voter], DACErrorsLib.AlreadyVoted());
+            primaryWrappedVoted[voter] = true;
+        } else {
+            require(!fallbackWrappedVoted[voter], DACErrorsLib.AlreadyVoted());
+            fallbackWrappedVoted[voter] = true;
+        }
+
+        uint256 weight = IVotes(wrappedToken).getPastVotes(voter, snapshotBlock);
+        require(weight > 0, DACErrorsLib.NoVotingPower());
+        _countVote(support, weight);
+
+        emit DACEventsLib.Voted(voter, support, weight);
+
+        _checkAndEmitResolution();
+    }
+
     function _countVote(bool support, uint256 weight) internal {
         if (support) {
             yesVotes += weight;
@@ -342,28 +354,29 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
         if (proposalResolved) return;
         if (phase != ProposalPhase.PrimaryVoting && phase != ProposalPhase.FallbackVoting) return;
 
-        bool nowResolved = (
-            vetoCasted ||
-            (
-                yesVotes >= quorum &&
-                ((blockingQuorum == 0) || (yesVotes >= (totalVotingPower - blockingQuorum))) &&
-                (!vetoRight)
-            ) ||
+        bool nowResolved =
+            ((yesVotes >= quorum) && ((blockingQuorum == 0) || (yesVotes >= (totalVotingPower - blockingQuorum)))) ||
             ((blockingQuorum > 0) && (noVotes >= blockingQuorum)) ||
-            (block.timestamp > phaseEndTime)
-        );
+            (block.timestamp > phaseEndTime);
 
         if (nowResolved) {
             ProposalPhase resolvedFromPhase = phase;
             proposalResolved = true;
             resolvedOutcome = _outcome();
+            resolutionTime = block.timestamp;
             phase = ProposalPhase.Resolved;
 
-            emit DACEventsLib.ProposalResolved(yesVotes, noVotes, resolvedOutcome, vetoCasted);
+            emit DACEventsLib.ProposalResolved(
+                yesVotes,
+                noVotes,
+                resolvedOutcome,
+                false
+            );
+
             emit DACEventsLib.ProposalPhaseTransition(
                 id,
                 uint8(phase),
-                resolvedFromPhase == ProposalPhase.PrimaryVoting ? primarySnapshotBlock : fallbackSnapshotBlock,
+                resolvedFromPhase == ProposalPhase.FallbackVoting ? fallbackSnapshotBlock : primarySnapshotBlock,
                 phaseStartTime,
                 block.timestamp,
                 totalVotingPower,
@@ -374,12 +387,6 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
     }
 
     function _outcome() internal view returns (bool) {
-        if (vetoCasted) return false;
-
-        if (vetoRight) {
-            require(block.timestamp > phaseEndTime, DACErrorsLib.NotResolved());
-        }
-
         bool yesQuorumReached = yesVotes >= quorum;
 
         if (blockingQuorum > 0) {
@@ -388,10 +395,34 @@ contract HybridDACManagementProposal is IVoting, ReentrancyGuard, Initializable 
             }
 
             if (!(yesVotes >= totalVotingPower - blockingQuorum)) {
-                require(block.timestamp > phaseEndTime, DACErrorsLib.NotResolved());
+                require(
+                    phase == ProposalPhase.Resolved || block.timestamp > phaseEndTime,
+                    DACErrorsLib.NotResolved()
+                );
             }
+        } else {
+            require(
+                phase == ProposalPhase.Resolved || yesQuorumReached || block.timestamp > phaseEndTime,
+                DACErrorsLib.NotResolved()
+            );
         }
 
         return yesQuorumReached;
+    }
+
+    function _executionDeadline() internal view returns (uint256 deadline) {
+        if (!proposalResolved) {
+            return 0;
+        }
+
+        deadline = resolutionTime + strategy.executionValidityDuration;
+    }
+
+    function _isExecutableNow() internal view returns (bool executable) {
+        if (!proposalResolved || !resolvedOutcome || proposalExecuted) {
+            return false;
+        }
+
+        executable = block.timestamp <= resolutionTime + strategy.executionValidityDuration;
     }
 }

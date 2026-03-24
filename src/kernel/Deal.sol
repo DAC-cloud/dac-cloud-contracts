@@ -5,7 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {DealParams, ProposalParams, VotingConfig} from "../interfaces/Structs.sol";
-import {IVoting} from "../interfaces/IVoting.sol";
+import {IExecutableProposal} from "../interfaces/IExecutableProposal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
 import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
@@ -48,7 +48,6 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
     // Governance
     uint256 private nextId;
     mapping(uint256 => address) private proposals;
-    mapping(uint256 => bool) private executed;
 
     VotingConfig private _votingConfig;
     
@@ -232,14 +231,13 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
     function _beforeExecuteProposal(uint256 proposalId) internal virtual {}
     function _afterExecuteProposal(uint256 proposalId) internal virtual {}
 
-    function executeStakedAgentProposal(uint256 proposalId) external onlyAfterStakedAgentVote(proposalId) {
-        // Here we protecting from the reentrancy only with check-effect-update pattern
-        require(!executed[proposalId], DACErrorsLib.AlreadyExecuted());
-        executed[proposalId] = true; // We will not enter this method with the same proposalId twice
+    function executeStakedAgentProposal(uint256 proposalId) external {
+        address proposalAddr = getProposal(proposalId);
+        IExecutableProposal(proposalAddr).consumeExecution(true);
 
         _beforeExecuteProposal(proposalId);
 
-        DealManagementProposal prop = DealManagementProposal(proposals[proposalId]);
+        DealManagementProposal prop = DealManagementProposal(proposalAddr);
         bytes4 typ = (prop).typ();
 
         if (typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG) {
@@ -318,11 +316,6 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         _;
     }
 
-    modifier onlyAfterStakedAgentVote(uint256 proposalId) {
-        _onlyAfterStakedAgentVote(proposalId);
-        _;
-    }
-
     function _onlyDealCell() internal view {
         require(msg.sender == dealCell, DACErrorsLib.NotAuthorized());
     }
@@ -331,11 +324,4 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, DACErrorsLib.NoStake());
     }
     
-    function _onlyAfterStakedAgentVote(uint256 proposalId) internal {
-        require(
-            IVoting(proposals[proposalId]).isResolved() &&
-            IVoting(proposals[proposalId]).outcome(),
-            DACErrorsLib.VoteNotPassed()
-        );
-    }
 }

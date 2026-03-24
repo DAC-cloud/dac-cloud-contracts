@@ -6,7 +6,6 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper, ExistingDACConfig} from "../interfaces/Structs.sol";
 import {DealCreationConfig, GovernanceStrategyConfig} from "../interfaces/GovernanceStructs.sol";
-import {IVoting} from "../interfaces/IVoting.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
 import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
 import {IManagementProposal} from "../interfaces/IManagementProposal.sol";
@@ -109,7 +108,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             highQuorumPercent: (MathLib.SCALE + _quorum) / 2,
             blockingPercent: (MathLib.SCALE - _quorum) / 2,
             duration: 7 days,
-            qualification: 0
+            qualification: 0,
+            executionValidityDuration: 1 days
         });
 
         assetController = NativeAssetControllerFactory(_assetControllerFactory).deployNativeAssetController(
@@ -318,6 +318,14 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             dividendsEnabled
         );
 
+        if (params.typ == DACManagementProposalType.CAST_VETO_DEAL) {
+            DACCellGovernanceLib.registerVetoChallenge(
+                proposal,
+                params.data,
+                IDealManager(dealManager)
+            );
+        }
+
         emit DACEventsLib.DACProposalCreated(id, proposal, params.typ, params.target, params.i, params.data);
     }
 
@@ -393,17 +401,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         }
 
         else if (
-            typ == DACManagementProposalType.CAST_VETO_DEAL
-        ) {
-            DACCellGovernanceLib.castVeto(
-                prop, IDealManager(dealManager)
-            );
-        }
-
-        else if (
             typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
         ) {
             _executeVoteDelegation(prop);
+        }
+
+        else if (typ == DACManagementProposalType.CAST_VETO_DEAL) {
+            // Deal proposal execution gating is handled by the challenged proposal itself.
         }
 
         else {

@@ -142,6 +142,7 @@ contract DACDeployTest is Test {
                 blockingPercent: MathLib.atScale(20),
                 duration: 7 days,
                 qualification: 0,
+                executionValidityDuration: 1 days,
                 oraclePublishDeadline: 1 days,
                 fallbackWarmupDuration: 1 days,
                 fallbackDuration: 3 days

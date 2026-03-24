@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
 import {IGovernanceSchema} from "../../interfaces/IGovernanceSchema.sol";
-import {IVoting} from "../../interfaces/IVoting.sol";
+import {IExecutableProposal} from "../../interfaces/IExecutableProposal.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
@@ -26,7 +26,6 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
     DealCreationConfig private dealCreationConfig;
     uint256 private nextId;
     mapping(uint256 => address) private proposals;
-    mapping(uint256 => bool) private executed;
 
     constructor() {
         _disableInitializers();
@@ -78,7 +77,7 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
             );
 
             require(
-                mainToken.balanceOf(creator) > votingConfig.qualification,
+                mainToken.getVotes(creator) > votingConfig.qualification,
                 DACErrorsLib.InsufficientBalance()
             );
 
@@ -141,13 +140,7 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
     {
         proposal = proposals[id];
         require(proposal != address(0), DACErrorsLib.NotFound());
-        require(!executed[id], DACErrorsLib.ProposalAlreadyExecuted());
-        require(
-            IVoting(proposal).isResolved() && IVoting(proposal).outcome() == requiredOutcome,
-            DACErrorsLib.VoteNotPassed()
-        );
-
-        executed[id] = true;
+        IExecutableProposal(proposal).consumeExecution(requiredOutcome);
     }
 
     function setVotingConfig(VotingConfig calldata config) external onlyDACCell {
@@ -166,7 +159,8 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
             blockingPercent: config.blockingPercent,
             highQuorumPercent: config.highQuorumPercent,
             duration: config.duration,
-            qualification: config.qualification
+            qualification: config.qualification,
+            executionValidityDuration: config.executionValidityDuration
         });
     }
 
@@ -189,6 +183,7 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
             blockingPercent: votingConfig.blockingPercent,
             duration: votingConfig.duration,
             qualification: votingConfig.qualification,
+            executionValidityDuration: votingConfig.executionValidityDuration,
             oraclePublishDeadline: 0,
             fallbackWarmupDuration: 0,
             fallbackDuration: 0
@@ -227,7 +222,8 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
                 blockingPercent: config.blockingPercent,
                 highQuorumPercent: config.highQuorumPercent,
                 duration: config.duration,
-                qualification: config.qualification
+                qualification: config.qualification,
+                executionValidityDuration: config.executionValidityDuration
             })
         );
     }
@@ -251,6 +247,7 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.duration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());

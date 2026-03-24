@@ -81,7 +81,7 @@ contract DACCellDealTest is DACTestBase {
 
         vm.warp(block.timestamp + 30 days); // Was not approved in time
 
-        vm.expectRevert(DACErrorsLib.DeadlineNotPassed.selector);
+        vm.expectRevert(DACErrorsLib.ProposalNotExecutable.selector);
         dac.executeDACProposal(handle.proposalId);
         vm.stopPrank();
     }

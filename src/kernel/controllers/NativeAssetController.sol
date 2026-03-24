@@ -74,7 +74,7 @@ contract NativeAssetController is IAssetController, Initializable {
         onlyDACCell
         returns (uint256 previousBalance, uint256 currentBalance)
     {
-        require(mainToken.balanceOf(holder) > qualification, DACErrorsLib.InsufficientBalance());
+        require(IVotes(address(mainToken)).getVotes(holder) > qualification, DACErrorsLib.InsufficientBalance());
 
         previousBalance = treasuryBalances[token];
         currentBalance = IERC20(token).balanceOf(address(this));

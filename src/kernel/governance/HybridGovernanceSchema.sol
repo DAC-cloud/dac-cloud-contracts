@@ -5,6 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig} from "../../interfaces/Structs.sol";
 import {IGovernanceSchema} from "../../interfaces/IGovernanceSchema.sol";
+import {IExecutableProposal} from "../../interfaces/IExecutableProposal.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
@@ -13,6 +14,7 @@ import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACManagementProposalType} from "./DACManagementProposals.sol";
 import {HybridDACManagementProposalFactory} from "./factories/HybridDACManagementProposalFactory.sol";
 import {MathLib} from "../libraries/MathLib.sol";
+import {IVotes} from "../../lib/IVotes.sol";
 
 contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     address public dacCell;
@@ -26,7 +28,6 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     DealCreationConfig private dealCreationConfig;
     uint256 private nextId;
     mapping(uint256 => address) private proposals;
-    mapping(uint256 => bool) private executed;
 
     constructor() {
         _disableInitializers();
@@ -81,7 +82,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             );
 
             require(
-                wrappedMainToken.balanceOf(creator) > strategyConfig.qualification,
+                IVotes(address(wrappedMainToken)).getVotes(creator) > strategyConfig.qualification,
                 DACErrorsLib.InsufficientBalance()
             );
 
@@ -133,8 +134,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             params,
             strategyConfig,
             _isHighQuorum(params.typ),
-            _isBlockingEnabled(params.typ),
-            address(0)
+            _isBlockingEnabled(params.typ)
         );
 
         proposals[id] = proposal;
@@ -147,13 +147,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     {
         proposal = proposals[id];
         require(proposal != address(0), DACErrorsLib.NotFound());
-        require(!executed[id], DACErrorsLib.ProposalAlreadyExecuted());
-        require(
-            IGovernanceVoting(proposal).isResolved() && IGovernanceVoting(proposal).outcome() == requiredOutcome,
-            DACErrorsLib.VoteNotPassed()
-        );
-
-        executed[id] = true;
+        IExecutableProposal(proposal).consumeExecution(requiredOutcome);
     }
 
     function setVotingConfig(VotingConfig calldata config) external onlyDACCell {
@@ -163,6 +157,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         strategyConfig.blockingPercent = config.blockingPercent;
         strategyConfig.duration = config.duration;
         strategyConfig.qualification = config.qualification;
+        strategyConfig.executionValidityDuration = config.executionValidityDuration;
     }
 
     function setDealCreationConfig(DealCreationConfig calldata config) external onlyDACCell {
@@ -185,7 +180,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             blockingPercent: strategyConfig.blockingPercent,
             highQuorumPercent: strategyConfig.highQuorumPercent,
             duration: strategyConfig.duration,
-            qualification: strategyConfig.qualification
+            qualification: strategyConfig.qualification,
+            executionValidityDuration: strategyConfig.executionValidityDuration
         });
     }
 
@@ -222,7 +218,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
                 blockingPercent: config.blockingPercent,
                 highQuorumPercent: config.highQuorumPercent,
                 duration: config.duration,
-                qualification: config.qualification
+                qualification: config.qualification,
+                executionValidityDuration: config.executionValidityDuration
             })
         );
         require(config.oraclePublishDeadline > 0, DACErrorsLib.InvalidVotingConfig());
@@ -234,6 +231,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.duration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
@@ -287,9 +285,4 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
         );
     }
-}
-
-interface IGovernanceVoting {
-    function isResolved() external returns (bool);
-    function outcome() external returns (bool);
 }

@@ -14,6 +14,8 @@ library DACErrorsLib {
 
     error NoVotingPower();
     error VoteNotPassed();
+    error ProposalNotExecutable();
+    error ProposalAlreadyChallenged();
 
     error ProposalAlreadyExecuted();
 

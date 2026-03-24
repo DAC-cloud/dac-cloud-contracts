@@ -36,7 +36,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
     ) external returns (address proposalAddress) {
         uint256 quorum;
         uint256 blockingQuorum;
-        address vetoRightOwner = address(0);
+        bool challengeable;
 
         uint256 totalSupply = IERC20(token).totalSupply();
 
@@ -62,7 +62,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
 
                 if (vetoEnabled || params.typ == AbstractDealManagementType.PERMIT_UNSTAKE) {
-                    vetoRightOwner = dac;
+                    challengeable = true;
                 }
             }
             else {
@@ -75,7 +75,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 blockingQuorum = MathLib.mul(totalSupply, votingConfig.blockingPercent);
 
                 if (vetoEnabled) {
-                    vetoRightOwner = dac;
+                    challengeable = true;
                 }
             }
         }
@@ -111,7 +111,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             
             if (vetoEnabled) {
                 if (quorumConfig.high || quorumConfig.blocking || quorumConfig.veto) {
-                    vetoRightOwner = dac;
+                    challengeable = true;
                 }
             }
         }
@@ -119,8 +119,8 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
         bytes memory initData = abi.encodeWithSelector(
             DealManagementProposal.initialize.selector,
             id,
-            abi.encode(dac, deal, token, vetoRightOwner),
-            abi.encode(votingConfig.duration, totalSupply, quorum, blockingQuorum),
+            abi.encode(dac, deal, token, challengeable),
+            abi.encode(votingConfig.duration, votingConfig.executionValidityDuration, totalSupply, quorum, blockingQuorum),
             params
         );
 

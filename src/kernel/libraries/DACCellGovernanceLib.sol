@@ -10,7 +10,7 @@ import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
 import {IModuleRegistry} from "../../interfaces/IModuleRegistry.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
-import {IVoting} from "../../interfaces/IVoting.sol";
+import {IDealChallengeableProposal} from "../../interfaces/IDealChallengeableProposal.sol";
 import {DealState} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IManagementProposal} from "../../interfaces/IManagementProposal.sol";
@@ -188,20 +188,24 @@ library DACCellGovernanceLib {
         );
     }
 
-    function castVeto(
-        IManagementProposal prop,
+    function registerVetoChallenge(
+        address challengeProposal,
+        bytes memory data,
         IDealManager dealManager
     ) public {
         (uint256 dealId, uint256 proposalId) = abi.decode(
-            prop.data(), 
+            data,
             (uint256, uint256)
         );
-        
-        address proposal = IDealCell(dealManager.deals(dealId)).deal().getProposal(proposalId);
+
+        address dealCell = dealManager.deals(dealId);
+        require(dealCell != address(0), DACErrorsLib.InvalidDealId(dealId));
+
+        address proposal = IDealCell(dealCell).deal().getProposal(proposalId);
 
         require(proposal != address(0), DACErrorsLib.NotFound());
 
-        IVoting(proposal).castVeto();
+        IDealChallengeableProposal(proposal).registerDACChallenge(challengeProposal);
     }
 
     function createManagementProposal(
@@ -234,7 +238,7 @@ library DACCellGovernanceLib {
             );
 
             require(
-                mainToken.balanceOf(msg.sender) > votingConfig.qualification,
+                mainToken.getVotes(msg.sender) > votingConfig.qualification,
                 DACErrorsLib.InsufficientBalance()
             );
 
@@ -265,6 +269,7 @@ library DACCellGovernanceLib {
                 require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.blockingPercent >= 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
+                require(_votingConfig.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());

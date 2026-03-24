@@ -21,8 +21,7 @@ contract HybridDACManagementProposalFactory {
         ProposalParams memory params,
         GovernanceStrategyConfig memory strategy,
         bool highQuorum,
-        bool blockingEnabled,
-        address vetoRightOwner
+        bool blockingEnabled
     ) external returns (address proposal) {
         bytes memory initData = abi.encodeWithSelector(
             HybridDACManagementProposal.initialize.selector,
@@ -33,8 +32,7 @@ contract HybridDACManagementProposalFactory {
             params,
             strategy,
             highQuorum,
-            blockingEnabled,
-            vetoRightOwner
+            blockingEnabled
         );
 
         proposal = address(new UUPSProxy(referenceImpl, initData));

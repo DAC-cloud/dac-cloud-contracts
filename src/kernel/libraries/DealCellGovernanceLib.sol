@@ -16,6 +16,7 @@ import {AbstractDealManagementType} from "../governance/AbstractDealManagementPr
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {MathLib} from "./MathLib.sol";
+import {IVotes} from "../../lib/IVotes.sol";
 
 interface IDealCellGovernanceAdapter {
     function invite(address invitee, bool grantInviteRight) external;
@@ -213,7 +214,7 @@ library DealCellGovernanceLib {
                 );
 
                 require(
-                    IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > votingConfig.qualification,
+                    IVotes(IDealCell(dealCell).stakeToken()).getVotes(msg.sender) > votingConfig.qualification,
                     DACErrorsLib.NotEnoughBalance()
                 );
             }
@@ -237,6 +238,7 @@ library DealCellGovernanceLib {
             require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.blockingPercent >= 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());

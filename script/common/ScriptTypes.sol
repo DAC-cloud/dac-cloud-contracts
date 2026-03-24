@@ -90,6 +90,7 @@ struct ExistingDACSeedConfig {
     uint256 blockingPercent;
     uint256 duration;
     uint256 qualification;
+    uint256 executionValidityDuration;
     uint256 oraclePublishDeadline;
     uint256 fallbackWarmupDuration;
     uint256 fallbackDuration;
