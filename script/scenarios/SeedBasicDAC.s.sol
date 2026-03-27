@@ -53,7 +53,7 @@ contract SeedBasicDAC is ManifestIO {
 
         seed.treasuryToken = config.treasuryToken;
 
-        IERC20(config.treasuryToken).approve(seed.dac, config.founderCommitment);
+        IERC20(config.treasuryToken).approve(DACCell(seed.dac).getAssetController(), config.founderCommitment);
 
         CapitalCall memory call = CapitalCall({
             treasuryToken: config.treasuryToken,

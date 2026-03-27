@@ -8,6 +8,7 @@ import {
     ChildDACFlowSeed,
     ExistingDACSeed,
     ExistingGovernanceFlowSeed,
+    ExistingTreasuryFlowSeed,
     ProtocolDeployment,
     TreasuryFlowSeed
 } from "./ScriptTypes.sol";
@@ -366,6 +367,87 @@ abstract contract ManifestIO is ScriptConfig {
         seed.dealApproved = json.readBool(".dealApproved");
         seed.actionProposalsCreated = json.readBool(".actionProposalsCreated");
         seed.actionProposalsExecuted = json.readBool(".actionProposalsExecuted");
+    }
+
+    function writeExistingTreasuryFlowManifest(ExistingTreasuryFlowSeed memory seed)
+        internal
+        returns (string memory path)
+    {
+        string memory root = "existingTreasuryFlow";
+
+        vm.createDir(deploymentsRoot(), true);
+        vm.createDir(chainDeploymentsRoot(), true);
+
+        vm.serializeUint(root, "chainId", seed.chainId);
+        vm.serializeUint(root, "blockNumber", seed.blockNumber);
+        vm.serializeString(root, "label", seed.label);
+        vm.serializeString(root, "existingDACLabel", seed.existingDACLabel);
+        vm.serializeAddress(root, "founder", seed.founder);
+        vm.serializeAddress(root, "agent", seed.agent);
+        vm.serializeAddress(root, "recipient", seed.recipient);
+        vm.serializeAddress(root, "dac", seed.dac);
+        vm.serializeAddress(root, "mainToken", seed.mainToken);
+        vm.serializeAddress(root, "agentToken", seed.agentToken);
+        vm.serializeAddress(root, "underlyingToken", seed.underlyingToken);
+        vm.serializeAddress(root, "governanceOracle", seed.governanceOracle);
+        vm.serializeUint(root, "dealId", seed.dealId);
+        vm.serializeAddress(root, "dealCell", seed.dealCell);
+        vm.serializeAddress(root, "deal", seed.deal);
+        vm.serializeAddress(root, "treasury", seed.treasury);
+        vm.serializeAddress(root, "evaluator", seed.evaluator);
+        vm.serializeUint(root, "mintAgentProposalId", seed.mintAgentProposalId);
+        vm.serializeUint(root, "mintAgentSnapshotBlock", seed.mintAgentSnapshotBlock);
+        vm.serializeBytes32(root, "mintAgentMerkleRoot", seed.mintAgentMerkleRoot);
+        vm.serializeUint(root, "mintAgentUnderlyingAmount", seed.mintAgentUnderlyingAmount);
+        vm.serializeUint(root, "dacProposalId", seed.dacProposalId);
+        vm.serializeUint(root, "approveDealSnapshotBlock", seed.approveDealSnapshotBlock);
+        vm.serializeBytes32(root, "approveDealMerkleRoot", seed.approveDealMerkleRoot);
+        vm.serializeUint(root, "approveDealUnderlyingAmount", seed.approveDealUnderlyingAmount);
+        vm.serializeBool(root, "mintAgentPublished", seed.mintAgentPublished);
+        vm.serializeBool(root, "agentMinted", seed.agentMinted);
+        vm.serializeBool(root, "dealApprovalPublished", seed.dealApprovalPublished);
+        string memory json = vm.serializeBool(root, "dealApproved", seed.dealApproved);
+
+        path = existingTreasuryFlowManifestPath(seed.label);
+        vm.writeJson(json, path);
+    }
+
+    function loadExistingTreasuryFlowManifest(string memory label)
+        internal
+        view
+        returns (ExistingTreasuryFlowSeed memory seed)
+    {
+        string memory json = vm.readFile(existingTreasuryFlowManifestPath(label));
+
+        seed.chainId = json.readUint(".chainId");
+        seed.blockNumber = json.readUint(".blockNumber");
+        seed.label = json.readString(".label");
+        seed.existingDACLabel = json.readString(".existingDACLabel");
+        seed.founder = json.readAddress(".founder");
+        seed.agent = json.readAddress(".agent");
+        seed.recipient = json.readAddress(".recipient");
+        seed.dac = json.readAddress(".dac");
+        seed.mainToken = json.readAddress(".mainToken");
+        seed.agentToken = json.readAddress(".agentToken");
+        seed.underlyingToken = json.readAddress(".underlyingToken");
+        seed.governanceOracle = json.readAddress(".governanceOracle");
+        seed.dealId = json.readUint(".dealId");
+        seed.dealCell = json.readAddress(".dealCell");
+        seed.deal = json.readAddress(".deal");
+        seed.treasury = json.readAddress(".treasury");
+        seed.evaluator = json.readAddress(".evaluator");
+        seed.mintAgentProposalId = json.readUint(".mintAgentProposalId");
+        seed.mintAgentSnapshotBlock = json.readUint(".mintAgentSnapshotBlock");
+        seed.mintAgentMerkleRoot = json.readBytes32(".mintAgentMerkleRoot");
+        seed.mintAgentUnderlyingAmount = json.readUint(".mintAgentUnderlyingAmount");
+        seed.dacProposalId = json.readUint(".dacProposalId");
+        seed.approveDealSnapshotBlock = json.readUint(".approveDealSnapshotBlock");
+        seed.approveDealMerkleRoot = json.readBytes32(".approveDealMerkleRoot");
+        seed.approveDealUnderlyingAmount = json.readUint(".approveDealUnderlyingAmount");
+        seed.mintAgentPublished = json.readBool(".mintAgentPublished");
+        seed.agentMinted = json.readBool(".agentMinted");
+        seed.dealApprovalPublished = json.readBool(".dealApprovalPublished");
+        seed.dealApproved = json.readBool(".dealApproved");
     }
 
     function writeChildDACFlowManifest(ChildDACFlowSeed memory seed) internal returns (string memory path) {

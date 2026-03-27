@@ -20,7 +20,7 @@ This repository contains the protocol kernel, the shipped core module, Solidity 
 - `src/interfaces/`
   Shared external interfaces, events, errors, and protocol structs.
 - `src/kernel/`
-  The protocol kernel: `DACFactory`, `DACCell`, `DealManager`, `DealCell`, `Deal`, governance, libraries, and tokens.
+  The protocol kernel: `DACFactory`, `DACCell`, `DealManager`, `DealCell`, `Deal`, governance schemas, asset controllers, module registry, libraries, and tokens.
 - `src/modules/core/`
   The shipped core module with `DACDeal`, `TreasuryDeal`, `Permit2Treasury`, and the built-in evaluators.
 - `src/lib/`

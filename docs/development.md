@@ -90,6 +90,8 @@ The deployment flow is split into two layers:
   Shared DAC and deal proposal create/vote/execute helpers.
 - `script/scenarios/ExistingGovernanceFlowBase.sol`
   Shared existing-token DAC hybrid-governance helpers.
+- `script/scenarios/ExistingTreasuryFlowBase.sol`
+  Shared existing-token treasury-deal seeding helpers.
 - `script/scenarios/TreasuryFlowBase.sol`
   Shared treasury-flow setup helpers.
 - `script/scenarios/ChildDACFlowBase.sol`
@@ -153,6 +155,7 @@ The deployment flow is split into two layers:
 - `EXISTING_DAC_BLOCKING_QUORUM`
 - `EXISTING_DAC_DURATION`
 - `EXISTING_DAC_QUALIFICATION`
+- `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
 - `EXISTING_DAC_FALLBACK_WARMUP`
 - `EXISTING_DAC_FALLBACK_DURATION`
@@ -180,6 +183,18 @@ The deployment flow is split into two layers:
 - `TREASURY_FLOW_AGENT_SPEND_TOTAL_AMOUNT`
 - `TREASURY_FLOW_AGENT_SPEND_SINGLE_AMOUNT`
 - `TREASURY_FLOW_AGENT_SPEND_DURATION`
+
+### Existing treasury flow config
+
+- `EXISTING_TREASURY_FLOW_LABEL`
+- `EXISTING_TREASURY_FLOW_EXISTING_DAC_LABEL`
+- `EXISTING_TREASURY_FLOW_AGENT_MINT_AMOUNT`
+- `EXISTING_TREASURY_FLOW_STAKE_AMOUNT`
+- `EXISTING_TREASURY_FLOW_FUNDING_AMOUNT`
+- `EXISTING_TREASURY_FLOW_REWARDS_LIMIT`
+- `EXISTING_TREASURY_FLOW_EXPECTED_RETURN`
+- `EXISTING_TREASURY_FLOW_MERKLE_INDEX`
+- `EXISTING_TREASURY_FLOW_MERKLE_AMOUNT`
 
 ### Child DAC flow config
 
@@ -228,6 +243,12 @@ Treasury flow seed:
 
 ```text
 deployments/<chainid>/treasury-flow-<label>.json
+```
+
+Existing treasury flow seed:
+
+```text
+deployments/<chainid>/existing-treasury-flow-<label>.json
 ```
 
 Child DAC flow seed:
@@ -339,6 +360,7 @@ Useful environment variables for this mode:
 - `EXISTING_DAC_BLOCKING_QUORUM`
 - `EXISTING_DAC_DURATION`
 - `EXISTING_DAC_QUALIFICATION`
+- `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
 - `EXISTING_DAC_FALLBACK_WARMUP`
 - `EXISTING_DAC_FALLBACK_DURATION`
@@ -359,6 +381,7 @@ Notes:
 - If `EXISTING_DAC_UNDERLYING_TOKEN_ADDRESS` is not provided, the script deploys a mock underlying token and mints it to the broadcaster.
 - `EXISTING_DAC_TREASURY_SEED` cannot exceed `EXISTING_DAC_WRAP_AMOUNT`.
 - The founder must retain more wrapped tokens than the configured qualification, otherwise the script refuses to move too much wrapped balance into treasury and strand proposer rights.
+- `EXISTING_DAC_EXECUTION_VALIDITY` controls how long passed DAC proposals remain executable after resolution.
 
 ### Existing-token DAC governance flow
 
@@ -430,6 +453,40 @@ This flow creates a treasury deal and seeds realistic activity around:
 - receive claim permissions,
 - agent spend allowances,
 - actual `executeAgentSpend(...)` usage.
+
+### Existing-token treasury flow
+
+The existing-token treasury scenario stages the same basic treasury-deal creation path against a hybrid-governed DAC, using wrapped main-token reserves as the funding token.
+
+Current staged scripts:
+
+- `SeedExistingTreasuryCreateAgentMint.s.sol`
+- `SeedExistingTreasuryPublishAgentMint.s.sol`
+- `SeedExistingTreasuryExecuteAgentMint.s.sol`
+- `SeedExistingTreasuryCreateDeal.s.sol`
+- `SeedExistingTreasuryPublishApproveDeal.s.sol`
+- `SeedExistingTreasuryApproveDeal.s.sol`
+
+This flow gives indexers and SDKs a realistic wrapped-DAC dataset with:
+
+- hybrid DAC proposal creation,
+- oracle snapshot publication,
+- wrapped plus Merkle voting on DAC proposals,
+- agent minting,
+- wrapped-token treasury deal creation,
+- DAC approval of that deal.
+
+Example local sequence:
+
+```bash
+forge script script/scenarios/SeedExistingTokenDAC.s.sol:SeedExistingTokenDAC --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingTreasuryCreateAgentMint.s.sol:SeedExistingTreasuryCreateAgentMint --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingTreasuryPublishAgentMint.s.sol:SeedExistingTreasuryPublishAgentMint --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingTreasuryExecuteAgentMint.s.sol:SeedExistingTreasuryExecuteAgentMint --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingTreasuryCreateDeal.s.sol:SeedExistingTreasuryCreateDeal --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingTreasuryPublishApproveDeal.s.sol:SeedExistingTreasuryPublishApproveDeal --rpc-url <rpc> --broadcast
+forge script script/scenarios/SeedExistingTreasuryApproveDeal.s.sol:SeedExistingTreasuryApproveDeal --rpc-url <rpc> --broadcast
+```
 
 ### Child DAC flow
 

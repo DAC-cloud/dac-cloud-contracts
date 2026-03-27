@@ -1,309 +1,558 @@
-**DAC Cloud Contract Inventory**
-**Implementation-aligned reference**
-**Updated: March 13, 2026**
+# DAC Cloud Contract Inventory
 
-This file is the contract map for the current repository.
+Updated: March 25, 2026
 
-For deployment scripts, seeded scenario flows, and manifest formats, see [development.md](development.md).
+For the architectural overview, see [architecture.md](architecture.md). For scripts and manifests, see [development.md](development.md).
 
-## 1. Top-Level Architecture
+## 1. Current Topology
 
 ```mermaid
 flowchart TB
     Factory["DACFactory"] --> Cell["DACCell"]
-    Factory --> Main["MainToken"]
+    Factory --> Main["MainToken / WrappedMainToken"]
     Factory --> Agent["AgentToken"]
+    Factory --> Oracle["GovernanceOracle (existing-token mode)"]
+
+    Cell --> Schema["GovernanceSchema"]
+    Cell --> Assets["AssetController"]
+    Cell --> Modules["ModuleRegistry"]
     Cell --> Manager["DealManager"]
 
     Manager --> Module["ModuleFactory"]
     Module --> DealCell["DealCell"]
     Module --> Deal["Deal implementation"]
-    Module --> Eval["Evaluator"]
+    Module --> Evaluator["Evaluator"]
 
-    Agent -->|"stake"| DealCell
     DealCell --> Stake["StakedAgent"]
-    Cell -->|"DAC proposals"| DACGov["DACManagementProposal"]
-    Deal -->|"deal proposals"| DealGov["DealManagementProposal"]
 ```
 
-## 2. Kernel Contracts
+## 2. DAC Deployment Contracts
 
 ### `src/kernel/DACFactory.sol`
-- Deploys new DACs.
-- Predicts `DACCell` address with `CREATE2`.
-- Deploys `MainToken`, `AgentToken`, and `DACCell`.
-- Starts the DAC immediately or stores a deferred "sleeping cell" deployment for later activation.
 
-### `src/kernel/DACCell.sol`
-- DAC-level governance and treasury kernel.
-- Stores DAC metadata, voting config, legal wrapper, and dividend state.
-- Creates and executes DAC governance proposals.
-- Tracks treasury balances and capital calls.
-- Initializes the root capital call.
-- Emits enriched capital-call and dividend-claim events used by indexers.
+Protocol bootstrap contract.
 
-### `src/kernel/DealManager.sol`
-- Registry and lifecycle controller for all deals created by a DAC.
-- Holds the approved module-factory set for that DAC.
-- Tracks per-deal state, evaluator list, reward caps, reward unlocks, and reward payments.
-- Prevents controlled or unreleased `MainToken` balances from voting.
-- Evaluates deals and applies evaluator actions.
+Current responsibilities:
 
-### `src/kernel/DealCell.sol`
-- Per-deal state container.
-- Stores deal metadata, deadlines, tranches, whitelist state, early-return flag, veto flag, capital accounting, and claimable rewards.
-- Mints and burns the deal's `StakedAgent`.
-- Bridges the DAC, deal logic, and evaluator outputs.
-
-### `src/kernel/Deal.sol`
-- Abstract base contract for all deal logic.
-- Hosts staked-agent governance proposals and lifecycle hooks.
-- Delegates generic accounting/state to `DealCell` while retaining custom execution logic in child contracts.
-- Provides a shared helper for module deals to emit `DealRelatedContract` discovery events and register controlled runtime addresses.
-
-### `src/kernel/ModuleFactory.sol`
-- Abstract deployment layer for modules.
-- Deploys a `DealCell`, concrete `Deal`, and concrete evaluator for a new deal.
-- Used by `DealManager` through `IModuleFactory`.
-- Exposed through `IModuleFactory` discovery getters for module id, semver, manifest URI, and supported deal/evaluator kinds.
-
-### `src/kernel/proxies/UUPSProxy.sol`
-- Lightweight ERC-1967 proxy used by factories for initialization-time deployment.
-- In practice the deployed protocol treats these instances as immutable after initialization.
-
-## 3. Kernel Factories
-
-### `src/kernel/factories/DACCellFactory.sol`
-- Deploys `DACCell` proxies.
-
-### `src/kernel/factories/DealManagerFactory.sol`
-- Deploys `DealManager` proxies.
-
-### `src/kernel/factories/DealCellFactory.sol`
-- Deploys `DealCell` proxies.
-
-## 4. Governance Contracts
-
-### `src/kernel/governance/Proposal.sol`
-- Shared snapshot-voting base used by DAC and deal proposals.
-- Supports quorum, blocking quorum, optional veto rights, resolution checks, and vote casting.
-
-### `src/kernel/governance/DACManagementProposal.sol`
-- DAC-level proposal contract using `MainToken` voting power.
-
-### `src/kernel/governance/DealManagementProposal.sol`
-- Deal-level proposal contract using `StakedAgent` voting power.
-
-### `src/kernel/governance/DACManagementProposals.sol`
-- DAC-level proposal type registry.
-- Defines selectors for:
-  - voting-config updates,
-  - legal wrapper updates,
-  - offchain approvals,
-  - main-token mint/burn,
-  - agent-token mint/revoke,
-  - dividends,
-  - capital calls,
-  - module management,
-  - deal and tranche approval,
-  - deal recovery,
-  - evaluator addition,
-  - deal messages,
-  - veto casting,
-  - vote delegation.
-
-### `src/kernel/governance/AbstractDealManagementProposals.sol`
-- Base deal-proposal type registry.
-- Defines selectors for:
-  - voting-config updates,
-  - tranche requests,
-  - stake changes,
-  - unstake permissions,
-  - whitelist toggle,
-  - early-return toggle,
-  - DAC veto enablement,
-  - evaluator-add permission.
-
-### `src/kernel/governance/factories/DACManagementProposalFactory.sol`
-- Deploys `DACManagementProposal`.
-- Selects quorum mode based on proposal type.
-
-### `src/kernel/governance/factories/DealManagementProposalFactory.sol`
-- Abstract factory for `DealManagementProposal`.
-- Applies kernel quorum rules for base deal proposals.
-- Lets modules define additional quorum rules for module-specific proposals.
-
-## 5. Token Contracts
-
-### `src/kernel/tokens/MainToken.sol`
-- DAC main token.
-- Transferable `ERC20Votes`.
-- Mint capped by `maxSupply`.
-- Delegation restricted through `DealManager` checks for controlled balances.
-
-### `src/kernel/tokens/AgentToken.sol`
-- DAC agent token.
-- Minted and revoked through DAC governance.
-- Stake source for joining deals.
-
-### `src/kernel/tokens/StakedAgent.sol`
-- Per-deal non-transferable `ERC20Votes`.
-- Represents staked participation inside a deal.
-
-### `src/kernel/tokens/factories/TokenFactories.sol`
-- Contains:
-  - `MainTokenFactory`
-  - `AgentTokenFactory`
-  - `StakedAgentFactory`
-
-## 6. Kernel Libraries
+- deploy native DACs through `deployDAC(...)`
+- deploy existing-token DACs through `deployExistingTokenDAC(...)`
+- predict deterministic DAC addresses
+- deploy wrapper/oracle primitives for existing-token mode
+- seed wrapped treasury balances for existing-token DACs
+- emit `DACDeployed` and `ExistingTokenDACDeployed`
 
 ### `src/kernel/libraries/DACDeployment.sol`
-- Predicts `DACCell` addresses for factory deployments.
 
-### `src/kernel/libraries/DACCellGovernanceLib.sol`
-- Core DAC-side orchestration logic.
-- Creates deal proposals, DAC proposals, tranches, evaluator additions, reward minting, and evaluator execution.
+Helper library used for deterministic address prediction.
 
-### `src/kernel/libraries/DACCellCapitalLib.sol`
-- Handles capital calls, treasury deposits, treasury recovery, and dividend claims.
+## 3. DAC Kernel Contracts
 
-### `src/kernel/libraries/DealCellGovernanceLib.sol`
-- Handles deal staking, unstaking, claim flows, tranche requests, capital return, reward allocation, and slashing.
+### `src/kernel/DACCell.sol`
 
-### `src/kernel/libraries/MathLib.sol`
-- Shared fixed-point math library used across voting and evaluator logic.
+DAC micro-kernel.
 
-## 7. Core Module Contracts
+Current responsibilities:
+
+- DAC metadata
+- pointers to:
+  - main token
+  - agent token
+  - deal manager
+  - module registry
+  - asset controller
+  - governance schema
+- DAC proposal creation and execution routing
+- legal-wrapper message logging
+- root capital-call bootstrap in native mode
+- asset-controller treasury sync entrypoints
+- DAC-level event emission
+
+Notably no longer responsible for:
+
+- canonical treasury custody
+- main-token obligation storage
+- module-registry ownership
+- DAC proposal policy logic
+
+### `src/kernel/DealManager.sol`
+
+Deal lifecycle controller.
+
+Current responsibilities:
+
+- create deals through approved modules
+- keep the deal registry
+- keep per-deal state and evaluator registry
+- approve funding and tranches
+- route evaluator output
+- determine recoverability / active lifecycle state
+- interact with the asset controller for reward and main-asset accounting
+
+No longer owns:
+
+- module approval registry
+- DAC treasury accounting
+- canonical main-token obligation storage
+
+### `src/kernel/DealCell.sol`
+
+Per-deal state shell.
+
+Current responsibilities:
+
+- holds generic deal state
+- staking bridge between `AgentToken` and `StakedAgent`
+- tranche state
+- whitelist / early-return state
+- reward distribution state
+- recovery state
+- generic deal-governance dispatch before forwarding module-specific behavior
+
+### `src/kernel/Deal.sol`
+
+Abstract module execution contract.
+
+Current responsibilities:
+
+- deal-level proposal execution routing
+- generic lifecycle hooks
+- module-specific logic extension surface
+- standardized `DealRelatedContract` discovery helper
+
+The deal contract intentionally stays lean; DAC challenge state now lives on deal proposal contracts instead of in `Deal`.
+
+## 4. Governance Boundary Contracts
+
+### `src/interfaces/IGovernanceSchema.sol`
+
+Common DAC governance policy interface.
+
+Main methods:
+
+- create/consume DAC proposals
+- set/get voting config
+- set/get deal-creation config
+- set/get governance strategy config
+- set/get governance oracle
+
+### `src/kernel/governance/NativeGovernanceSchema.sol`
+
+Native DAC governance policy.
+
+Uses:
+
+- `MainToken` delegated votes for qualification
+- `VotingConfig` for native DAC proposal rules
+
+Handles:
+
+- proposal-type gating
+- validation of native voting config
+- capability-aware proposal support via the asset controller
+
+### `src/kernel/governance/HybridGovernanceSchema.sol`
+
+Existing-token DAC governance policy.
+
+Uses:
+
+- `WrappedMainToken` delegated votes for qualification
+- `GovernanceStrategyConfig` for oracle/fallback behavior
+- `GovernanceOracle` address management
+
+Handles:
+
+- hybrid proposal deployment
+- oracle-based governance strategy validation
+- fallback durations and execution-validity configuration
+- capability-aware proposal support via the asset controller
+
+### `src/kernel/governance/GovernanceOracle.sol`
+
+Oracle publisher for hybrid DAC governance.
+
+Features:
+
+- admin-controlled publisher set
+- proposal-specific snapshot publication
+- deactivation path
+- indexer-facing publisher/deactivation events
+
+### `src/kernel/governance/Proposal.sol`
+
+Shared base for timestamp-based proposal resolution and execution validity.
+
+Current shared behaviors:
+
+- vote casting
+- resolution logic
+- blocking quorum logic
+- execution-validity window
+- executable / expired / executed state
+
+### `src/kernel/governance/DACManagementProposal.sol`
+
+Native DAC proposal contract.
+
+Uses:
+
+- `MainToken` snapshot voting
+- neutral proposal semantics
+- no veto-specific behavior
+
+### `src/kernel/governance/HybridDACManagementProposal.sol`
+
+Existing-token DAC proposal contract.
+
+Features:
+
+- `AwaitingOracleSnapshot`
+- `PrimaryVoting`
+- `FallbackWarmup`
+- `FallbackVoting`
+- `Resolved`
+
+Supports:
+
+- wrapped voting
+- Merkle voting
+- emergency fallback after oracle deactivation
+- execution-validity window after resolution
+
+### `src/kernel/governance/DealManagementProposal.sol`
+
+Deal-level proposal contract.
+
+Uses:
+
+- `StakedAgent` snapshot voting
+- challengeable-execution model
+- execution-validity window
+
+Stores:
+
+- whether the proposal is DAC-challengeable
+- the linked DAC challenge proposal, if any
+
+### Governance factories
+
+- `src/kernel/governance/factories/DACManagementProposalFactory.sol`
+- `src/kernel/governance/factories/HybridDACManagementProposalFactory.sol`
+- `src/kernel/governance/factories/DealManagementProposalFactory.sol`
+- `src/kernel/governance/factories/NativeGovernanceSchemaFactory.sol`
+- `src/kernel/governance/factories/HybridGovernanceSchemaFactory.sol`
+- `src/kernel/governance/factories/GovernanceOracleFactory.sol`
+
+These deploy the governance implementations through proxy-backed factory flows.
+
+## 5. Treasury and Asset Boundary Contracts
+
+### `src/interfaces/IAssetController.sol`
+
+Common asset-controller interface.
+
+Main responsibilities exposed at interface level:
+
+- treasury deposits and treasury sync
+- capital-call creation and fulfillment
+- dividend payout registration and claim settlement
+- deal funding approval
+- main reward settlement
+- mint/burn support
+- vote delegation for DAC-held assets
+- controlled-address registration
+- votable-supply and obligation views
+- capability introspection
+
+### `src/kernel/controllers/NativeAssetController.sol`
+
+Native DAC treasury and main-asset policy implementation.
+
+Handles:
+
+- main-token treasury accounting
+- native main-token obligations
+- dividend payout commitments
+- capital calls
+- controlled address registration
+- released-votable accounting
+
+### `src/kernel/controllers/ExistingTokenAssetController.sol`
+
+Existing-token DAC treasury and wrapped-main-asset policy implementation.
+
+Handles:
+
+- wrapped treasury custody
+- reserve-backed reward commitments
+- reserve-backed dividend commitments
+- wrapped votable-supply exclusions
+- wrapped move/delegate hooks
+- reserve-backed capital calls from wrapped inventory
+
+### Asset-controller factories
+
+- `src/kernel/factories/AssetControllerFactory.sol`
+- `src/kernel/factories/ExistingTokenAssetControllerFactory.sol`
+
+## 6. Module Approval and Discovery
+
+### `src/interfaces/IModuleRegistry.sol`
+
+Minimal approved-module registry interface.
+
+### `src/kernel/ModuleRegistry.sol`
+
+Canonical DAC-owned approved-module storage.
+
+### `src/interfaces/IModuleFactory.sol`
+
+Module deployment and discovery interface.
+
+Current discovery surface includes:
+
+- `moduleId()`
+- `moduleVersion()`
+- `moduleManifestURI()`
+- `supportedDealKinds()`
+- `supportedEvaluatorKinds()`
+- `supportsDealKind(...)`
+- `supportsEvaluatorKind(...)`
+
+### `src/kernel/ModuleFactory.sol`
+
+Abstract module factory base used by concrete modules.
+
+## 7. Token Contracts
+
+### `src/kernel/tokens/MainToken.sol`
+
+Native DAC governance token.
+
+- `ERC20Votes`
+- capped supply
+- mint/burn hooks routed through DAC-controlled components
+
+### `src/kernel/tokens/WrappedMainToken.sol`
+
+Existing-token DAC wrapper.
+
+Features:
+
+- 1:1 wrap / unwrap against an underlying ERC-20
+- `ERC20Votes`
+- auto-self-delegation on first wrap
+- move/delegate notifications to the asset controller
+- explicit `Wrapped` / `Unwrapped` events
+
+### `src/kernel/tokens/AgentToken.sol`
+
+DAC operator token.
+
+Used for:
+
+- DAC-level operator issuance/revocation
+- deal-creation anti-spam requirements
+- staking into deals
+
+### `src/kernel/tokens/StakedAgent.sol`
+
+Per-deal non-transferable `ERC20Votes` token used for deal governance.
+
+### Token factories
+
+- `src/kernel/tokens/factories/TokenFactories.sol`
+- `src/kernel/tokens/factories/WrappedMainTokenFactory.sol`
+
+## 8. Proxy and Factory Infrastructure
+
+### Proxy contract
+
+- `src/kernel/proxies/UUPSProxy.sol`
+
+The system uses proxy deployment for size and deployment-gas reasons, but the kernel/core-module deployment model remains operationally non-upgradeable.
+
+### Core kernel factories
+
+- `src/kernel/factories/DACCellFactory.sol`
+- `src/kernel/factories/DealManagerFactory.sol`
+- `src/kernel/factories/DealCellFactory.sol`
+- `src/kernel/factories/ModuleRegistryFactory.sol`
+
+## 9. Deal and Module Contracts
 
 ### `src/modules/core/CoreModuleFactory.sol`
-- Active module factory shipped with the repository.
-- Maps supported deal kinds and evaluator kinds to concrete factories.
-- Exposes module discovery metadata through `IModuleFactory`:
-  - `moduleId()`
-  - `moduleVersion()`
-  - `moduleManifestURI()`
-  - `supportedDealKinds()`
-  - `supportedEvaluatorKinds()`
+
+Current shipped module factory.
+
+Supports:
+
+- `DACDeal`
+- `TreasuryDeal`
+- milestone evaluator
+- revenue evaluator
 
 ### `src/modules/core/CoreModuleDeals.sol`
-- Declares current core deal/evaluator selectors:
-  - `DAC_DEAL`
-  - `PERMIT2_TREASURY` (the selector used for `TreasuryDeal`)
-  - `MILESTONES_EVALUATOR`
-  - `REVENUE_EVALUATOR`
+
+Selector registry for the shipped core deal/evaluator kinds.
 
 ### `src/modules/core/governance/CoreDealManagementProposals.sol`
-- Core-module proposal selector registry.
-- Covers child-DAC actions and treasury-management actions.
+
+Core-module proposal selector registry for:
+
+- treasury operations
+- child-DAC operations
 
 ### `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol`
-- Concrete deal-governance factory for core module proposals.
-- Applies quorum rules for the selectors defined above.
 
-## 8. Core Deal Implementations
+Quorum-policy factory for core module deal proposals.
+
+## 10. Core Deal Implementations
 
 ### `src/modules/core/deals/DACDeal.sol`
-- Deal type for owning and funding a child DAC.
-- Can deploy a new child DAC or connect to an existing one.
-- Fulfills child capital calls on tranche approval.
-- Returns the child DAC `MainToken` position to the parent DAC when the deal closes.
-- Registers child DAC runtime addresses through `DealRelatedContract` for indexer discovery.
+
+Child-DAC deal implementation.
+
+Capabilities:
+
+- deploy/connect child DACs
+- fulfill child capital calls
+- create and vote child DAC proposals
+- reinvest profits
+- return profits
+- emit `DealRelatedContract` for child DAC and child token discovery
 
 ### `src/modules/core/deals/TreasuryDeal.sol`
-- Deal type for a governed treasury / execution wallet.
-- Owns a dedicated `Permit2Treasury`.
-- Supports spend approvals, agent allowances, receive permissions, capital return, and treasury vote delegation.
-- Registers its treasury wallet through `DealRelatedContract` and emits `ProfitsRecovered` when non-funding assets are moved into treasury control.
+
+Operational treasury deal.
+
+Capabilities:
+
+- direct spend governance
+- Permit2 spend approvals
+- agent spend/receive permissions
+- vote delegation for treasury-held vote tokens
+- profits recovery
+- related treasury discovery event emission
 
 ### `src/modules/core/deals/Permit2Treasury.sol`
-- Asset-holding treasury controlled by `TreasuryDeal`.
-- Supports:
-  - Permit2 spend approvals,
-  - direct spends,
-  - agent receive permissions,
-  - agent spend allowances,
-  - capital return to the deal,
-  - compatible-token vote delegation.
 
-### `src/modules/core/deals/factories/DACDealFactory.sol`
-- Deploys `DACDeal`.
+Treasury wallet owned by `TreasuryDeal`.
 
-### `src/modules/core/deals/factories/TreasuryDealFactory.sol`
-- Deploys `TreasuryDeal`.
-- Also deploys the shared `Permit2TreasuryFactory`.
+Features:
 
-## 9. Evaluators
+- direct spends
+- Permit2 receive/spend support
+- agent allowance enforcement
+- capital return to the deal
+
+### Deal factories
+
+- `src/modules/core/deals/factories/DACDealFactory.sol`
+- `src/modules/core/deals/factories/TreasuryDealFactory.sol`
+
+## 11. Evaluators
 
 ### `src/modules/core/evaluators/MilestoneBasedEvaluator.sol`
-- Milestone schedule evaluator.
-- Supports reward and penalty curves, extensions, and close milestones.
+
+Milestone-driven evaluator with:
+
+- reward curves
+- slash curves
+- extension support
+- close milestones
 
 ### `src/modules/core/evaluators/RevenueBasedEvaluator.sol`
-- Recurring revenue evaluator.
-- Supports periodic unlocks, missed-cycle penalties, and optional auto-close.
 
-### `src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol`
-- Deploys `MilestoneBasedEvaluator`.
+Recurring revenue evaluator with:
 
-### `src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol`
-- Deploys `RevenueBasedEvaluator`.
+- requirement curves
+- unlock curves
+- missed-cycle penalties
+- optional close behavior
 
-## 10. Shared Interfaces and Structs
+### Evaluator factories
+
+- `src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol`
+- `src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol`
+
+## 12. Shared Struct and Interface Files
 
 ### `src/interfaces/Structs.sol`
-- Shared config and message structs:
-  - `DACConfig`
-  - `VotingConfig`
-  - `LegalWrapper`
-  - `CapitalCall`
-  - `ProposalParams`
-  - `DealParams`
-  - `EvaluationResult`
-  - `Tranche`
 
-### `src/kernel/interfaces/Structs.sol`
-- Kernel runtime state structs:
-  - `DealState`
-  - `CapitalCallState`
+Key shared structs:
 
-### `src/modules/core/interfaces/Structs.sol`
-- Core-module config structs:
-  - `DACDealConfig`
-  - `TreasurySpendAllowance`
-  - `Milestone`
-  - `RevenueSchedule`
+- `DACConfig`
+- `ExistingDACConfig`
+- `VotingConfig`
+- `CapitalCall`
+- `ProposalParams`
+- `DealParams`
+- `EvaluationResult`
+- `Tranche`
 
-### Other key interfaces
+### `src/interfaces/GovernanceStructs.sol`
+
+Key governance/accounting structs and enums:
+
+- `DACMode`
+- `ProposalPhase`
+- `AssetCapability`
+- `CommitmentKind`
+- `GovernanceStrategyConfig`
+- `DealCreationConfig`
+- `AssetControllerConfig`
+- `ExistingTokenConfig`
+- `OracleSnapshot`
+
+### Important external interfaces
+
 - `src/interfaces/IDACCell.sol`
+- `src/interfaces/IDACFactory.sol`
 - `src/interfaces/IDealManager.sol`
 - `src/interfaces/IDealCell.sol`
 - `src/interfaces/IDeal.sol`
+- `src/interfaces/IManagementProposal.sol`
+- `src/interfaces/IVoting.sol`
+- `src/interfaces/IExecutableProposal.sol`
+- `src/interfaces/IDealChallengeableProposal.sol`
+- `src/interfaces/IGovernanceOracle.sol`
+- `src/interfaces/IGovernanceSchema.sol`
+- `src/interfaces/IAssetController.sol`
 - `src/interfaces/IModuleFactory.sol`
-- Module discovery interface for `DealManager` and offchain tooling.
-- Exposes module id, version, manifest URI, supported deal kinds, and supported evaluator kinds.
-- `src/interfaces/IEvaluator.sol`
-- `src/kernel/interfaces/IDACCellAdapter.sol`
-- `src/kernel/interfaces/IDealCellAdapter.sol`
-- `src/kernel/interfaces/IDealManagerAdapter.sol`
+- `src/interfaces/IModuleRegistry.sol`
 
-## 11. Event and Error Catalogs
+## 13. Event and Error Catalogs
 
 ### `src/interfaces/DACEventsLib.sol`
-- Central event catalog for DAC creation, proposals, funding, staking, evaluation, rewards, and capital returns.
+
+Central event catalog.
+
+Important current groups:
+
+- DAC deployment and startup
+- DAC proposal lifecycle
+- treasury and capital calls
+- dividends
+- module approval
+- generic proposal voting/resolution
+- oracle lifecycle
+- wrapper lifecycle
+- deal lifecycle
+- deal challenge state
+- module-related runtime address discovery
 
 ### `src/interfaces/DACErrorsLib.sol`
-- Central custom-error catalog shared across the system.
 
-## 12. Current Contract Relationships
+Shared custom error catalog used across the kernel, controllers, governance layer, and modules.
 
-| Contract | Owns / deploys | Governs / controls | Main purpose |
-|---|---|---|---|
-| `DACFactory` | `DACCell`, `MainToken`, `AgentToken` | none after init | bootstrap DACs |
-| `DACCell` | root capital calls, DAC proposals | DAC treasury and policy | DAC kernel |
-| `DealManager` | deals registry, evaluator registry | active deals, reward safety | DAC execution router |
-| `DealCell` | `StakedAgent` | one deal's state and staking | deal shell |
-| `Deal` | module-defined logic | one deal's actions | deal brain |
-| `CoreModuleFactory` | core deals and evaluators | module deployment | module system |
-| `DACDeal` | child DAC position | child-DAC funding flow | structured child DAC investment |
-| `TreasuryDeal` | `Permit2Treasury` | treasury execution | governed operational wallet |
+## 14. Legacy Libraries Still Present
+
+These files still exist and remain part of the current implementation, but they are no longer the primary architectural boundary the way they were before the refactor:
+
+- `src/kernel/libraries/DACCellGovernanceLib.sol`
+- `src/kernel/libraries/DACCellCapitalLib.sol`
+- `src/kernel/libraries/DealCellGovernanceLib.sol`
+- `src/kernel/libraries/MathLib.sol`
+
+They now support thinner top-level contracts rather than defining the full architecture alone.

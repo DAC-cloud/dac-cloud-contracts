@@ -7,6 +7,7 @@ import {
     ChildDACFlowSeedConfig,
     ExistingDACSeedConfig,
     ExistingGovernanceFlowSeedConfig,
+    ExistingTreasuryFlowSeedConfig,
     ProtocolConfig,
     TreasuryFlowSeedConfig
 } from "./ScriptTypes.sol";
@@ -73,6 +74,15 @@ abstract contract ScriptConfig is Script {
     string internal constant TREASURY_FLOW_AGENT_SPEND_TOTAL_ENV = "TREASURY_FLOW_AGENT_SPEND_TOTAL_AMOUNT";
     string internal constant TREASURY_FLOW_AGENT_SPEND_SINGLE_ENV = "TREASURY_FLOW_AGENT_SPEND_SINGLE_AMOUNT";
     string internal constant TREASURY_FLOW_AGENT_SPEND_DURATION_ENV = "TREASURY_FLOW_AGENT_SPEND_DURATION";
+    string internal constant EXISTING_TREASURY_FLOW_LABEL_ENV = "EXISTING_TREASURY_FLOW_LABEL";
+    string internal constant EXISTING_TREASURY_FLOW_DAC_LABEL_ENV = "EXISTING_TREASURY_FLOW_EXISTING_DAC_LABEL";
+    string internal constant EXISTING_TREASURY_FLOW_AGENT_MINT_AMOUNT_ENV = "EXISTING_TREASURY_FLOW_AGENT_MINT_AMOUNT";
+    string internal constant EXISTING_TREASURY_FLOW_STAKE_AMOUNT_ENV = "EXISTING_TREASURY_FLOW_STAKE_AMOUNT";
+    string internal constant EXISTING_TREASURY_FLOW_FUNDING_AMOUNT_ENV = "EXISTING_TREASURY_FLOW_FUNDING_AMOUNT";
+    string internal constant EXISTING_TREASURY_FLOW_REWARDS_LIMIT_ENV = "EXISTING_TREASURY_FLOW_REWARDS_LIMIT";
+    string internal constant EXISTING_TREASURY_FLOW_EXPECTED_RETURN_ENV = "EXISTING_TREASURY_FLOW_EXPECTED_RETURN";
+    string internal constant EXISTING_TREASURY_FLOW_MERKLE_INDEX_ENV = "EXISTING_TREASURY_FLOW_MERKLE_INDEX";
+    string internal constant EXISTING_TREASURY_FLOW_MERKLE_AMOUNT_ENV = "EXISTING_TREASURY_FLOW_MERKLE_AMOUNT";
     string internal constant CHILD_FLOW_LABEL_ENV = "CHILD_FLOW_LABEL";
     string internal constant CHILD_FLOW_BASIC_DAC_LABEL_ENV = "CHILD_FLOW_BASIC_DAC_LABEL";
     string internal constant CHILD_FLOW_AGENT_MINT_AMOUNT_ENV = "CHILD_FLOW_AGENT_MINT_AMOUNT";
@@ -154,6 +164,10 @@ abstract contract ScriptConfig is Script {
 
     function treasuryFlowManifestPath(string memory label) internal view returns (string memory) {
         return string.concat(chainDeploymentsRoot(), "/treasury-flow-", label, ".json");
+    }
+
+    function existingTreasuryFlowManifestPath(string memory label) internal view returns (string memory) {
+        return string.concat(chainDeploymentsRoot(), "/existing-treasury-flow-", label, ".json");
     }
 
     function childDACFlowManifestPath(string memory label) internal view returns (string memory) {
@@ -261,6 +275,23 @@ abstract contract ScriptConfig is Script {
         config.agentMintAmount = vm.envOr(EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT_ENV, uint256(12_345));
         config.merkleIndex = vm.envOr(EXISTING_GOV_FLOW_MERKLE_INDEX_ENV, uint256(0));
         config.merkleAmountOverride = vm.envOr(EXISTING_GOV_FLOW_MERKLE_AMOUNT_ENV, uint256(0));
+    }
+
+    function loadExistingTreasuryFlowSeedConfig()
+        internal
+        view
+        returns (ExistingTreasuryFlowSeedConfig memory config)
+    {
+        config.label = vm.envOr(EXISTING_TREASURY_FLOW_LABEL_ENV, string("existing-treasury"));
+        config.existingDACLabel =
+            vm.envOr(EXISTING_TREASURY_FLOW_DAC_LABEL_ENV, vm.envOr(EXISTING_DAC_LABEL_ENV, string("existing")));
+        config.agentMintAmount = vm.envOr(EXISTING_TREASURY_FLOW_AGENT_MINT_AMOUNT_ENV, uint256(100_000));
+        config.stakeAmount = vm.envOr(EXISTING_TREASURY_FLOW_STAKE_AMOUNT_ENV, uint256(20_000));
+        config.fundingAmount = vm.envOr(EXISTING_TREASURY_FLOW_FUNDING_AMOUNT_ENV, uint256(10_000e18));
+        config.rewardsLimit = vm.envOr(EXISTING_TREASURY_FLOW_REWARDS_LIMIT_ENV, uint256(500e18));
+        config.expectedReturn = vm.envOr(EXISTING_TREASURY_FLOW_EXPECTED_RETURN_ENV, uint256(10_000e18));
+        config.merkleIndex = vm.envOr(EXISTING_TREASURY_FLOW_MERKLE_INDEX_ENV, uint256(0));
+        config.merkleAmountOverride = vm.envOr(EXISTING_TREASURY_FLOW_MERKLE_AMOUNT_ENV, uint256(0));
     }
 
     function loadChildDACFlowSeedConfig() internal view returns (ChildDACFlowSeedConfig memory config) {

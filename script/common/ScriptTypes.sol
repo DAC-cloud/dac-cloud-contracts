@@ -188,6 +188,18 @@ struct TreasuryFlowSeedConfig {
     uint256 agentSpendDuration;
 }
 
+struct ExistingTreasuryFlowSeedConfig {
+    string label;
+    string existingDACLabel;
+    uint256 agentMintAmount;
+    uint256 stakeAmount;
+    uint256 fundingAmount;
+    uint256 rewardsLimit;
+    uint256 expectedReturn;
+    uint256 merkleIndex;
+    uint256 merkleAmountOverride;
+}
+
 struct ChildDACFlowSeedConfig {
     string label;
     string basicDACLabel;
@@ -233,6 +245,38 @@ struct TreasuryFlowSeed {
     bool dealApproved;
     bool actionProposalsCreated;
     bool actionProposalsExecuted;
+}
+
+struct ExistingTreasuryFlowSeed {
+    uint256 chainId;
+    uint256 blockNumber;
+    string label;
+    string existingDACLabel;
+    address founder;
+    address agent;
+    address recipient;
+    address dac;
+    address mainToken;
+    address agentToken;
+    address underlyingToken;
+    address governanceOracle;
+    uint256 dealId;
+    address dealCell;
+    address deal;
+    address treasury;
+    address evaluator;
+    uint256 mintAgentProposalId;
+    uint256 mintAgentSnapshotBlock;
+    bytes32 mintAgentMerkleRoot;
+    uint256 mintAgentUnderlyingAmount;
+    uint256 dacProposalId;
+    uint256 approveDealSnapshotBlock;
+    bytes32 approveDealMerkleRoot;
+    uint256 approveDealUnderlyingAmount;
+    bool mintAgentPublished;
+    bool agentMinted;
+    bool dealApprovalPublished;
+    bool dealApproved;
 }
 
 struct ChildDACFlowSeed {
