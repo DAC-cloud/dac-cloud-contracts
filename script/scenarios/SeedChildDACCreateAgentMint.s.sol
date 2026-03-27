@@ -2,16 +2,14 @@
 pragma solidity ^0.8.20;
 
 import {console2} from "forge-std/console2.sol";
-import {BasicDACSeed, ChildDACFlowSeed, ChildDACFlowSeedConfig, ProtocolDeployment} from "../common/ScriptTypes.sol";
+import {ChildDACFlowSeed, ChildDACFlowSeedConfig, ProtocolDeployment} from "../common/ScriptTypes.sol";
 import {ChildDACFlowBase} from "./ChildDACFlowBase.sol";
 
 contract SeedChildDACCreateAgentMint is ChildDACFlowBase {
     function run() external returns (ChildDACFlowSeed memory seed) {
         ChildDACFlowSeedConfig memory config = loadChildDACFlowSeedConfig();
-        (ProtocolDeployment memory protocol, BasicDACSeed memory basic, ChildDACFlowSeed memory flowSeed) =
-            _initChildDACSeed(config);
+        (ProtocolDeployment memory protocol, ChildDACFlowSeed memory flowSeed) = _initChildDACSeed(config);
         protocol;
-        basic;
         seed = flowSeed;
 
         vm.startBroadcast(founderKey());
@@ -28,4 +26,3 @@ contract SeedChildDACCreateAgentMint is ChildDACFlowBase {
         console2.log("  manifest:", manifestPath);
     }
 }
-

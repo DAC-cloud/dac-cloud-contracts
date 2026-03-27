@@ -460,6 +460,7 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeUint(root, "blockNumber", seed.blockNumber);
         vm.serializeString(root, "label", seed.label);
         vm.serializeString(root, "basicDACLabel", seed.basicDACLabel);
+        vm.serializeString(root, "existingDACLabel", seed.existingDACLabel);
         vm.serializeAddress(root, "founder", seed.founder);
         vm.serializeAddress(root, "agent", seed.agent);
         vm.serializeAddress(root, "beneficiary", seed.beneficiary);
@@ -467,6 +468,8 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeAddress(root, "mainToken", seed.mainToken);
         vm.serializeAddress(root, "agentToken", seed.agentToken);
         vm.serializeAddress(root, "treasuryToken", seed.treasuryToken);
+        vm.serializeAddress(root, "underlyingToken", seed.underlyingToken);
+        vm.serializeAddress(root, "governanceOracle", seed.governanceOracle);
         vm.serializeUint(root, "dealId", seed.dealId);
         vm.serializeAddress(root, "dealCell", seed.dealCell);
         vm.serializeAddress(root, "deal", seed.deal);
@@ -505,6 +508,7 @@ abstract contract ManifestIO is ScriptConfig {
         seed.blockNumber = json.readUint(".blockNumber");
         seed.label = json.readString(".label");
         seed.basicDACLabel = json.readString(".basicDACLabel");
+        seed.existingDACLabel = json.readString(".existingDACLabel");
         seed.founder = json.readAddress(".founder");
         seed.agent = json.readAddress(".agent");
         seed.beneficiary = json.readAddress(".beneficiary");
@@ -512,6 +516,8 @@ abstract contract ManifestIO is ScriptConfig {
         seed.mainToken = json.readAddress(".mainToken");
         seed.agentToken = json.readAddress(".agentToken");
         seed.treasuryToken = json.readAddress(".treasuryToken");
+        seed.underlyingToken = json.readAddress(".underlyingToken");
+        seed.governanceOracle = json.readAddress(".governanceOracle");
         seed.dealId = json.readUint(".dealId");
         seed.dealCell = json.readAddress(".dealCell");
         seed.deal = json.readAddress(".deal");

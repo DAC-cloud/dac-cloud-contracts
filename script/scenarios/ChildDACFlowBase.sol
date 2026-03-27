@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {BasicDACSeed, ChildDACFlowSeed, ChildDACFlowSeedConfig, ProtocolDeployment} from "../common/ScriptTypes.sol";
+import {ChildDACFlowSeed, ChildDACFlowSeedConfig, ExistingDACSeed, ProtocolDeployment} from "../common/ScriptTypes.sol";
 import {IDealManager} from "../../src/interfaces/IDealManager.sol";
 import {IDACCell} from "../../src/interfaces/IDACCell.sol";
 import {IDealCell} from "../../src/interfaces/IDealCell.sol";
@@ -16,6 +17,7 @@ import {MilestoneBasedEvaluator} from "../../src/modules/core/evaluators/Milesto
 import {DACDealConfig, Milestone} from "../../src/modules/core/interfaces/Structs.sol";
 import {DACManagementProposalType} from "../../src/kernel/governance/DACManagementProposals.sol";
 import {CoreDealManagementType} from "../../src/modules/core/governance/CoreDealManagementProposals.sol";
+import {HybridDACManagementProposal} from "../../src/kernel/governance/HybridDACManagementProposal.sol";
 import {ScenarioGovernanceBase} from "./ScenarioGovernanceBase.sol";
 
 abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
@@ -25,46 +27,90 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
     error ChildProposalNotPrepared();
     error CapitalCallNotPrepared();
     error TokenNotMintable();
+    error ZeroUnderlyingVotingPower();
 
     function _initChildDACSeed(
         ChildDACFlowSeedConfig memory config
-    ) internal view returns (ProtocolDeployment memory protocol, BasicDACSeed memory basic, ChildDACFlowSeed memory seed) {
+    ) internal view returns (ProtocolDeployment memory protocol, ChildDACFlowSeed memory seed) {
         protocol = loadProtocolManifest();
-        basic = loadBasicDACSeedManifest(config.basicDACLabel);
 
         seed.chainId = block.chainid;
         seed.label = config.label;
         seed.basicDACLabel = config.basicDACLabel;
+        seed.existingDACLabel = config.existingDACLabel;
         seed.founder = vm.addr(founderKey());
         seed.agent = vm.addr(agentKey());
         seed.beneficiary = recipientAddress();
-        seed.dac = basic.dac;
-        seed.mainToken = basic.mainToken;
-        seed.agentToken = basic.agentToken;
-        seed.treasuryToken = basic.treasuryToken;
+
+        if (bytes(config.existingDACLabel).length > 0) {
+            ExistingDACSeed memory existing = loadExistingDACSeedManifest(config.existingDACLabel);
+            seed.dac = existing.dac;
+            seed.mainToken = existing.mainToken;
+            seed.agentToken = existing.agentToken;
+            seed.treasuryToken = existing.mainToken;
+            seed.underlyingToken = existing.underlyingToken;
+            seed.governanceOracle = existing.governanceOracle;
+        } else {
+            seed.dac = loadBasicDACSeedManifest(config.basicDACLabel).dac;
+            seed.mainToken = loadBasicDACSeedManifest(config.basicDACLabel).mainToken;
+            seed.agentToken = loadBasicDACSeedManifest(config.basicDACLabel).agentToken;
+            seed.treasuryToken = loadBasicDACSeedManifest(config.basicDACLabel).treasuryToken;
+        }
+    }
+
+    function _parentIsExisting(ChildDACFlowSeed memory seed) internal pure returns (bool) {
+        return bytes(seed.existingDACLabel).length > 0;
+    }
+
+    function _parentDealManager(ChildDACFlowSeed memory seed) internal view returns (address) {
+        return IDACCell(seed.dac).getDealManager();
     }
 
     function _createChildDACDeal(
         ChildDACFlowSeed memory seed,
-        BasicDACSeed memory basic,
         ProtocolDeployment memory protocol,
         ChildDACFlowSeedConfig memory config
     ) internal returns (Vm.Log[] memory logs) {
         DealParams memory params = _childDACDealParams(seed, protocol, config);
 
         vm.recordLogs();
-        (seed.dealId, seed.dealCell, seed.deal, seed.evaluator) = IDealManager(basic.dealManager).createDealProposal(params);
+        (seed.dealId, seed.dealCell, seed.deal, seed.evaluator) = IDealManager(_parentDealManager(seed)).createDealProposal(params);
         AgentToken(seed.agentToken).stakeToDeal(seed.dealCell, config.stakeAmount);
         StakedAgent(IDealCell(seed.dealCell).stakeToken()).delegate(seed.agent);
         return vm.getRecordedLogs();
     }
 
     function _approveDeal(ChildDACFlowSeed memory seed) internal {
-        _voteAndExecuteDACProposal(seed.dac, seed.dacProposalId, true);
+        _executeParentDACProposal(seed, seed.dacProposalId);
         seed.dealApproved = true;
         seed.childDac = DACDeal(seed.deal).managedEntity();
         seed.childMainToken = IDACCell(seed.childDac).getMainToken();
         seed.childAgentToken = IDACCell(seed.childDac).getAgentToken();
+    }
+
+    function _executeParentDACProposal(ChildDACFlowSeed memory seed, uint256 proposalId) internal {
+        if (!_parentIsExisting(seed)) {
+            _voteAndExecuteDACProposal(seed.dac, proposalId, true);
+            return;
+        }
+
+        address proposalAddress = IDACCell(seed.dac).getProposalVoting(proposalId);
+        uint256 snapshotBlock = HybridDACManagementProposal(proposalAddress).primarySnapshotBlock();
+        uint256 amount = IERC20(seed.underlyingToken).balanceOf(seed.founder);
+        if (amount == 0) revert ZeroUnderlyingVotingPower();
+        bytes32 merkleRoot = _singleLeafRoot(0, seed.founder, amount);
+
+        _publishDACOracleSnapshot(seed.governanceOracle, proposalId, snapshotBlock, merkleRoot, amount);
+        _activatePrimaryDACProposal(seed.dac, proposalId);
+        _voteDACProposal(seed.dac, proposalId, true);
+
+        bytes32[] memory proof = new bytes32[](0);
+        _voteDACProposalMerkle(seed.dac, proposalId, true, 0, amount, proof);
+        _executeDACProposal(seed.dac, proposalId);
+    }
+
+    function _singleLeafRoot(uint256 index, address account, uint256 amount) internal pure returns (bytes32 root) {
+        root = keccak256(abi.encodePacked(index, account, amount));
     }
 
     function _createParentChildProposal(

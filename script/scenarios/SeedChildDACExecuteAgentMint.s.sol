@@ -13,7 +13,7 @@ contract SeedChildDACExecuteAgentMint is ChildDACFlowBase {
         if (seed.mintAgentProposalId == 0) revert ChildDACFlowNotPrepared();
 
         vm.startBroadcast(founderKey());
-        _voteAndExecuteDACProposal(seed.dac, seed.mintAgentProposalId, true);
+        _executeParentDACProposal(seed, seed.mintAgentProposalId);
         vm.stopBroadcast();
 
         seed.agentMinted = true;
@@ -27,4 +27,3 @@ contract SeedChildDACExecuteAgentMint is ChildDACFlowBase {
         console2.log("  manifest:", manifestPath);
     }
 }
-

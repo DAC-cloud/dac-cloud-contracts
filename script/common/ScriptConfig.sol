@@ -85,6 +85,7 @@ abstract contract ScriptConfig is Script {
     string internal constant EXISTING_TREASURY_FLOW_MERKLE_AMOUNT_ENV = "EXISTING_TREASURY_FLOW_MERKLE_AMOUNT";
     string internal constant CHILD_FLOW_LABEL_ENV = "CHILD_FLOW_LABEL";
     string internal constant CHILD_FLOW_BASIC_DAC_LABEL_ENV = "CHILD_FLOW_BASIC_DAC_LABEL";
+    string internal constant CHILD_FLOW_EXISTING_DAC_LABEL_ENV = "CHILD_FLOW_EXISTING_DAC_LABEL";
     string internal constant CHILD_FLOW_AGENT_MINT_AMOUNT_ENV = "CHILD_FLOW_AGENT_MINT_AMOUNT";
     string internal constant CHILD_FLOW_STAKE_AMOUNT_ENV = "CHILD_FLOW_STAKE_AMOUNT";
     string internal constant CHILD_FLOW_FUNDING_AMOUNT_ENV = "CHILD_FLOW_FUNDING_AMOUNT";
@@ -297,6 +298,7 @@ abstract contract ScriptConfig is Script {
     function loadChildDACFlowSeedConfig() internal view returns (ChildDACFlowSeedConfig memory config) {
         config.label = vm.envOr(CHILD_FLOW_LABEL_ENV, string("child-dac"));
         config.basicDACLabel = vm.envOr(CHILD_FLOW_BASIC_DAC_LABEL_ENV, vm.envOr(BASIC_DAC_LABEL_ENV, string("seed")));
+        config.existingDACLabel = vm.envOr(CHILD_FLOW_EXISTING_DAC_LABEL_ENV, string(""));
         config.agentMintAmount = vm.envOr(CHILD_FLOW_AGENT_MINT_AMOUNT_ENV, uint256(100_000));
         config.stakeAmount = vm.envOr(CHILD_FLOW_STAKE_AMOUNT_ENV, uint256(20_000));
         config.fundingAmount = vm.envOr(CHILD_FLOW_FUNDING_AMOUNT_ENV, uint256(10_000e6));

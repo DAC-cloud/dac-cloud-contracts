@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {console2} from "forge-std/console2.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams} from "../../src/interfaces/Structs.sol";
 import {CoreDealManagementType} from "../../src/modules/core/governance/CoreDealManagementProposals.sol";
 import {ChildDACFlowSeed, ChildDACFlowSeedConfig} from "../common/ScriptTypes.sol";
@@ -14,8 +15,16 @@ contract SeedChildDACCreateReturnProfitsProposal is ChildDACFlowBase {
 
         if (!seed.dealApproved) revert DealNotApproved();
 
+        if (_parentIsExisting(seed)) {
+            vm.startBroadcast(founderKey());
+            IERC20(seed.treasuryToken).transfer(seed.deal, config.returnProfitAmount);
+            vm.stopBroadcast();
+        }
+
         vm.startBroadcast(agentKey());
-        _mintProfitsToDeal(seed.treasuryToken, seed.deal, config.returnProfitAmount);
+        if (!_parentIsExisting(seed)) {
+            _mintProfitsToDeal(seed.treasuryToken, seed.deal, config.returnProfitAmount);
+        }
         seed.returnProfitProposalId = _createDealProposal(
             seed.deal,
             ProposalParams({
@@ -37,4 +46,3 @@ contract SeedChildDACCreateReturnProfitsProposal is ChildDACFlowBase {
         console2.log("  manifest:", manifestPath);
     }
 }
-

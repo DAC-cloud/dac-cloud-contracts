@@ -203,6 +203,7 @@ struct ExistingTreasuryFlowSeedConfig {
 struct ChildDACFlowSeedConfig {
     string label;
     string basicDACLabel;
+    string existingDACLabel;
     uint256 agentMintAmount;
     uint256 stakeAmount;
     uint256 fundingAmount;
@@ -284,6 +285,7 @@ struct ChildDACFlowSeed {
     uint256 blockNumber;
     string label;
     string basicDACLabel;
+    string existingDACLabel;
     address founder;
     address agent;
     address beneficiary;
@@ -291,6 +293,8 @@ struct ChildDACFlowSeed {
     address mainToken;
     address agentToken;
     address treasuryToken;
+    address underlyingToken;
+    address governanceOracle;
     uint256 dealId;
     address dealCell;
     address deal;
