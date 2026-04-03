@@ -158,6 +158,7 @@ contract AccountingObligationsFuzzTest is DACTestBase {
             fundingToken: address(usdc),
             fundingAmount: 10_000,
             rewardsLimit: REWARDS_LIMIT,
+            dealRewardPoolPercent: 0,
             approveDeadline: block.timestamp + 1 days,
             evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,

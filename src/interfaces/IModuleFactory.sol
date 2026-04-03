@@ -11,6 +11,7 @@ interface IModuleFactory {
     function supportedEvaluatorKinds() external view returns (bytes4[] memory);
     function supportsDealKind(bytes4 dealKind) external view returns (bool);
     function supportsEvaluatorKind(bytes4 dealKind, bytes4 evaluatorKind) external view returns (bool);
+    function supportsDealRewardPool(bytes4 dealKind) external view returns (bool);
 
     function isActive() external view returns (bool);
     function safetyCheck(address deal) external view returns (bool);

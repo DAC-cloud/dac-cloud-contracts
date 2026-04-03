@@ -256,9 +256,11 @@ library DACEventsLib {
     event DealRecovered(address indexed dac, uint256 indexed id, address indexed deal, address liquidator);
 
     event RewardsAllocated(address indexed dac, uint256 indexed id, address indexed deal, uint256 reward);
+    event DealRewardPoolAllocated(address indexed dac, uint256 indexed id, address indexed deal, uint256 amount);
     event StakesSlashed(address indexed dac, uint256 indexed id, address indexed deal, uint256 slashAmount);
     
     event RewardsClaimed(address indexed dac, address indexed agent, address indexed deal, uint256 amount);
+    event DealRewardClaimed(address indexed dac, uint256 indexed id, address indexed deal, uint256 amount);
 
     // Wrapped main token events
 

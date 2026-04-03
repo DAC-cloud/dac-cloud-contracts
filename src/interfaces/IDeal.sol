@@ -32,6 +32,7 @@ interface IDeal {
     function afterWithdrawCapital() external;
 
     function onMarkAsSuccess(uint256 rewardPercent) external;
+    function onDealRewardAllocated(uint256 amount) external;
     function onMarkAsFailed(uint256 slashPercent) external;
     function onExtendDeadline(uint256 oldDeadline, uint256 newDeadline) external;
     function beforeClose() external;

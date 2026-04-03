@@ -18,6 +18,7 @@ interface IDealCell {
     function invite(address invitee, bool grantInviteRight) external;
 
     function claimMainToken(uint256 evaluatorId) external;
+    function dealRewardPoolPercent() external view returns (uint256);
     function unstake() external;
     
     function fundingTranche(uint256 trancheId) external view returns (Tranche memory tranche);

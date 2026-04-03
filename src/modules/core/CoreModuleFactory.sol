@@ -67,6 +67,10 @@ contract CoreModuleFactory is ModuleFactory {
             || evaluatorKind == CoreEvaluatorType.REVENUE_EVALUATOR;
     }
 
+    function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
+        return dealKind == CoreDealType.DAC_DEAL || dealKind == CoreDealType.PERMIT2_TREASURY;
+    }
+
     function isActive() external pure returns (bool) { return true; }
     function safetyCheck(address) external pure returns (bool) { return true; }
 

@@ -69,6 +69,7 @@ contract DACCellGovernanceLibTest is Test {
             fundingToken: makeAddr("usdc"),
             fundingAmount: 1000e6,
             rewardsLimit: 500e6,
+            dealRewardPoolPercent: 0,
             approveDeadline: block.timestamp + 1 days,
             evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,

@@ -131,6 +131,7 @@ contract MockDealForLib is IDeal {
     }
 
     function onMarkAsSuccess(uint256) external pure {}
+    function onDealRewardAllocated(uint256) external pure {}
     function onMarkAsFailed(uint256) external pure {}
     function onExtendDeadline(uint256, uint256) external pure {}
     function beforeClose() external pure {}

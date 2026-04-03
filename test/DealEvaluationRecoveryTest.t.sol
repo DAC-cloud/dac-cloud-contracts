@@ -25,6 +25,7 @@ import {CoreDealType} from "../src/modules/core/CoreModuleDeals.sol";
 import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {StakedAgentFactory} from "../src/kernel/tokens/factories/TokenFactories.sol";
+import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 
 bytes4 constant MOCK_EVALUATOR_SELECTOR = bytes4(keccak256("MOCK_EVALUATOR"));
 
@@ -114,6 +115,9 @@ contract MockEvaluatorModuleFactory is ModuleFactory {
     function supportsEvaluatorKind(bytes4, bytes4 evaluatorSelector) external pure returns (bool) {
         return evaluatorSelector == MOCK_EVALUATOR_SELECTOR;
     }
+    function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
+        return dealKind == CoreDealType.PERMIT2_TREASURY;
+    }
 
     function isActive() external pure returns (bool) { return true; }
     function safetyCheck(address) external pure returns (bool) { return true; }
@@ -173,6 +177,42 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         state = IDealManagerAdapter(dealManager).state(handle.dealCell);
         assertEq(state.rewardsPaid, 125e6);
         assertEq(mainToken.balanceOf(agent1), beforeBalance + 125e6);
+    }
+
+    function test_mockEvaluator_successAllocatesDealRewardPoolAndDealCanClaim() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal(MathLib.atScale(80));
+
+        EvaluationResult[] memory results = _singleResult(1, MathLib.atScale(50), 0);
+        MockEvaluator(handle.evaluatorAddr).setResults(results);
+
+        vm.expectEmit(true, true, true, true);
+        emit DACEventsLib.DealRewardPoolAllocated(address(dac), handle.dealId, handle.dealAddr, 200e6);
+
+        vm.prank(agent1);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+
+        DealState memory state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertEq(state.rewardsUnlocked, 250e6);
+        assertEq(state.rewardsPaid, 0);
+
+        uint256 dealBalanceBefore = mainToken.balanceOf(handle.dealAddr);
+
+        vm.expectEmit(true, true, true, true);
+        emit DACEventsLib.DealRewardClaimed(address(dac), handle.dealId, handle.dealAddr, 200e6);
+
+        Deal(handle.dealAddr).claimDealRewardPool(0);
+
+        state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertEq(state.rewardsPaid, 200e6);
+        assertEq(mainToken.balanceOf(handle.dealAddr), dealBalanceBefore + 200e6);
+
+        uint256 agentBalanceBefore = mainToken.balanceOf(agent1);
+        vm.prank(agent1);
+        IDealCell(handle.dealCell).claimMainToken(0);
+
+        state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertEq(state.rewardsPaid, 225e6);
+        assertEq(mainToken.balanceOf(agent1), agentBalanceBefore + 25e6);
     }
 
     function test_mockEvaluator_slashBurnsStakeAndEscrowedAgentTokens() public {
@@ -378,7 +418,7 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         vm.stopPrank();
     }
 
-    function _createMockTreasuryDeal(address proposer) internal returns (DealHandle memory handle) {
+    function _createMockTreasuryDeal(address proposer, uint256 dealRewardPoolPercent) internal returns (DealHandle memory handle) {
         vm.recordLogs();
 
         vm.startPrank(proposer);
@@ -396,6 +436,7 @@ contract DealEvaluationRecoveryTest is DACTestBase {
             fundingToken: address(usdc),
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
+            dealRewardPoolPercent: dealRewardPoolPercent,
             approveDeadline: block.timestamp + 1 days,
             evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,
@@ -422,7 +463,11 @@ contract DealEvaluationRecoveryTest is DACTestBase {
     }
 
     function _setupApprovedMockTreasuryDeal() internal returns (DealHandle memory handle) {
-        handle = _createMockTreasuryDeal(agent1);
+        handle = _setupApprovedMockTreasuryDeal(0);
+    }
+
+    function _setupApprovedMockTreasuryDeal(uint256 dealRewardPoolPercent) internal returns (DealHandle memory handle) {
+        handle = _createMockTreasuryDeal(agent1, dealRewardPoolPercent);
 
         vm.warp(block.timestamp + 1);
         _stakeAndDelegate(agent1, handle.dealCell, 20_000);

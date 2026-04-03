@@ -79,6 +79,9 @@ contract MockGovernanceModuleFactory is ModuleFactory {
     function supportsEvaluatorKind(bytes4, bytes4 evaluatorSelector) external pure returns (bool) {
         return evaluatorSelector == DAC_TEST_EVALUATOR_SELECTOR;
     }
+    function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
+        return dealKind == CoreDealType.PERMIT2_TREASURY;
+    }
 
     function isActive() external pure returns (bool) { return true; }
     function safetyCheck(address) external pure returns (bool) { return true; }
@@ -335,6 +338,7 @@ contract DACGovernanceControlTest is DACTestBase {
             fundingToken: address(usdc),
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
+            dealRewardPoolPercent: 0,
             approveDeadline: block.timestamp + 1 days,
             evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,

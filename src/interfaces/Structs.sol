@@ -75,6 +75,7 @@ struct DealParams {
     address fundingToken;
     uint256 fundingAmount;
     uint256 rewardsLimit;
+    uint256 dealRewardPoolPercent; // portion of unlocked rewards allocated to the deal itself
     uint256 approveDeadline;
     uint256 evaluationDeadline;     // The deadline before the first evaluation
     uint256 dealDeadline;           // The date where withdraw capital becomes possible

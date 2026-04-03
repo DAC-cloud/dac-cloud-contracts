@@ -129,6 +129,7 @@ abstract contract ExistingTreasuryFlowBase is ExistingGovernanceFlowBase {
             fundingToken: seed.mainToken,
             fundingAmount: config.fundingAmount,
             rewardsLimit: config.rewardsLimit,
+            dealRewardPoolPercent: 0,
             approveDeadline: block.timestamp + 7 days,
             evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,

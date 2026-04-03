@@ -43,6 +43,10 @@ library DACCellGovernanceLib {
         require(params.proposer == msg.sender, DACErrorsLib.NotAuthorized());
 
         require(IModuleFactory(params.moduleFactory).isActive(), DACErrorsLib.ModuleDisabled());
+        require(params.dealRewardPoolPercent <= MathLib.SCALE, DACErrorsLib.NotAllowed());
+        if (params.dealRewardPoolPercent > 0) {
+            require(IModuleFactory(params.moduleFactory).supportsDealRewardPool(params.dealKind), DACErrorsLib.NotAllowed());
+        }
 
         id = nextId;
 

@@ -63,6 +63,7 @@ contract MockDealCell is IDealCell {
     function stakeToken() external pure returns (address) { return address(0); }
     function invite(address, bool) external pure { revert("Not implemented"); }
     function claimMainToken(uint256) external {}
+    function dealRewardPoolPercent() external pure returns (uint256) { return 0; }
     function unstake() external {}
     function fundingTranche(uint256) external pure returns (Tranche memory) { revert("Not implemented"); }
     function fundingTokens() external pure returns (address[] memory) { return new address[](0); }
@@ -116,6 +117,7 @@ contract MilestoneBasedEvaluatorTest is Test {
             fundingToken: address(usdc),
             fundingAmount: 10_000,
             rewardsLimit: 500e6,
+            dealRewardPoolPercent: 0,
             approveDeadline: block.timestamp + 1 days,
             evaluationDeadline: block.timestamp + 15 days,
             dealDeadline: block.timestamp + 30 days,

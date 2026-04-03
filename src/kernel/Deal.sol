@@ -157,6 +157,11 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         _beforeMarkAsSuccess(rewardPercent);
     }
 
+    function _onDealRewardAllocated(uint256 amount) internal virtual {}
+    function onDealRewardAllocated(uint256 amount) external onlyDealCell {
+        _onDealRewardAllocated(amount);
+    }
+
     function _afterMarkAsFailed(uint256 slashPercent) internal virtual {}
     function onMarkAsFailed(uint256 slashPercent) external onlyDealCell {
         _afterMarkAsFailed(slashPercent);
@@ -190,6 +195,10 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
     function _afterClaimMainToken(address grantee, uint256 amount) internal virtual {}
     function afterClaimMainToken(address grantee, uint256 amount) external onlyDealCell {
         _afterClaimMainToken(grantee, amount);
+    }
+
+    function claimDealRewardPool(uint256 evaluatorId) external {
+        IDealCell(dealCell).claimMainToken(evaluatorId);
     }
 
     function _beforeCreateProposal(ProposalParams calldata params) internal virtual {}

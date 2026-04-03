@@ -391,6 +391,7 @@ library DealCellGovernanceLib {
 
     function claimMainToken(
         address dacCell,
+        uint256 id,
         IDeal deal,
         uint256 evaluatorId,
         mapping(address => uint256) storage claimableRewards
@@ -406,6 +407,9 @@ library DealCellGovernanceLib {
         ).mintMain(address(this), evaluatorId, msg.sender, amount);
         
         emit DACEventsLib.RewardsClaimed(dacCell, msg.sender, address(deal), amount);
+        if (msg.sender == address(deal)) {
+            emit DACEventsLib.DealRewardClaimed(dacCell, id, address(deal), amount);
+        }
 
         deal.afterClaimMainToken(msg.sender, amount);
     }
@@ -508,6 +512,7 @@ library DealCellGovernanceLib {
         IDeal deal,
         uint256 rewardsConverted,
         uint256 _tokenRewardsLimit,
+        uint256 dealRewardPoolPercent,
         address[] storage holders,
         mapping(address => uint256) storage claimableRewards
     ) public returns (uint256 rewardsConvertedPct, uint256 rewardAmount) {
@@ -518,14 +523,18 @@ library DealCellGovernanceLib {
         deal.onMarkAsSuccess(rewardPercent);
 
         uint256 rewardBase = MathLib.mul(_tokenRewardsLimit, rewardPercent);
+        uint256 dealRewardAmount = MathLib.mul(rewardBase, dealRewardPoolPercent);
+        uint256 stakerRewardBase = rewardBase - dealRewardAmount;
 
-        for (uint256 i = 0; i < holders.length; i++) {
-            address h = holders[i];
-            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), rewardBase, token.totalSupply());  // pro-rata on original stake
-            claimableRewards[h] += holderShare;
+        if (dealRewardAmount > 0) {
+            claimableRewards[address(deal)] += dealRewardAmount;
+            rewardAmount += dealRewardAmount;
 
-            rewardAmount += holderShare;
+            emit DACEventsLib.DealRewardPoolAllocated(dacCell, id, address(deal), dealRewardAmount);
+            deal.onDealRewardAllocated(dealRewardAmount);
         }
+
+        rewardAmount += _allocateStakerRewards(token, holders, claimableRewards, stakerRewardBase);
 
         rewardsConvertedPct += rewardPercent;
 
@@ -551,5 +560,21 @@ library DealCellGovernanceLib {
         emit DACEventsLib.StakesSlashed(dacCell, id, address(deal), slashAmount);
 
         deal.onMarkAsFailed(slashPercent);
+    }
+
+    function _allocateStakerRewards(
+        StakedAgent token,
+        address[] storage holders,
+        mapping(address => uint256) storage claimableRewards,
+        uint256 stakerRewardBase
+    ) internal returns (uint256 rewardAmount) {
+        uint256 totalStake = token.totalSupply();
+
+        for (uint256 i = 0; i < holders.length; i++) {
+            address h = holders[i];
+            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), stakerRewardBase, totalStake); // pro-rata on original stake
+            claimableRewards[h] += holderShare;
+            rewardAmount += holderShare;
+        }
     }
 }

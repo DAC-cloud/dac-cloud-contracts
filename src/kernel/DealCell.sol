@@ -42,6 +42,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     // for it, and only escrow capital within the Deal logic.
     
     uint256 internal _tokenRewardsLimit;
+    uint256 internal _dealRewardPoolPercent;
     
     uint256 public startTime;
     uint256 internal _approveDeadline;
@@ -144,6 +145,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         linkHash = params.linkHash;
 
         _tokenRewardsLimit = params.rewardsLimit;
+        _dealRewardPoolPercent = params.dealRewardPoolPercent;
         _approveDeadline = params.approveDeadline;
         _evaluationDeadline = params.evaluationDeadline;
         _dealDeadline = params.dealDeadline;
@@ -305,6 +307,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             deal,
             rewardsConverted,
             _tokenRewardsLimit,
+            _dealRewardPoolPercent,
             holders,
             claimableRewards
         );
@@ -372,6 +375,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function claimMainToken(uint256 evaluatorId) external nonReentrant {
         DealCellGovernanceLib.claimMainToken(
             dacCell,
+            id,
             deal,
             evaluatorId,
             claimableRewards
@@ -511,6 +515,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function getReturnedCapital(address _fundingToken) external view returns (uint256) { return returnedCapital[_fundingToken]; }
     function getInvestedCapital(address _fundingToken) external view returns (uint256) { return investedCapital[_fundingToken]; }
     function getMainRewardsLimit() external view returns (uint256) { return _tokenRewardsLimit; }
+    function dealRewardPoolPercent() external view returns (uint256) { return _dealRewardPoolPercent; }
     function rewardsConvertedPct() external view returns (uint256) { return rewardsConverted; }
     
     function isValidDeal() external pure returns (bool) { return true; }
