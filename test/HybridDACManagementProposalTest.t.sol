@@ -163,6 +163,90 @@ contract HybridDACManagementProposalTest is Test {
         assertEq(proposal.yesVotes(), 80e18);
     }
 
+    function test_wrappedOnlyBootstrap_startsInWarmupThenVotesWithWrappedToken() external {
+        vm.roll(24);
+
+        proposal.initialize(
+            21,
+            address(this),
+            address(wrapped),
+            address(oracle),
+            ProposalParams({
+                typ: bytes4(keccak256("TEST_WRAPPED_BOOTSTRAP")),
+                target: address(0),
+                i: bytes32(0),
+                data: bytes("")
+            }),
+            _wrappedOnlyStrategyConfig(),
+            true,
+            true
+        );
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
+
+        vm.prank(fallbackHolder);
+        wrapped.wrap(90e18);
+
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.roll(25);
+        proposal.activateFallbackVoting();
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
+        assertEq(proposal.blockingEnabled(), true);
+
+        vm.prank(fallbackHolder);
+        proposal.vote(true);
+
+        assertTrue(proposal.isResolved());
+        assertTrue(proposal.outcome());
+    }
+
+    function test_blockingFlags_enableHighQuorumBlocking() external {
+        vm.roll(26);
+
+        proposal.initialize(
+            22,
+            address(this),
+            address(wrapped),
+            address(oracle),
+            ProposalParams({
+                typ: bytes4(keccak256("TEST_BLOCKING_FLAGS")),
+                target: address(0),
+                i: bytes32(0),
+                data: bytes("")
+            }),
+            _strategyConfig(),
+            true,
+            true
+        );
+
+        assertTrue(proposal.highQuorum());
+        assertTrue(proposal.blockingEnabled());
+    }
+
+    function test_blockingFlags_canDisableHighQuorumBlocking() external {
+        vm.roll(27);
+
+        proposal.initialize(
+            23,
+            address(this),
+            address(wrapped),
+            address(oracle),
+            ProposalParams({
+                typ: bytes4(keccak256("TEST_BLOCKING_DISABLED")),
+                target: address(0),
+                i: bytes32(0),
+                data: bytes("")
+            }),
+            _strategyConfigWithFlags(false, false, true),
+            true,
+            false
+        );
+
+        assertTrue(proposal.highQuorum());
+        assertFalse(proposal.blockingEnabled());
+    }
+
     function test_oraclePublisherAccessControl() external {
         vm.expectRevert();
         oracle.publishSnapshot(999, 1, keccak256("root"), 1);
@@ -237,7 +321,35 @@ contract HybridDACManagementProposalTest is Test {
             executionValidityDuration: 1 days,
             oraclePublishDeadline: 2 days,
             fallbackWarmupDuration: 1 days,
-            fallbackDuration: 3 days
+            fallbackDuration: 3 days,
+            blockingOnAllProposals: false,
+            blockingOnHighQuorum: true,
+            oraclePrimaryEnabled: true
+        });
+    }
+
+    function _wrappedOnlyStrategyConfig() internal pure returns (GovernanceStrategyConfig memory config) {
+        config = _strategyConfigWithFlags(false, true, false);
+    }
+
+    function _strategyConfigWithFlags(
+        bool blockingOnAllProposals,
+        bool blockingOnHighQuorum,
+        bool oraclePrimaryEnabled
+    ) internal pure returns (GovernanceStrategyConfig memory config) {
+        config = GovernanceStrategyConfig({
+            quorumPercent: 5e17,
+            highQuorumPercent: 8e17,
+            blockingPercent: 2e17,
+            duration: 7 days,
+            qualification: 0,
+            executionValidityDuration: 1 days,
+            oraclePublishDeadline: oraclePrimaryEnabled ? 2 days : 0,
+            fallbackWarmupDuration: 1 days,
+            fallbackDuration: 3 days,
+            blockingOnAllProposals: blockingOnAllProposals,
+            blockingOnHighQuorum: blockingOnHighQuorum,
+            oraclePrimaryEnabled: oraclePrimaryEnabled
         });
     }
 }

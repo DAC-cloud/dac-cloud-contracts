@@ -50,6 +50,9 @@ abstract contract ScriptConfig is Script {
     string internal constant EXISTING_DAC_ORACLE_DEADLINE_ENV = "EXISTING_DAC_ORACLE_PUBLISH_DEADLINE";
     string internal constant EXISTING_DAC_FALLBACK_WARMUP_ENV = "EXISTING_DAC_FALLBACK_WARMUP";
     string internal constant EXISTING_DAC_FALLBACK_DURATION_ENV = "EXISTING_DAC_FALLBACK_DURATION";
+    string internal constant EXISTING_DAC_BLOCKING_ALL_ENV = "EXISTING_DAC_BLOCKING_ON_ALL";
+    string internal constant EXISTING_DAC_BLOCKING_HIGH_ENV = "EXISTING_DAC_BLOCKING_ON_HIGH_QUORUM";
+    string internal constant EXISTING_DAC_ORACLE_PRIMARY_ENV = "EXISTING_DAC_ORACLE_PRIMARY_ENABLED";
     string internal constant EXISTING_GOV_FLOW_LABEL_ENV = "EXISTING_GOV_FLOW_LABEL";
     string internal constant EXISTING_GOV_FLOW_DAC_LABEL_ENV = "EXISTING_GOV_FLOW_EXISTING_DAC_LABEL";
     string internal constant EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT_ENV = "EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT";
@@ -224,6 +227,9 @@ abstract contract ScriptConfig is Script {
         config.oraclePublishDeadline = vm.envOr(EXISTING_DAC_ORACLE_DEADLINE_ENV, uint256(1 days));
         config.fallbackWarmupDuration = vm.envOr(EXISTING_DAC_FALLBACK_WARMUP_ENV, uint256(1 days));
         config.fallbackDuration = vm.envOr(EXISTING_DAC_FALLBACK_DURATION_ENV, uint256(3 days));
+        config.blockingOnAllProposals = vm.envOr(EXISTING_DAC_BLOCKING_ALL_ENV, false);
+        config.blockingOnHighQuorum = vm.envOr(EXISTING_DAC_BLOCKING_HIGH_ENV, true);
+        config.oraclePrimaryEnabled = vm.envOr(EXISTING_DAC_ORACLE_PRIMARY_ENV, true);
 
         if (vm.envExists(EXISTING_DAC_UNDERLYING_ENV)) {
             config.underlyingToken = vm.envAddress(EXISTING_DAC_UNDERLYING_ENV);

@@ -145,7 +145,10 @@ contract DACDeployTest is Test {
                 executionValidityDuration: 1 days,
                 oraclePublishDeadline: 1 days,
                 fallbackWarmupDuration: 1 days,
-                fallbackDuration: 3 days
+                fallbackDuration: 3 days,
+                blockingOnAllProposals: false,
+                blockingOnHighQuorum: true,
+                oraclePrimaryEnabled: true
             })
         });
 

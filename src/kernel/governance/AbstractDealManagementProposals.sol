@@ -24,7 +24,7 @@ library AbstractDealManagementType {
     bytes4 public constant REQUEST_TRANCHE      = IAbstractDealManagementProposals.requestTranche.selector;     // Default quorum, blocking allowed
     
     bytes4 public constant ADD_STAKE            = IAbstractDealManagementProposals.addStake.selector;           // High quorum
-    bytes4 public constant PERMIT_UNSTAKE       = IAbstractDealManagementProposals.permitUnstake.selector;      // High quorum, always allows veto
+    bytes4 public constant PERMIT_UNSTAKE       = IAbstractDealManagementProposals.permitUnstake.selector;      // High quorum, always allows challenging
 
     bytes4 public constant TOGGLE_WHITELIST     = IAbstractDealManagementProposals.toggleWhitelist.selector;    // High quorum
     

@@ -72,7 +72,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(_governanceOracle != address(0), DACErrorsLib.NotAllowed());
         require(_strategy.duration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
-        require(_strategy.oraclePublishDeadline > 0, DACErrorsLib.InvalidVotingConfig());
+        require(_strategy.oraclePublishDeadline > 0 || !_strategy.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
 
@@ -85,8 +85,15 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         highQuorum = _highQuorum;
         blockingEnabled = _blockingEnabled;
         primarySnapshotBlock = block.number - 1;
-        oracleSnapshotDeadline = block.timestamp + _strategy.oraclePublishDeadline;
-        phase = ProposalPhase.AwaitingOracleSnapshot;
+        if (_strategy.oraclePrimaryEnabled) {
+            oracleSnapshotDeadline = block.timestamp + _strategy.oraclePublishDeadline;
+            phase = ProposalPhase.AwaitingOracleSnapshot;
+        } else {
+            oracleSnapshotDeadline = 0;
+            phase = ProposalPhase.FallbackWarmup;
+            phaseStartTime = block.timestamp;
+            phaseEndTime = block.timestamp + _strategy.fallbackWarmupDuration;
+        }
 
         emit DACEventsLib.ProposalCreated(
             wrappedToken,
@@ -94,15 +101,15 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
             0,
             0,
             primarySnapshotBlock,
-            oracleSnapshotDeadline,
+            phase == ProposalPhase.AwaitingOracleSnapshot ? oracleSnapshotDeadline : phaseEndTime,
             false
         );
         emit DACEventsLib.ProposalPhaseTransition(
             id,
             uint8(phase),
             primarySnapshotBlock,
-            block.timestamp,
-            oracleSnapshotDeadline,
+            phase == ProposalPhase.AwaitingOracleSnapshot ? block.timestamp : phaseStartTime,
+            phase == ProposalPhase.AwaitingOracleSnapshot ? oracleSnapshotDeadline : phaseEndTime,
             0,
             0,
             0
@@ -111,6 +118,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
 
     function activatePrimaryVoting() external {
         require(phase == ProposalPhase.AwaitingOracleSnapshot, DACErrorsLib.NotAllowed());
+        require(strategy.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
         require(block.timestamp <= oracleSnapshotDeadline, DACErrorsLib.NotAllowed());
         require(IGovernanceOracle(governanceOracle).isActive(), DACErrorsLib.NotAllowed());
 
@@ -157,6 +165,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
             phase == ProposalPhase.AwaitingOracleSnapshot || phase == ProposalPhase.PrimaryVoting,
             DACErrorsLib.NotAllowed()
         );
+        require(strategy.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
         require(!proposalResolved, DACErrorsLib.NotAllowed());
         require(!IGovernanceOracle(governanceOracle).isActive(), DACErrorsLib.NotAllowed());
 

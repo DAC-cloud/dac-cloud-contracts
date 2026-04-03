@@ -186,7 +186,10 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
             executionValidityDuration: votingConfig.executionValidityDuration,
             oraclePublishDeadline: 0,
             fallbackWarmupDuration: 0,
-            fallbackDuration: 0
+            fallbackDuration: 0,
+            blockingOnAllProposals: false,
+            blockingOnHighQuorum: false,
+            oraclePrimaryEnabled: false
         });
     }
 
@@ -216,6 +219,9 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.oraclePublishDeadline == 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackWarmupDuration == 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration == 0, DACErrorsLib.InvalidVotingConfig());
+        require(!config.blockingOnAllProposals, DACErrorsLib.InvalidVotingConfig());
+        require(!config.blockingOnHighQuorum, DACErrorsLib.InvalidVotingConfig());
+        require(!config.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
         _validateVotingConfig(
             VotingConfig({
                 quorumPercent: config.quorumPercent,

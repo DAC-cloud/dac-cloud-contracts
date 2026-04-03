@@ -222,7 +222,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
                 executionValidityDuration: config.executionValidityDuration
             })
         );
-        require(config.oraclePublishDeadline > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.blockingPercent > 0 || (!config.blockingOnAllProposals && !config.blockingOnHighQuorum), DACErrorsLib.InvalidVotingConfig());
+        require(config.oraclePublishDeadline > 0 || !config.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
     }
@@ -273,8 +274,13 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         );
     }
 
-    function _isBlockingEnabled(bytes4 typ) internal pure returns (bool) {
+    function _isBlockingEnabled(bytes4 typ) internal view returns (bool) {
         return (
+            strategyConfig.blockingOnAllProposals ||
+            (
+                _isHighQuorum(typ) &&
+                strategyConfig.blockingOnHighQuorum
+            ) ||
             typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION ||
             typ == DACManagementProposalType.REVOKE_AGENT_TOKENS ||
             typ == DACManagementProposalType.CAPITAL_CALL ||

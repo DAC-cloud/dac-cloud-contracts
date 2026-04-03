@@ -39,6 +39,9 @@ struct GovernanceStrategyConfig {
     uint256 oraclePublishDeadline;
     uint256 fallbackWarmupDuration;
     uint256 fallbackDuration;
+    bool blockingOnAllProposals;
+    bool blockingOnHighQuorum;
+    bool oraclePrimaryEnabled;
 }
 
 struct DealCreationConfig {
