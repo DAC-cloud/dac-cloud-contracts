@@ -197,10 +197,6 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         _afterClaimMainToken(grantee, amount);
     }
 
-    function claimDealRewardPool(uint256 evaluatorId) external {
-        IDealCell(dealCell).claimMainToken(evaluatorId);
-    }
-
     function _beforeCreateProposal(ProposalParams calldata params) internal virtual {}
     function _afterCreateProposal(uint256 proposalId, ProposalParams calldata params) internal virtual {}
 

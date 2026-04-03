@@ -83,6 +83,10 @@ contract TreasuryDeal is Deal {
         IERC20(mainTokenAddr).safeTransfer(managedEntity, amount);
     }
 
+    function claimDealRewardPool(uint256 evaluatorId) external onlyStakedAgent nonReentrant {
+        IDealCell(dealCell).claimMainToken(evaluatorId);
+    }
+
     function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||

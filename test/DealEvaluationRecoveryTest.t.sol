@@ -201,9 +201,12 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         uint256 treasuryBalanceBefore = mainToken.balanceOf(treasuryAddr);
 
         vm.expectEmit(true, true, true, true);
+        emit DACEventsLib.RewardsClaimed(address(dac), handle.dealAddr, handle.dealAddr, 200e6);
+        vm.expectEmit(true, true, true, true);
         emit DACEventsLib.DealRewardClaimed(address(dac), handle.dealId, handle.dealAddr, 200e6);
 
-        Deal(handle.dealAddr).claimDealRewardPool(0);
+        vm.prank(agent1);
+        TreasuryDeal(handle.dealAddr).claimDealRewardPool(0);
 
         state = IDealManagerAdapter(dealManager).state(handle.dealCell);
         assertEq(state.rewardsPaid, 200e6);
@@ -217,6 +220,21 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         state = IDealManagerAdapter(dealManager).state(handle.dealCell);
         assertEq(state.rewardsPaid, 225e6);
         assertEq(mainToken.balanceOf(agent1), agentBalanceBefore + 25e6);
+    }
+
+    function test_mockEvaluator_dealRewardPoolClaimRequiresStakedAgent() public {
+        DealHandle memory handle = _setupApprovedMockTreasuryDeal(MathLib.atScale(80));
+
+        EvaluationResult[] memory results = _singleResult(1, MathLib.atScale(50), 0);
+        MockEvaluator(handle.evaluatorAddr).setResults(results);
+
+        vm.prank(agent1);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+
+        address outsider = makeAddr("outsider");
+        vm.expectRevert(DACErrorsLib.NoStake.selector);
+        vm.prank(outsider);
+        TreasuryDeal(handle.dealAddr).claimDealRewardPool(0);
     }
 
     function test_mockEvaluator_slashBurnsStakeAndEscrowedAgentTokens() public {

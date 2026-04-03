@@ -156,6 +156,10 @@ contract DACDeal is Deal {
         IDACCell(managedEntity).recoverERC20(mainTokenAddr);
     }
 
+    function claimDealRewardPool(uint256 evaluatorId) external onlyStakedAgent nonReentrant {
+        IDealCell(dealCell).claimMainToken(evaluatorId);
+    }
+
     function _beforeClose() internal override {
         // On close we transfer child Main token to our DAC
         // Now this equity is chickens' problem, they can distribute 
