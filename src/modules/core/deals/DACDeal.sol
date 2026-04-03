@@ -6,7 +6,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
 import {IVotes} from "../../../lib/IVotes.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
-import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {IDACFactory} from "../../../interfaces/IDACFactory.sol";
 import {DealManagementProposal} from "../../../kernel/governance/DealManagementProposal.sol";
@@ -146,6 +145,15 @@ contract DACDeal is Deal {
         }
 
         IVotes(IDACCell(managedEntity).getMainToken()).delegate(address(this));
+    }
+
+    function _afterClaimMainToken(address grantee, uint256 amount) internal override {
+        if (grantee != address(this) || amount == 0) {
+            return;
+        }
+
+        IERC20(mainTokenAddr).safeTransfer(managedEntity, amount);
+        IDACCell(managedEntity).recoverERC20(mainTokenAddr);
     }
 
     function _beforeClose() internal override {

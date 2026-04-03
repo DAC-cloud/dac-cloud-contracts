@@ -43,6 +43,20 @@ import {DACDeal} from "../src/modules/core/deals/DACDeal.sol";
 import {Milestone, DACDealConfig} from "../src/modules/core/interfaces/Structs.sol";
 import {DACTestBase, MockUSDC} from "./base/DACTestBase.t.sol";
 
+contract DACDealRewardForwardHarness is DACDeal {
+    function setMainTokenForTest(address token) external {
+        mainTokenAddr = token;
+    }
+
+    function setManagedEntityForTest(address entity) external {
+        managedEntity = entity;
+    }
+
+    function exposeAfterClaimMainToken(address grantee, uint256 amount) external {
+        _afterClaimMainToken(grantee, amount);
+    }
+}
+
 contract DACCellDealTest is Test {
     MockUSDC usdc;
 
@@ -269,4 +283,54 @@ contract DACCellDealTest is Test {
         
         vm.stopPrank();
     }
-} 
+
+    function testDACDeal_claimedRewardPoolForwardsToChildTreasury() public {
+        DACDealRewardForwardHarness harness = new DACDealRewardForwardHarness();
+
+        DACConfig memory childConfig = DACConfig({
+            symbol: "CHILD",
+            name: "Child DAC",
+            description: "child",
+            mainTokenMaxSupply: 1_000_000e18,
+            defaultQuorum: MathLib.atScale(50),
+            founder: founder,
+            founderAllocation: 100_000e18,
+            treasuryToken: address(usdc),
+            founderCommitment: 10_000,
+            dividendsEnabled: false
+        });
+
+        bytes32 salt = keccak256(abi.encode("child-dac-reward-forward", block.timestamp));
+
+        vm.prank(founder);
+        (address childDac, address childMainTokenAddr,) = dacFactory.deployDAC(childConfig, salt, address(0));
+
+        vm.startPrank(founder);
+        usdc.approve(DACCell(childDac).getAssetController(), 10_000);
+        DACCell(childDac).fulfillCapitalCall(
+            CapitalCall({
+                treasuryToken: address(usdc),
+                nonce: 0,
+                tokenRecipient: founder,
+                tokenAmount: 100_000e18,
+                cashAmount: 10_000
+            })
+        );
+        require(MainToken(childMainTokenAddr).transfer(address(harness), 1e18));
+        require(mainToken.transfer(address(harness), 25e18));
+        vm.stopPrank();
+
+        harness.setManagedEntityForTest(childDac);
+        harness.setMainTokenForTest(address(mainToken));
+
+        address childAssetController = DACCell(childDac).getAssetController();
+        uint256 childTreasuryBefore = mainToken.balanceOf(childAssetController);
+        uint256 childCellBefore = mainToken.balanceOf(childDac);
+
+        harness.exposeAfterClaimMainToken(address(harness), 25e18);
+
+        assertEq(mainToken.balanceOf(address(harness)), 0);
+        assertEq(mainToken.balanceOf(childDac), childCellBefore);
+        assertEq(mainToken.balanceOf(childAssetController), childTreasuryBefore + 25e18);
+    }
+}

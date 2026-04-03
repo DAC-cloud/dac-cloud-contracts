@@ -1,8 +1,10 @@
 # DAC Cloud Development Guide
 
-Updated: March 13, 2026
+Updated: April 3, 2026
 
 This guide covers local development, test commands, deployment scripts, and manifest-driven scenario seeding.
+
+For contract topology, see [architecture.md](architecture.md). For indexer / SDK integration-oriented protocol surfaces, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md).
 
 ## 1. Tooling
 
@@ -259,7 +261,21 @@ deployments/<chainid>/child-dac-flow-<label>.json
 
 These manifests are intended to be consumed by later scripts, indexers, SDK tooling, and frontends.
 
-## 7. Local Dry-Run
+## 7. Current Seeded Surface
+
+The staged scripts now cover the full core entity set needed for local indexer / SDK work:
+
+- protocol deployment
+- native DAC bootstrap
+- existing-token DAC bootstrap
+- hybrid governance primary and fallback flows
+- treasury deals for both DAC modes
+- child-DAC deals for both DAC modes
+- child proposal / capital-call / reinvest / return-profit flows
+
+On very fast local Anvil instances, proposal creation and voting may still require a small `evm_increaseTime 1` + `evm_mine` step between phases for deterministic local runs.
+
+## 8. Local Dry-Run
 
 This runs the deployment script without broadcasting to a chain:
 
@@ -270,7 +286,7 @@ export PERMIT2_ADDRESS=0x000000000022D473030F116dDEE9F6B43aC78BA3
 forge script script/deploy/DeployProtocol.s.sol:DeployProtocol
 ```
 
-## 8. Local Anvil Validation
+## 9. Local Anvil Validation
 
 Run Anvil with realistic code-size and block-gas constraints:
 
@@ -320,7 +336,7 @@ forge script \
   --rpc-url http://127.0.0.1:8545
 ```
 
-## 9. Scenario Seeding
+## 10. Scenario Seeding
 
 ### Basic DAC
 
@@ -516,7 +532,7 @@ This flow seeds a `DACDeal` lifecycle covering:
 - reinvested profits,
 - returned profits.
 
-## 10. Local Timestamp Caveat
+## 11. Local Timestamp Caveat
 
 Proposal voting in this repository uses timestamp-based snapshots through ERC-6372 / ERC-5805-compatible vote checkpoints.
 
@@ -531,7 +547,7 @@ cast rpc --rpc-url http://127.0.0.1:8545 evm_mine
 
 This is generally not needed on real testnets, where proposal creation and later voting naturally occur in different blocks and timestamps.
 
-## 11. Recommended Contributor Workflow
+## 12. Recommended Contributor Workflow
 
 1. `forge build`
 2. `forge test`

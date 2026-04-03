@@ -1,5 +1,5 @@
 ### **DAC Whitepaper**
-**v1.3 – March 11, 2026**
+**v1.4 – April 3, 2026**
 
 #### Introduction
 
@@ -37,19 +37,19 @@ The core idea is simple:
 **Evaluators** are per-deal contracts that assess performance and issue binding instructions (slash %, convert %, extend, close). This decouples governance from execution and allows specialized logic per deal type.
 
 **Governance** is strictly capital-aligned:
-- Main token holders control DAC cell - what modules are enabled, mint and revoke Agent tokens, control voting and capital actions
+- DAC governance controls the DAC cell - what modules are enabled, mint and revoke Agent tokens, control voting and capital actions
 - Staked-Agent holders govern individual Deals (spends, tranches, capital returns, deal specific logic, etc.)
 
 #### Governance Model
 
 **DAC governance**
-- runs on `MainToken` snapshots,
+- runs either on native `MainToken` snapshots or on the existing-token hybrid path (`WrappedMainToken` votes plus oracle snapshots),
 - uses configurable quorum, high quorum, blocking quorum, duration, and proposal qualification,
 - controls minting, burns, agent issuance, module management, funding approvals, capital calls, dividends, legal wrapper updates, and deal recovery.
 
 **Deal governance**
 - runs on `StakedAgent` snapshots,
-- controls tranches, whitelist policy, early-return policy, optional DAC veto enablement, custom module proposals, and evaluator additions.
+- controls tranches, whitelist policy, early-return policy, DAC-challengeable execution, custom module proposals, and evaluator additions.
 
 This makes the system layered rather than monolithic:
 - the DAC approves capital and protocol-level policy,
@@ -59,7 +59,7 @@ This makes the system layered rather than monolithic:
 #### Deal Lifecycle
 
 1. A DAC is deployed through `DACFactory`.
-2. The root capital call is initialized and fulfilled, minting founding `MainToken` supply.
+2. For native DACs, the root capital call is initialized and fulfilled, minting founding `MainToken` supply. Existing-token DACs instead bootstrap by wrapping a treasury seed of the underlying token.
 3. DAC governance mints `AgentToken` to operating agents.
 4. An agent creates a deal through `DealManager.createDealProposal`.
 5. A module factory deploys:

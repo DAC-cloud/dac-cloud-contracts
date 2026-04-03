@@ -75,6 +75,14 @@ contract TreasuryDeal is Deal {
         }
     }
 
+    function _afterClaimMainToken(address grantee, uint256 amount) internal override {
+        if (grantee != address(this) || amount == 0) {
+            return;
+        }
+
+        IERC20(mainTokenAddr).safeTransfer(managedEntity, amount);
+    }
+
     function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {
         supported = (
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||

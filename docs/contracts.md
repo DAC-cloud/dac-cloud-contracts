@@ -1,8 +1,8 @@
 # DAC Cloud Contract Inventory
 
-Updated: March 25, 2026
+Updated: April 3, 2026
 
-For the architectural overview, see [architecture.md](architecture.md). For scripts and manifests, see [development.md](development.md).
+For the architectural overview, see [architecture.md](architecture.md). For scripts and manifests, see [development.md](development.md). For integration-facing lifecycle and event guidance, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md).
 
 ## 1. Current Topology
 
@@ -105,6 +105,7 @@ Current responsibilities:
 - tranche state
 - whitelist / early-return state
 - reward distribution state
+- deal reward-pool split and deal-owned reward claim state
 - recovery state
 - generic deal-governance dispatch before forwarding module-specific behavior
 
@@ -118,6 +119,7 @@ Current responsibilities:
 - generic lifecycle hooks
 - module-specific logic extension surface
 - standardized `DealRelatedContract` discovery helper
+- generic claim entrypoint for deal-owned reward pools via `claimDealRewardPool(...)`
 
 The deal contract intentionally stays lean; DAC challenge state now lives on deal proposal contracts instead of in `Deal`.
 
@@ -164,6 +166,8 @@ Handles:
 
 - hybrid proposal deployment
 - oracle-based governance strategy validation
+- wrapped-only bootstrap mode when `oraclePrimaryEnabled == false`
+- blocking behavior toggles for all proposals / high-quorum proposals
 - fallback durations and execution-validity configuration
 - capability-aware proposal support via the asset controller
 
@@ -234,6 +238,11 @@ Stores:
 - whether the proposal is DAC-challengeable
 - the linked DAC challenge proposal, if any
 
+This contract now covers both voluntary and forced deal exits:
+
+- `PERMIT_UNSTAKE`
+- `STRIKE_OUT_AGENT`
+
 ### Governance factories
 
 - `src/kernel/governance/factories/DACManagementProposalFactory.sol`
@@ -258,6 +267,7 @@ Main responsibilities exposed at interface level:
 - dividend payout registration and claim settlement
 - deal funding approval
 - main reward settlement
+- DAC-managed distributor registry for `AgentToken`
 - mint/burn support
 - vote delegation for DAC-held assets
 - controlled-address registration
@@ -276,6 +286,7 @@ Handles:
 - capital calls
 - controlled address registration
 - released-votable accounting
+- DAC-managed `AgentToken` distributor allowances and recipient validation
 
 ### `src/kernel/controllers/ExistingTokenAssetController.sol`
 
@@ -289,6 +300,7 @@ Handles:
 - wrapped votable-supply exclusions
 - wrapped move/delegate hooks
 - reserve-backed capital calls from wrapped inventory
+- DAC-managed `AgentToken` distributor allowances and recipient validation
 
 ### Asset-controller factories
 
@@ -318,6 +330,7 @@ Current discovery surface includes:
 - `supportedEvaluatorKinds()`
 - `supportsDealKind(...)`
 - `supportsEvaluatorKind(...)`
+- `supportsDealRewardPool(...)`
 
 ### `src/kernel/ModuleFactory.sol`
 
@@ -352,8 +365,15 @@ DAC operator token.
 Used for:
 
 - DAC-level operator issuance/revocation
+- distributor inventory fanout into bound agent balances
 - deal-creation anti-spam requirements
 - staking into deals
+
+Key semantics:
+
+- distributor inventory is transferable only from DAC-approved distributor wallets
+- distributed balances become bound / non-transferable at the recipient
+- qualification-sensitive checks use `qualifiedBalanceOf(...)`, which excludes distributor inventory
 
 ### `src/kernel/tokens/StakedAgent.sol`
 
@@ -391,6 +411,8 @@ Supports:
 - `TreasuryDeal`
 - milestone evaluator
 - revenue evaluator
+
+The core module also declares reward-pool support through `supportsDealRewardPool(...)` for its shipped deal kinds.
 
 ### `src/modules/core/CoreModuleDeals.sol`
 
@@ -491,6 +513,10 @@ Key shared structs:
 - `EvaluationResult`
 - `Tranche`
 
+Notable recent addition:
+
+- `DealParams.dealRewardPoolPercent`
+
 ### `src/interfaces/GovernanceStructs.sol`
 
 Key governance/accounting structs and enums:
@@ -499,6 +525,7 @@ Key governance/accounting structs and enums:
 - `ProposalPhase`
 - `AssetCapability`
 - `CommitmentKind`
+- `AgentTokenMintAction`
 - `GovernanceStrategyConfig`
 - `DealCreationConfig`
 - `AssetControllerConfig`
@@ -538,8 +565,10 @@ Important current groups:
 - generic proposal voting/resolution
 - oracle lifecycle
 - wrapper lifecycle
+- agent distributor lifecycle
 - deal lifecycle
 - deal challenge state
+- deal reward-pool allocation and settlement
 - module-related runtime address discovery
 
 ### `src/interfaces/DACErrorsLib.sol`

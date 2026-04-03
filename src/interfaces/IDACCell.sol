@@ -27,6 +27,7 @@ interface IDACCell {
     function getLegalWrapper() external view returns (LegalWrapper memory wrapper);
 
     function recoverTreasury(address token) external;
+    function recoverERC20(address token) external;
 
     function logLegalWrapperMessage(bytes4 kind, bytes calldata message) external;
 }

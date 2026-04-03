@@ -14,6 +14,8 @@ This repository contains the protocol kernel, the shipped core module, Solidity 
   Contract-by-contract map of the current implementation.
 - [Development Guide](docs/development.md)
   Build and test commands, deployment scripts, scenario seeding, manifests, and local Anvil validation.
+- [Indexer / SDK Handoff](docs/indexer-sdk-handoff.md)
+  Integration-oriented summary of protocol surfaces, events, manifests, and lifecycle semantics.
 
 ## Repository Map
 
@@ -37,11 +39,15 @@ This repository contains the protocol kernel, the shipped core module, Solidity 
 - `src/kernel/DACFactory.sol`
   Deploys new DACs and wires the kernel.
 - `src/kernel/DACCell.sol`
-  DAC-level governance, treasury, capital calls, dividends, and legal-wrapper integration.
+  DAC micro-kernel for governance routing, identity, and legal-wrapper integration.
 - `src/kernel/DealManager.sol`
-  Deal registry, module routing, evaluator execution, and main-token flow accounting.
+  Deal registry, module routing, evaluator execution, and lifecycle orchestration.
+- `src/kernel/controllers/`
+  Asset controllers for native and existing-token treasury / main-asset policy.
+- `src/kernel/governance/`
+  Native and hybrid DAC governance schemas plus DAC-level proposal contracts.
 - `src/kernel/DealCell.sol`
-  Per-deal state, staking, tranches, and reward accounting.
+  Per-deal state, staking, tranches, and reward distribution state.
 - `src/modules/core/CoreModuleFactory.sol`
   The shipped module factory for the core deal set.
 

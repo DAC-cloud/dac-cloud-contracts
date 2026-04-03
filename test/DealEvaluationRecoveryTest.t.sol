@@ -22,6 +22,7 @@ import {MathLib} from "../src/kernel/libraries/MathLib.sol";
 import {DealState} from "../src/kernel/interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../src/kernel/interfaces/IDealManagerAdapter.sol";
 import {CoreDealType} from "../src/modules/core/CoreModuleDeals.sol";
+import {TreasuryDeal} from "../src/modules/core/deals/TreasuryDeal.sol";
 import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {DealCellFactory} from "../src/kernel/factories/DealCellFactory.sol";
 import {StakedAgentFactory} from "../src/kernel/tokens/factories/TokenFactories.sol";
@@ -195,7 +196,9 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         assertEq(state.rewardsUnlocked, 250e6);
         assertEq(state.rewardsPaid, 0);
 
+        address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
         uint256 dealBalanceBefore = mainToken.balanceOf(handle.dealAddr);
+        uint256 treasuryBalanceBefore = mainToken.balanceOf(treasuryAddr);
 
         vm.expectEmit(true, true, true, true);
         emit DACEventsLib.DealRewardClaimed(address(dac), handle.dealId, handle.dealAddr, 200e6);
@@ -204,7 +207,8 @@ contract DealEvaluationRecoveryTest is DACTestBase {
 
         state = IDealManagerAdapter(dealManager).state(handle.dealCell);
         assertEq(state.rewardsPaid, 200e6);
-        assertEq(mainToken.balanceOf(handle.dealAddr), dealBalanceBefore + 200e6);
+        assertEq(mainToken.balanceOf(handle.dealAddr), dealBalanceBefore);
+        assertEq(mainToken.balanceOf(treasuryAddr), treasuryBalanceBefore + 200e6);
 
         uint256 agentBalanceBefore = mainToken.balanceOf(agent1);
         vm.prank(agent1);

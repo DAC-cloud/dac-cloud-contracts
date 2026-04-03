@@ -1,8 +1,8 @@
 # DAC Cloud Architecture
 
-Updated: March 25, 2026
+Updated: April 3, 2026
 
-For the contract-by-contract inventory, see [contracts.md](contracts.md). For build, test, deployment, and scenario scripts, see [development.md](development.md).
+For the contract-by-contract inventory, see [contracts.md](contracts.md). For build, test, deployment, and scenario scripts, see [development.md](development.md). For indexer / SDK-facing surfaces, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md).
 
 ## 1. Summary
 
@@ -99,7 +99,7 @@ Its responsibilities are:
 - legal-wrapper messaging
 - DAC-level event emission
 
-`DACCell` doesnt't own deals, treasury balances or main-token obligation accounting.
+`DACCell` does not own deals, treasury balances or main-token obligation accounting.
 
 ### 3.3 GovernanceSchema
 
@@ -200,8 +200,32 @@ In existing-token mode, `WrappedMainToken` is the DAC-native governance and acco
 `AgentToken` remains the DAC-level operator token:
 
 - minted and revoked by DAC governance
+- can be minted either:
+  - directly to a bound agent address, or
+  - into DAC-approved distributor inventory
 - required for deal participation
 - subject to deal-creation anti-spam checks through `DealCreationConfig`
+
+#### 4.3.1 Distributor flow
+
+Distributor flow is the easy way to onboard a list of agents.
+
+DAC governance still uses the same `MINT_AGENT_TOKENS` proposal selector, but the payload can now choose among:
+
+- direct mint to a bound agent
+- mint of transferable inventory to a distributor wallet
+- distributor disable / allowance reset
+
+The `AssetController` owns distributor state.
+
+Important invariants:
+
+- distributor addresses can hold transferable inventory
+- real agent addresses hold bound, non-transferable balances
+- distributor inventory does not count toward DAC agent qualification or deal-creation qualification
+- transfer from distributor to recipient is a one-way conversion into a bound agent balance
+
+This reduces onboarding friction for large agent networks without weakening the economic meaning of real agent membership.
 
 ### 4.4 StakedAgent
 
@@ -244,7 +268,28 @@ If the oracle does not publish in time, the proposal transitions into fallback:
 
 Fallback is wrapped-token-only and starts from a clean vote state after warmup.
 
-### 5.3 Governance Oracle
+### 5.3 Hybrid Strategy Tweaks
+
+Hybrid governance strategy has three important toggles:
+
+- `blockingOnAllProposals`
+- `blockingOnHighQuorum`
+- `oraclePrimaryEnabled`
+
+These let an existing-token DAC choose between:
+
+- full oracle-primary hybrid mode
+- wrapped-only bootstrap mode
+- more defensive blocking settings during early community formation
+
+Wrapped-only bootstrap mode is not a separate governance family. It is a configuration of the hybrid family:
+
+- proposals skip oracle publication as the primary path
+- proposals begin in `FallbackWarmup`
+- wrapped-token voting becomes the active governance channel after warmup
+- governance can later switch back to oracle-primary mode
+
+### 5.4 Governance Oracle
 
 `GovernanceOracle` is the publisher for proposal-specific Merkle snapshots in hybrid mode.
 
@@ -260,7 +305,7 @@ Important properties:
 - deactivation forces active hybrid proposals into the fallback path
 - DAC governance can replace the oracle instance with a new one
 
-### 5.4 Qualification
+### 5.5 Qualification
 
 Proposal qualification now uses delegated voting power rather than raw token balances:
 
@@ -356,6 +401,34 @@ This affects:
 
 The existing-token flow therefore behaves more like reserved treasury accounting than mint-headroom accounting.
 
+### 8.3 Rewards
+
+Staked agents receive rewards from participating in deals if deal was evaluated positively.
+
+Some deals also will receive allocation of rewards to the Deal contract itself.
+
+Each deal can now configure:
+
+- `dealRewardPoolPercent`
+
+The remaining portion of unlocked rewards stays allocated pro rata to staked agents.
+
+On reward unlock:
+
+- staker share is allocated to agent claim balances
+- deal share is allocated to `address(deal)`
+
+The deal can then claim its own main-token pool and apply module-specific logic such as:
+
+- campaign rewards
+- MLM-style reward trees
+- LP incentives
+- loyalty or promotion programs
+
+The kernel does not interpret those downstream schedules. It only routes ownership.
+
+This feature is capability-gated by the selected module factory.
+
 ## 9. Capital Calls and Dividends
 
 Capital calls and dividends are now routed through the asset controller.
@@ -380,6 +453,7 @@ Each module factory exposes:
 - manifest URI
 - supported deal kinds
 - supported evaluator kinds
+- whether a given deal kind supports deal reward pools
 
 The current shipped module is `CoreModuleFactory`, which includes:
 
@@ -387,6 +461,8 @@ The current shipped module is `CoreModuleFactory`, which includes:
 - `TreasuryDeal`
 - `MilestoneBasedEvaluator`
 - `RevenueBasedEvaluator`
+
+The core module currently declares support for deal reward pools on both shipped deal kinds.
 
 Module deals can emit standardized `DealRelatedContract` events so indexers can discover runtime-linked addresses such as:
 
@@ -448,6 +524,10 @@ Important additions and semantics:
   surfaces the DAC challenge hold on a deal proposal
 - `DealChallengeEnabled(...)`
   replaces the old veto-right enablement event
+- `AgentDistributorApproved(...)` / `AgentDistributorRevoked(...)` / `AgentTokenDistributed(...)`
+  surface DAC-managed onboarding inventory and downstream distribution
+- `DealRewardPoolAllocated(...)` / `DealRewardClaimed(...)`
+  surface deal-local reward routing and settlement
 - `ProposalResolved(...)`
   is now neutral and no longer carries a stale `vetoed` field
 
