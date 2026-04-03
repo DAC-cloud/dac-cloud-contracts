@@ -79,8 +79,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         DealCreationConfig memory creationConfig =
             IGovernanceSchema(IDACCell(dacCell).getGovernanceSchema()).getDealCreationConfig();
 
-        require(agentToken.balanceOf(msg.sender) >= creationConfig.minAgentBalance, DACErrorsLib.InsufficientBalance());
-        require(agentToken.balanceOf(msg.sender) >= creationConfig.minInitialAgentStake, DACErrorsLib.NoStake());
+        require(agentToken.qualifiedBalanceOf(msg.sender) >= creationConfig.minAgentBalance, DACErrorsLib.InsufficientBalance());
+        require(agentToken.qualifiedBalanceOf(msg.sender) >= creationConfig.minInitialAgentStake, DACErrorsLib.NoStake());
 
         (id, dealCell, dealAddr, evaluatorAddr) = DACCellGovernanceLib.createDealProposal(
             dacCell,
@@ -335,7 +335,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function _onlyAgent() internal view {
-        require(agentToken.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
+        require(agentToken.qualifiedBalanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
     }
 
     function _onlyHolderOrSelf() internal view {
@@ -352,7 +352,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         require(
             (
                 mainToken.balanceOf(msg.sender) > 0 ||
-                agentToken.balanceOf(msg.sender) > 0
+                agentToken.qualifiedBalanceOf(msg.sender) > 0
             ), 
             DACErrorsLib.NotAuthorized()
         );

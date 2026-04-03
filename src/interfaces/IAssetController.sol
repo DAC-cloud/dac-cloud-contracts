@@ -7,6 +7,7 @@ import {AssetCapability} from "./GovernanceStructs.sol";
 interface IAssetController {
     function initialize(address _dacCell, address _mainToken) external;
     function setDealManager(address _dealManager) external;
+    function setAgentToken(address _agentToken) external;
 
     function depositFrom(address from, address token, uint256 amount) external;
     function recordTreasuryDeposit(address token, uint256 amount) external;
@@ -49,6 +50,13 @@ interface IAssetController {
     function registerControlledAddress(address controlled) external;
     function onMainMove(address from, address to, uint256 amount) external;
     function onMainDelegate(address from, address to) external view;
+
+    function validateBoundAgentRecipient(address recipient) external view;
+    function authorizeAgentDistributor(address distributor, uint256 allowance) external;
+    function revokeAgentDistributor(address distributor) external;
+    function handleAgentDistribution(address distributor, address recipient, uint256 amount) external;
+    function isAgentDistributor(address account) external view returns (bool);
+    function agentDistributorAllowance(address account) external view returns (uint256);
 
     function totalReleasedVotable() external view returns (uint256);
     function mainTokenObligations() external view returns (uint256);

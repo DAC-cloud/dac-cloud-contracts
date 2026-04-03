@@ -48,6 +48,9 @@ library DACEventsLib {
 
     event AgentTokenMinted(uint256 indexed id, address indexed agent, uint256 amount);
     event AgentTokenRevoked(uint256 indexed id, address indexed agent, uint256 amount);
+    event AgentDistributorApproved(address indexed dac, address indexed distributor, uint256 allowance);
+    event AgentDistributorRevoked(address indexed dac, address indexed distributor);
+    event AgentTokenDistributed(address indexed dac, address indexed distributor, address indexed recipient, uint256 amount);
     
     event LegalWrapperSet(uint256 indexed id, LegalWrapper legalWrapper);
     event OffchainActionApproved(uint256 indexed id, bytes4 action, bytes data);
@@ -212,6 +215,13 @@ library DACEventsLib {
         uint256 indexed id, 
         address indexed deal, 
         address agent, 
+        uint256 amount
+    );
+    event AgentStruckOut(
+        address indexed dac,
+        uint256 indexed id,
+        address indexed deal,
+        address agent,
         uint256 amount
     );
 

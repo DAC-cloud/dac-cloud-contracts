@@ -190,7 +190,7 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
             "HAG"
         );
         agentToken = AgentToken(address(new UUPSProxy(address(new AgentToken()), agentInit)));
-        agentToken.dacInit(managerAddr);
+        agentToken.dacInit(managerAddr, address(0));
 
         bytes memory stakeInit = abi.encodeWithSelector(
             StakedAgent.initialize.selector,

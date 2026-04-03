@@ -25,6 +25,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     WrappedMainToken public mainToken;
     IERC20 public underlyingToken;
     address public dealManager;
+    address public agentToken;
 
     mapping(bytes32 => CapitalCallState) private capitalCalls;
     mapping(address => uint256) private treasuryBalances;
@@ -36,6 +37,8 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     uint256 private _mainTokenObligations;
     mapping(address => bool) private controlledAddresses;
     uint256 private controlledWrappedBalance;
+    mapping(address => bool) private distributorAddresses;
+    mapping(address => uint256) private distributorAllowances;
 
     constructor() {
         _disableInitializers();
@@ -59,6 +62,14 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
         dealManager = _dealManager;
         controlledAddresses[_dealManager] = true;
+    }
+
+    function setAgentToken(address _agentToken) external onlyDACCell {
+        require(_agentToken != address(0), DACErrorsLib.NotAllowed());
+        require(agentToken == address(0), DACErrorsLib.AlreadyInitialized());
+
+        agentToken = _agentToken;
+        controlledAddresses[_agentToken] = true;
     }
 
     function depositFrom(address from, address token, uint256 amount) external onlyDACCell {
@@ -238,6 +249,44 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         controlledWrappedBalance += IERC20(address(mainToken)).balanceOf(controlled);
     }
 
+    function validateBoundAgentRecipient(address recipient) external view {
+        _validateBoundAgentRecipient(recipient);
+    }
+
+    function authorizeAgentDistributor(address distributor, uint256 allowance) external onlyDACCell {
+        require(distributor != address(0), DACErrorsLib.NotAllowed());
+        require(!_isInvalidAgentRecipient(distributor), DACErrorsLib.NotAllowed());
+
+        if (!distributorAddresses[distributor]) {
+            require(agentToken == address(0) || IERC20(agentToken).balanceOf(distributor) == 0, DACErrorsLib.NotAllowed());
+            distributorAddresses[distributor] = true;
+        }
+
+        distributorAllowances[distributor] += allowance;
+    }
+
+    function revokeAgentDistributor(address distributor) external onlyDACCell {
+        require(distributorAddresses[distributor], DACErrorsLib.NotFound());
+        distributorAllowances[distributor] = 0;
+    }
+
+    function handleAgentDistribution(address distributor, address recipient, uint256 amount) external onlyAgentToken {
+        require(distributorAddresses[distributor], DACErrorsLib.NotTransferable());
+        require(distributorAllowances[distributor] >= amount, DACErrorsLib.InsufficientBalance());
+
+        _validateBoundAgentRecipient(recipient);
+
+        distributorAllowances[distributor] -= amount;
+    }
+
+    function isAgentDistributor(address account) external view returns (bool) {
+        return distributorAddresses[account];
+    }
+
+    function agentDistributorAllowance(address account) external view returns (uint256) {
+        return distributorAllowances[account];
+    }
+
     function onMainMove(address from, address to, uint256 amount) external onlyWrappedMainToken {
         if (from != address(0) && controlledAddresses[from]) {
             controlledWrappedBalance -= amount;
@@ -287,6 +336,19 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         return treasuryBalances[token] - committedBalances[token];
     }
 
+    function _validateBoundAgentRecipient(address recipient) internal view {
+        require(recipient != address(0), DACErrorsLib.NotAllowed());
+        require(!_isInvalidAgentRecipient(recipient), DACErrorsLib.NotAllowed());
+        require(!distributorAddresses[recipient], DACErrorsLib.NotAllowed());
+    }
+
+    function _isInvalidAgentRecipient(address recipient) internal view returns (bool) {
+        return
+            controlledAddresses[recipient] ||
+            recipient == address(mainToken) ||
+            recipient == agentToken;
+    }
+
     modifier onlyDACCell() {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
         _;
@@ -299,6 +361,11 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
     modifier onlyWrappedMainToken() {
         require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
+        _;
+    }
+
+    modifier onlyAgentToken() {
+        require(msg.sender == agentToken, DACErrorsLib.NotAuthorized());
         _;
     }
 }

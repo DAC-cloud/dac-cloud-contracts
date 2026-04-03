@@ -5,7 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper, ExistingDACConfig} from "../interfaces/Structs.sol";
-import {DealCreationConfig, GovernanceStrategyConfig} from "../interfaces/GovernanceStructs.sol";
+import {AgentTokenMintAction, DealCreationConfig, GovernanceStrategyConfig} from "../interfaces/GovernanceStructs.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
 import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
 import {IManagementProposal} from "../interfaces/IManagementProposal.sol";
@@ -141,7 +141,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         );
 
         MainToken(_mainToken).dacInit(dealManager, assetController);
-        agentToken.dacInit(dealManager);
+        IAssetController(assetController).setAgentToken(_agentToken);
+        agentToken.dacInit(dealManager, assetController);
 
         emit DACEventsLib.DACStarted(
             dealManager,
@@ -200,7 +201,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             config.governanceStrategy
         );
 
-        agentToken.dacInit(dealManager);
+        IAssetController(assetController).setAgentToken(_agentToken);
+        agentToken.dacInit(dealManager, assetController);
 
         emit DACEventsLib.DACStarted(
             dealManager,
@@ -499,8 +501,26 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     function _executeMintAgent(uint256 id, IManagementProposal prop) internal {
         uint256 amount = uint256(prop.i());
         address recipient = prop.target();
-        agentToken.mint(recipient, amount);
-        emit DACEventsLib.AgentTokenMinted(id, recipient, amount);
+        AgentTokenMintAction action = prop.data().length == 0
+            ? AgentTokenMintAction.DIRECT_AGENT
+            : abi.decode(prop.data(), (AgentTokenMintAction));
+
+        if (action == AgentTokenMintAction.DIRECT_AGENT) {
+            IAssetController(assetController).validateBoundAgentRecipient(recipient);
+            agentToken.mint(recipient, amount);
+            emit DACEventsLib.AgentTokenMinted(id, recipient, amount);
+        } else if (action == AgentTokenMintAction.DISTRIBUTOR_INVENTORY) {
+            require(amount > 0, DACErrorsLib.NotAllowed());
+            IAssetController(assetController).authorizeAgentDistributor(recipient, amount);
+            agentToken.mint(recipient, amount);
+            emit DACEventsLib.AgentDistributorApproved(address(this), recipient, amount);
+            emit DACEventsLib.AgentTokenMinted(id, recipient, amount);
+        } else if (action == AgentTokenMintAction.DISTRIBUTOR_DISABLE) {
+            IAssetController(assetController).revokeAgentDistributor(recipient);
+            emit DACEventsLib.AgentDistributorRevoked(address(this), recipient);
+        } else {
+            revert DACErrorsLib.UnsupportedProposal();
+        }
     }
 
     function _executeRevokeAgent(uint256 id, IManagementProposal prop) internal {
@@ -626,7 +646,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function _onlyAgent() internal view {
-        require(agentToken.balanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
+        require(agentToken.qualifiedBalanceOf(msg.sender) > 0, DACErrorsLib.NotAuthorized());
     }
 
     function _onlyHolderOrManager() internal view {
@@ -643,7 +663,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         require(
             (
                 mainToken.balanceOf(msg.sender) > 0 ||
-                agentToken.balanceOf(msg.sender) > 0
+                agentToken.qualifiedBalanceOf(msg.sender) > 0
             ), 
             DACErrorsLib.NotAuthorized()
         );

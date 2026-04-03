@@ -32,7 +32,7 @@ contract DirectAccessControlTest is DACTestBase {
 
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
-        agentToken.dacInit(outsider);
+        agentToken.dacInit(outsider, outsider);
 
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);

@@ -5,8 +5,10 @@ import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/
 import {AccessControlUpgradeable} from"@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IAgentToken} from "../../interfaces/IAgentToken.sol";
+import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
+import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
@@ -15,6 +17,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     
     address public dacCell;
     address public dealManager;
+    address public assetController;
 
     event Staked(address indexed staker, address indexed deal, uint256 amount);
     event StakeRequested(address indexed staker, address indexed deal, uint256 amount);
@@ -38,11 +41,13 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     }
 
     function dacInit(
-        address _dealManager
+        address _dealManager,
+        address _assetController
     ) external {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
 
         dealManager = _dealManager;
+        assetController = _assetController;
 
         _grantRole(MINTER_ROLE, _dealManager);
         _grantRole(BURNER_ROLE, _dealManager);
@@ -55,6 +60,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     }
 
     function stakeToDeal(address dealCell, uint256 amount) external {
+        require(qualifiedBalanceOf(msg.sender) >= amount, DACErrorsLib.NotTransferable());
         require(
             IDealManagerAdapter(dealManager).state(dealCell).id != 0, 
             DACErrorsLib.InvalidDealAddress()
@@ -70,6 +76,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
 
     function forceStakeToDeal(address staker, address dealCell, uint256 amount) external {
         require(msg.sender == dealManager, DACErrorsLib.NotAuthorized());
+        require(qualifiedBalanceOf(staker) >= amount, DACErrorsLib.NotTransferable());
         require(
             IDealManagerAdapter(dealManager).state(dealCell).id != 0,
             DACErrorsLib.InvalidDealAddress()
@@ -89,6 +96,14 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
+        if (assetController != address(0) && IAssetController(assetController).isAgentDistributor(msg.sender)) {
+            IAssetController(assetController).handleAgentDistribution(msg.sender, to, amount);
+            _transfer(msg.sender, to, amount);
+
+            emit DACEventsLib.AgentTokenDistributed(dacCell, msg.sender, to, amount);
+            return true;
+        }
+
         require(
             IDealManagerAdapter(dealManager).state(msg.sender).id != 0, 
             DACErrorsLib.InvalidDealAddress()
@@ -115,5 +130,13 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
         emit StakeRequested(msg.sender, deal, amount);
 
         return true;
+    }
+
+    function qualifiedBalanceOf(address account) public view returns (uint256) {
+        if (assetController != address(0) && IAssetController(assetController).isAgentDistributor(account)) {
+            return 0;
+        }
+
+        return balanceOf(account);
     }
 }

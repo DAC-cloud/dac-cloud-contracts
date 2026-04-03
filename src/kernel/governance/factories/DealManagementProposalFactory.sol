@@ -45,6 +45,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
             params.typ == AbstractDealManagementType.ADD_STAKE || 
             params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
+            params.typ == AbstractDealManagementType.STRIKE_OUT_AGENT ||
             params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
             params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
             params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
@@ -55,13 +56,18 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 params.typ == AbstractDealManagementType.ENABLE_VETO_RIGHT ||
                 params.typ == AbstractDealManagementType.ADD_STAKE || 
                 params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
+                params.typ == AbstractDealManagementType.STRIKE_OUT_AGENT ||
                 params.typ == AbstractDealManagementType.TOGGLE_WHITELIST ||
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
                 params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
             ) {
                 quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
 
-                if (vetoEnabled || params.typ == AbstractDealManagementType.PERMIT_UNSTAKE) {
+                if (
+                    vetoEnabled ||
+                    params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
+                    params.typ == AbstractDealManagementType.STRIKE_OUT_AGENT
+                ) {
                     challengeable = true;
                 }
             }

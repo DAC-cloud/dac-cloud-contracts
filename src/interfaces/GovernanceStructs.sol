@@ -29,6 +29,12 @@ enum CommitmentKind {
     OTHER
 }
 
+enum AgentTokenMintAction {
+    DIRECT_AGENT,
+    DISTRIBUTOR_INVENTORY,
+    DISTRIBUTOR_DISABLE
+}
+
 struct GovernanceStrategyConfig {
     uint256 quorumPercent;
     uint256 highQuorumPercent;

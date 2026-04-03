@@ -24,6 +24,7 @@ contract NativeAssetController is IAssetController, Initializable {
     address public dacCell;
     MainToken public mainToken;
     address public dealManager;
+    address public agentToken;
 
     mapping(bytes32 => CapitalCallState) private capitalCalls;
     mapping(address => uint256) private treasuryBalances;
@@ -36,6 +37,8 @@ contract NativeAssetController is IAssetController, Initializable {
     uint256 private unreleasedMainTokens;
     mapping(address => uint256) private lockedMainTokens;
     mapping(address => bool) private controlledAddresses;
+    mapping(address => bool) private distributorAddresses;
+    mapping(address => uint256) private distributorAllowances;
 
     constructor() {
         _disableInitializers();
@@ -58,6 +61,14 @@ contract NativeAssetController is IAssetController, Initializable {
 
         dealManager = _dealManager;
         controlledAddresses[_dealManager] = true;
+    }
+
+    function setAgentToken(address _agentToken) external onlyDACCell {
+        require(_agentToken != address(0), DACErrorsLib.NotAllowed());
+        require(agentToken == address(0), DACErrorsLib.AlreadyInitialized());
+
+        agentToken = _agentToken;
+        controlledAddresses[_agentToken] = true;
     }
 
     function depositFrom(address from, address token, uint256 amount) external onlyDACCell {
@@ -232,6 +243,44 @@ contract NativeAssetController is IAssetController, Initializable {
         controlledAddresses[controlled] = true;
     }
 
+    function validateBoundAgentRecipient(address recipient) external view {
+        _validateBoundAgentRecipient(recipient);
+    }
+
+    function authorizeAgentDistributor(address distributor, uint256 allowance) external onlyDACCell {
+        require(distributor != address(0), DACErrorsLib.NotAllowed());
+        require(!_isInvalidAgentRecipient(distributor), DACErrorsLib.NotAllowed());
+
+        if (!distributorAddresses[distributor]) {
+            require(agentToken == address(0) || IERC20(agentToken).balanceOf(distributor) == 0, DACErrorsLib.NotAllowed());
+            distributorAddresses[distributor] = true;
+        }
+
+        distributorAllowances[distributor] += allowance;
+    }
+
+    function revokeAgentDistributor(address distributor) external onlyDACCell {
+        require(distributorAddresses[distributor], DACErrorsLib.NotFound());
+        distributorAllowances[distributor] = 0;
+    }
+
+    function handleAgentDistribution(address distributor, address recipient, uint256 amount) external onlyAgentToken {
+        require(distributorAddresses[distributor], DACErrorsLib.NotTransferable());
+        require(distributorAllowances[distributor] >= amount, DACErrorsLib.InsufficientBalance());
+
+        _validateBoundAgentRecipient(recipient);
+
+        distributorAllowances[distributor] -= amount;
+    }
+
+    function isAgentDistributor(address account) external view returns (bool) {
+        return distributorAddresses[account];
+    }
+
+    function agentDistributorAllowance(address account) external view returns (uint256) {
+        return distributorAllowances[account];
+    }
+
     function onMainMove(address from, address to, uint256 amount) external onlyDealManager {
         if (from == address(0)) {
             if (controlledAddresses[to]) {
@@ -284,6 +333,19 @@ contract NativeAssetController is IAssetController, Initializable {
         return treasuryBalances[token] - committedBalances[token];
     }
 
+    function _validateBoundAgentRecipient(address recipient) internal view {
+        require(recipient != address(0), DACErrorsLib.NotAllowed());
+        require(!_isInvalidAgentRecipient(recipient), DACErrorsLib.NotAllowed());
+        require(!distributorAddresses[recipient], DACErrorsLib.NotAllowed());
+    }
+
+    function _isInvalidAgentRecipient(address recipient) internal view returns (bool) {
+        return
+            controlledAddresses[recipient] ||
+            recipient == address(mainToken) ||
+            recipient == agentToken;
+    }
+
     modifier onlyDACCell() {
         _onlyDACCell();
         _;
@@ -300,5 +362,10 @@ contract NativeAssetController is IAssetController, Initializable {
 
     function _onlyDealManager() internal view {
         require(msg.sender == dealManager, DACErrorsLib.NotAuthorized());
+    }
+
+    modifier onlyAgentToken() {
+        require(msg.sender == agentToken, DACErrorsLib.NotAuthorized());
+        _;
     }
 }

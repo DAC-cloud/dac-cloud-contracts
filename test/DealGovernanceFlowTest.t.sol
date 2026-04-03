@@ -491,6 +491,54 @@ contract DealGovernanceFlowTest is DACTestBase {
         assertTrue(IDealCell(handle.dealCell).allowEarlyReturns());
     }
 
+    function test_strikeOutAgent_isAlwaysChallengeable() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.STRIKE_OUT_AGENT,
+                target: agent2,
+                i: 0,
+                data: bytes("")
+            })
+        );
+        vm.stopPrank();
+
+        address proposal = Deal(handle.dealAddr).getProposal(proposalId);
+        assertTrue(IDealChallengeableProposal(proposal).isChallengeable());
+    }
+
+    function test_strikeOutAgent_releasesStakeBackToTarget() public {
+        DealHandle memory handle = _setupApprovedTreasuryDealWithTwoAgents();
+        address stakeToken = IDealCell(handle.dealCell).stakeToken();
+        uint256 releasedStake = StakedAgent(stakeToken).balanceOf(agent2);
+        uint256 agentBalanceBefore = agentToken.balanceOf(agent2);
+
+        vm.startPrank(agent1);
+        uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
+            ProposalParams({
+                typ: AbstractDealManagementType.STRIKE_OUT_AGENT,
+                target: agent2,
+                i: 0,
+                data: bytes("")
+            })
+        );
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+        _voteDealProposal(handle.dealAddr, proposalId, agent1, true);
+        _voteDealProposal(handle.dealAddr, proposalId, agent2, true);
+
+        vm.expectEmit(true, true, true, true);
+        emit DACEventsLib.AgentStruckOut(address(dac), handle.dealId, handle.dealAddr, agent2, releasedStake);
+
+        Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
+
+        assertEq(StakedAgent(stakeToken).balanceOf(agent2), 0);
+        assertEq(agentToken.balanceOf(agent2), agentBalanceBefore + releasedStake);
+    }
+
     function test_createChildProposal_andVote_executesOnChildDAC() public {
         DealHandle memory handle = _setupApprovedDACDealWithTwoAgents();
         address childDac = DACDeal(handle.dealAddr).managedEntity();

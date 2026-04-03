@@ -8,6 +8,7 @@ interface IAbstractDealManagementProposals {
 
     function addStake() external pure returns (bytes4);
     function permitUnstake() external pure returns (bytes4);
+    function strikeOutAgent() external pure returns (bytes4);
 
     function enableVetoRight() external pure returns (bytes4);
 
@@ -25,6 +26,7 @@ library AbstractDealManagementType {
     
     bytes4 public constant ADD_STAKE            = IAbstractDealManagementProposals.addStake.selector;           // High quorum
     bytes4 public constant PERMIT_UNSTAKE       = IAbstractDealManagementProposals.permitUnstake.selector;      // High quorum, always allows challenging
+    bytes4 public constant STRIKE_OUT_AGENT     = IAbstractDealManagementProposals.strikeOutAgent.selector;     // High quorum, always allows challenging
 
     bytes4 public constant TOGGLE_WHITELIST     = IAbstractDealManagementProposals.toggleWhitelist.selector;    // High quorum
     

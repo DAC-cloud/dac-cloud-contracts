@@ -256,6 +256,7 @@ library DealCellGovernanceLib {
             params.typ == AbstractDealManagementType.REQUEST_TRANCHE ||
             params.typ == AbstractDealManagementType.ADD_STAKE ||
             params.typ == AbstractDealManagementType.PERMIT_UNSTAKE ||
+            params.typ == AbstractDealManagementType.STRIKE_OUT_AGENT ||
             params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
         );
     }

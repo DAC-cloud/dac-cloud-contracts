@@ -463,6 +463,15 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             unstakeAllowed(DealManagementProposal(prop).target());
         }
 
+        else if (typ == AbstractDealManagementType.STRIKE_OUT_AGENT) {
+            address agent = DealManagementProposal(prop).target();
+            uint256 releasedStake = token.balanceOf(agent);
+
+            unstakeAllowed(agent);
+
+            emit DACEventsLib.AgentStruckOut(dacCell, id, address(deal), agent, releasedStake);
+        }
+
         else if (typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD) {
             IDealManagerAdapter(manager).permitEvaluatorAdd(id, DealManagementProposal(prop).data());
         }
