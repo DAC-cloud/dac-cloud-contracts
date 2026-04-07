@@ -60,15 +60,16 @@ contract DACDeployTest is Test {
     function setUp() public {
         vm.startPrank(owner);
 
+        address dealCellFactory_ = address(new DealCellFactory());
+        address stakedAgentFactory_ = address(new StakedAgentFactory());
+
         coreModule = new CoreModuleFactory(
-            address(new DealCellFactory()),
             address(new DACDealFactory()),
-            address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new MilestoneEvaluatorFactory()),
             address(new RevenueEvaluatorFactory())
         );
-        
+
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
@@ -81,7 +82,9 @@ contract DACDeployTest is Test {
                 address(new NativeAssetControllerFactory()),
                 address(governanceFactory),
                 address(new NativeGovernanceSchemaFactory()),
-                address(coreModule)
+                address(coreModule),
+                dealCellFactory_,
+                stakedAgentFactory_
             ],
             [
                 address(new ExistingTokenAssetControllerFactory()),

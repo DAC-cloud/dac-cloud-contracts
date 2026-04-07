@@ -92,7 +92,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         address _governanceSchemaFactory,
         address coreModule,
         bool _dividendsEnabled,
-        uint256 _quorum // 1e18 == MathLib.SCALE == 100%
+        uint256 _quorum, // 1e18 == MathLib.SCALE == 100%
+        address _dealCellFactory,
+        address _stakedAgentTokenFactory
     ) external {
         require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
         require(!cellStarted, DACErrorsLib.AlreadyInitialized());
@@ -126,7 +128,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             _agentToken,
             moduleRegistry,
             address(this),
-            assetController
+            assetController,
+            _dealCellFactory,
+            _stakedAgentTokenFactory
         );
 
         IAssetController(assetController).setDealManager(dealManager);
@@ -161,7 +165,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         address _governanceSchemaFactory,
         address _governanceOracle,
         address coreModule,
-        ExistingDACConfig calldata config
+        ExistingDACConfig calldata config,
+        address _dealCellFactory,
+        address _stakedAgentTokenFactory
     ) external {
         require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
         require(!cellStarted, DACErrorsLib.AlreadyInitialized());
@@ -185,7 +191,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             _agentToken,
             moduleRegistry,
             address(this),
-            assetController
+            assetController,
+            _dealCellFactory,
+            _stakedAgentTokenFactory
         );
 
         IAssetController(assetController).setDealManager(dealManager);

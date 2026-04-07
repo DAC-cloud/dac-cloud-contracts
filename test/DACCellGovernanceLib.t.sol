@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import {DACCellGovernanceLib, IDACGovernanceAdapter} from "../src/kernel/libraries/DACCellGovernanceLib.sol";
 import {MathLib} from "../src/kernel/libraries/MathLib.sol";
-import {DealState} from "../src/kernel/interfaces/Structs.sol";
+import {DealState, KernelFactories} from "../src/kernel/interfaces/Structs.sol";
 import {DealParams, VotingConfig} from "../src/interfaces/Structs.sol";
 import {IModuleFactory} from "../src/interfaces/IModuleFactory.sol";
 import {IModuleRegistry} from "../src/interfaces/IModuleRegistry.sol";
@@ -44,6 +44,10 @@ contract DACCellGovernanceLibTest is Test {
     address mockDeal = makeAddr("deal");
     address mockDealCell = makeAddr("dealCell");
     address mockEvaluator = makeAddr("evaluator");
+    address mockDealCellFactory = makeAddr("dealCellFactory");
+    address mockStakedAgentFactory = makeAddr("stakedAgentTokenFactory");
+    address mockAgentToken = makeAddr("agentToken");
+    address mockMainToken = makeAddr("mainToken");
 
     // Test constants
     bytes4 constant MOCK_DEAL_KIND = bytes4(keccak256("TestDeal"));
@@ -90,36 +94,31 @@ contract DACCellGovernanceLibTest is Test {
             executionValidityDuration: 1 days
         });
 
-        // Mock external calls
-        vm.mockCall(
-            mockModuleFactory,
-            abi.encodeWithSelector(IModuleFactory.deployDeal.selector),
-            abi.encode(mockDealCell, mockDeal)
-        );
+        // Mock: dacCell.getAgentToken / getMainToken
+        vm.mockCall(mockDACCell, abi.encodeWithSelector(bytes4(keccak256("getAgentToken()"))), abi.encode(mockAgentToken));
+        vm.mockCall(mockDACCell, abi.encodeWithSelector(bytes4(keccak256("getMainToken()"))), abi.encode(mockMainToken));
 
-        vm.mockCall(
-            mockModuleFactory,
-            abi.encodeWithSelector(IModuleFactory.isActive.selector),
-            abi.encode(true)
-        );
+        // Mock: DealCellFactory.deployCell → returns mockDealCell
+        vm.mockCall(mockDealCellFactory, abi.encodeWithSelector(bytes4(keccak256("deployCell(uint256,address,address,address,address,address,address)"))), abi.encode(mockDealCell));
 
-        vm.mockCall(
-            mockModuleFactory,
-            abi.encodeWithSelector(IModuleFactory.supportsEvaluatorKind.selector),
-            abi.encode(true)
-        );
+        // Mock: DealCell.initializeDealCell (no-op)
+        vm.mockCall(mockDealCell, abi.encodeWithSelector(bytes4(keccak256("initializeDealCell(address,address,(bytes4,string,string,string,address,address,address,address,bool,address,uint256,uint256,uint256,uint256,uint256,uint256,bytes,bytes4,bytes,address,uint256,uint256),(uint256,uint256,uint256,uint256,uint256,uint256))"))), abi.encode());
 
-        vm.mockCall(
-            mockModuleFactory,
-            abi.encodeWithSelector(IModuleFactory.deployEvaluator.selector),
-            abi.encode(mockEvaluator)
-        );
+        // Mock: module.deployDeal → returns mockDeal
+        vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.deployDeal.selector), abi.encode(mockDeal));
 
-        vm.mockCall(
-            mockDACCell,
-            abi.encodeWithSelector(IDACGovernanceAdapter.createManagementProposal.selector),
-            abi.encode(1)  // mock proposal ID
-        );
+        // Mock: module.isActive
+        vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.isActive.selector), abi.encode(true));
+
+        // Mock: module compatibility checks
+        vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.dealAcceptsEvaluator.selector), abi.encode(true));
+        vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.evaluatorAcceptsDeal.selector), abi.encode(true));
+
+        // Mock: module.deployEvaluator
+        vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.deployEvaluator.selector), abi.encode(mockEvaluator));
+
+        // Mock: dacCell.createManagementProposal
+        vm.mockCall(mockDACCell, abi.encodeWithSelector(IDACGovernanceAdapter.createManagementProposal.selector), abi.encode(1));
 
         // vm.expectEmit(true, true, true, true);
         // emit DealCreated(mockDACCell, 1, 1, msg.sender, MOCK_DEAL_KIND, mockDealCell, mockDeal);
@@ -131,6 +130,7 @@ contract DACCellGovernanceLibTest is Test {
             params,
             votingConfig,
             mockRegistry,
+            KernelFactories(mockDealCellFactory, mockStakedAgentFactory),
             mockDeals,
             mockDealRegistry
         );

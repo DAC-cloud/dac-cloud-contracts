@@ -21,3 +21,8 @@ struct CapitalCallState {
     CapitalCall call;
     bool fulfilled;
 }
+
+struct KernelFactories {
+    address dealCellFactory;
+    address stakedAgentTokenFactory;
+}

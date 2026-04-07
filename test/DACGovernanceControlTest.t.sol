@@ -53,11 +53,9 @@ contract MockGovernanceModuleFactory is ModuleFactory {
     address public immutable mockEvaluatorFactory;
 
     constructor(
-        address dealCellFactory_,
-        address stakedAgentFactory_,
         address treasuryDealFactory_,
         address mockEvaluatorFactory_
-    ) ModuleFactory(dealCellFactory_, stakedAgentFactory_) {
+    ) {
         treasuryDealFactory = treasuryDealFactory_;
         mockEvaluatorFactory = mockEvaluatorFactory_;
     }
@@ -78,6 +76,12 @@ contract MockGovernanceModuleFactory is ModuleFactory {
     }
     function supportsEvaluatorKind(bytes4, bytes4 evaluatorSelector) external pure returns (bool) {
         return evaluatorSelector == DAC_TEST_EVALUATOR_SELECTOR;
+    }
+    function dealAcceptsEvaluator(bytes4, bytes4, address) external pure returns (bool) {
+        return true;
+    }
+    function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
+        return true;
     }
     function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
         return dealKind == CoreDealType.PERMIT2_TREASURY;
@@ -115,8 +119,6 @@ contract DACGovernanceControlTest is DACTestBase {
 
         vm.prank(moduleOwner);
         mockModule = new MockGovernanceModuleFactory(
-            address(new DealCellFactory()),
-            address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new MockNoopEvaluatorFactory())
         );

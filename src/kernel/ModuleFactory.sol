@@ -6,48 +6,27 @@ import {IModuleFactory} from "../interfaces/IModuleFactory.sol";
 import {IDealFactory} from "../interfaces/modules/IDealFactory.sol";
 import {IEvaluatorFactory} from "../interfaces/modules/IEvaluatorFactory.sol";
 import {IDACCellAdapter} from "./interfaces/IDACCellAdapter.sol";
-import {DealCellFactory} from "./factories/DealCellFactory.sol";
-import {DealCell} from "./DealCell.sol";
 
 abstract contract ModuleFactory is IModuleFactory {
-
-    address public dealCellFactory;
-    address public stakedAgentTokenFactory;
-
-    constructor(
-        address _dealCellFactory,
-        address _stakedAgentTokenFactory
-    ) {
-        dealCellFactory = _dealCellFactory;
-        stakedAgentTokenFactory = _stakedAgentTokenFactory;
-    }
 
     function getDealFactory(
         bytes4 dealKind
     ) internal virtual returns (IDealFactory);
 
     function getEvaluatorFactory(
-        bytes4 dealKind, 
+        bytes4 dealKind,
         bytes4 evaluatorSelector
     ) internal virtual returns (IEvaluatorFactory);
 
+    // Deploys only the Deal contract. DealCell deployment and initialization
+    // are handled by the kernel for security (no module control over DealCell).
     function deployDeal(
         uint256 id,
         DealParams calldata params,
         address dac,
-        address manager,
+        address dealCell,
         VotingConfig calldata votingConfig
-    ) external returns (address dealCell, address dealAddr) {
-        dealCell = DealCellFactory(dealCellFactory).deployCell(
-            id,
-            dac,
-            manager,
-            params.governanceFactory,
-            IDACCellAdapter(dac).getAgentToken(),
-            IDACCellAdapter(dac).getMainToken(),
-            params.proposer
-        );
-
+    ) external returns (address dealAddr) {
         IDealFactory factory = getDealFactory(params.dealKind);
         dealAddr = factory.deployDeal(
             id,
@@ -56,13 +35,6 @@ abstract contract ModuleFactory is IModuleFactory {
             dac,
             IDACCellAdapter(dac).getAgentToken(),
             IDACCellAdapter(dac).getMainToken()
-        );
-
-        DealCell(dealCell).initializeDealCell(
-            dealAddr,
-            stakedAgentTokenFactory,
-            params,
-            votingConfig
         );
     }
 

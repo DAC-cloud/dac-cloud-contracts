@@ -64,15 +64,16 @@ contract DACCellCapitalCallTest is Test {
 
         vm.startPrank(moduleOwner);
 
+        address dealCellFactory_ = address(new DealCellFactory());
+        address stakedAgentFactory_ = address(new StakedAgentFactory());
+
         coreModule = new CoreModuleFactory(
-            address(new DealCellFactory()),
             address(new DACDealFactory()),
-            address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new MilestoneEvaluatorFactory()),
             address(new RevenueEvaluatorFactory())
         );
-        
+
         governanceFactory = new DACManagementProposalFactory();
 
         dacFactory = new DACFactory(
@@ -85,7 +86,9 @@ contract DACCellCapitalCallTest is Test {
                 address(new NativeAssetControllerFactory()),
                 address(governanceFactory),
                 address(new NativeGovernanceSchemaFactory()),
-                address(coreModule)
+                address(coreModule),
+                dealCellFactory_,
+                stakedAgentFactory_
             ],
             [
                 address(new ExistingTokenAssetControllerFactory()),
@@ -177,8 +180,8 @@ contract DACCellCapitalCallTest is Test {
         assertEq(evaluatorKinds.length, 2);
         assertEq(evaluatorKinds[0], CoreEvaluatorType.MILESTONES_EVALUATOR);
         assertEq(evaluatorKinds[1], CoreEvaluatorType.REVENUE_EVALUATOR);
-        assertTrue(coreModule.supportsEvaluatorKind(CoreDealType.DAC_DEAL, evaluatorKinds[0]));
-        assertTrue(coreModule.supportsEvaluatorKind(CoreDealType.DAC_DEAL, evaluatorKinds[1]));
+        assertTrue(coreModule.dealAcceptsEvaluator(CoreDealType.DAC_DEAL, evaluatorKinds[0], address(0)));
+        assertTrue(coreModule.dealAcceptsEvaluator(CoreDealType.DAC_DEAL, evaluatorKinds[1], address(0)));
 
         assertEq(bytes(coreModule.moduleManifestURI()).length, 0);
     }

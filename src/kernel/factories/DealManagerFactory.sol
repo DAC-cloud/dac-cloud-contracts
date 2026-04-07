@@ -17,7 +17,9 @@ contract DealManagerFactory {
         address agentToken,
         address moduleRegistry,
         address dacCell,
-        address assetController
+        address assetController,
+        address dealCellFactory,
+        address stakedAgentTokenFactory
     ) external returns (address dealManager) {
         bytes memory initData = abi.encodeWithSelector(
             DealManager.initialize.selector,
@@ -25,7 +27,9 @@ contract DealManagerFactory {
             agentToken,
             moduleRegistry,
             dacCell,
-            assetController
+            assetController,
+            dealCellFactory,
+            stakedAgentTokenFactory
         );
 
         dealManager = address(new UUPSProxy(address(referenceImpl), initData));

@@ -25,13 +25,11 @@ contract CoreModuleFactory is ModuleFactory {
     error EvaluatorKindNotSupported(bytes4 dealKind);
 
     constructor(
-        address _dealCellFactory,
         address _dacDealFactory,
-        address _stakedAgentTokenFactory,
         address _treasuryDealFactory,
         address _milestoneEvaluatorFactory,
         address _revenueEvaluatorFactory
-    ) ModuleFactory(_dealCellFactory, _stakedAgentTokenFactory) {
+    ) {
         dacDealFactory = _dacDealFactory;
         treasuryDealFactory = _treasuryDealFactory;
         milestoneEvaluatorFactory = _milestoneEvaluatorFactory;
@@ -62,9 +60,14 @@ contract CoreModuleFactory is ModuleFactory {
         return dealKind == CoreDealType.DAC_DEAL || dealKind == CoreDealType.PERMIT2_TREASURY;
     }
 
-    function supportsEvaluatorKind(bytes4, bytes4 evaluatorKind) external pure returns (bool) {
-        return evaluatorKind == CoreEvaluatorType.MILESTONES_EVALUATOR
-            || evaluatorKind == CoreEvaluatorType.REVENUE_EVALUATOR;
+    // Core module accepts any evaluator from any module
+    function dealAcceptsEvaluator(bytes4, bytes4, address) external pure returns (bool) {
+        return true;
+    }
+
+    // Core module evaluators accept any deal from any module
+    function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
+        return true;
     }
 
     function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
@@ -78,7 +81,7 @@ contract CoreModuleFactory is ModuleFactory {
         if (dealKind == CoreDealType.DAC_DEAL) {
             factory = IDealFactory(dacDealFactory);
         }
-        
+
         else if (dealKind == CoreDealType.PERMIT2_TREASURY) {
             factory = IDealFactory(treasuryDealFactory);
         }
@@ -92,7 +95,7 @@ contract CoreModuleFactory is ModuleFactory {
         if (evaluatorSelector == CoreEvaluatorType.MILESTONES_EVALUATOR) {
             factory = IEvaluatorFactory(milestoneEvaluatorFactory);
         }
-        
+
         else if (evaluatorSelector == CoreEvaluatorType.REVENUE_EVALUATOR) {
             factory = IEvaluatorFactory(revenueEvaluatorFactory);
         }

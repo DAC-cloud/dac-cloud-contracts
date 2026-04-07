@@ -78,9 +78,7 @@ contract DeployProtocol is ManifestIO {
         deployment.revenueEvaluatorFactory = address(new RevenueEvaluatorFactory());
 
         deployment.coreModuleFactory = address(new CoreModuleFactory(
-            deployment.dealCellFactory,
             deployment.dacDealFactory,
-            deployment.stakedAgentFactory,
             deployment.treasuryDealFactory,
             deployment.milestoneEvaluatorFactory,
             deployment.revenueEvaluatorFactory
@@ -96,7 +94,9 @@ contract DeployProtocol is ManifestIO {
                 deployment.assetControllerFactory,
                 deployment.dacGovernanceFactory,
                 deployment.governanceSchemaFactory,
-                deployment.coreModuleFactory
+                deployment.coreModuleFactory,
+                deployment.dealCellFactory,
+                deployment.stakedAgentFactory
             ],
             [
                 deployment.existingAssetControllerFactory,

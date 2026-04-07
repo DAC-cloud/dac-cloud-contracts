@@ -37,7 +37,8 @@ interface IModuleFactory {
     function supportedDealKinds() external view returns (bytes4[] memory);
     function supportedEvaluatorKinds() external view returns (bytes4[] memory);
     function supportsDealKind(bytes4 dealKind) external view returns (bool);
-    function supportsEvaluatorKind(bytes4 dealKind, bytes4 evaluatorKind) external view returns (bool);
+    function dealAcceptsEvaluator(bytes4 dealKind, bytes4 evaluatorKind, address evaluatorModule) external view returns (bool);
+    function evaluatorAcceptsDeal(bytes4 evaluatorKind, bytes4 dealKind, address dealModule) external view returns (bool);
     function supportsDealRewardPool(bytes4 dealKind) external view returns (bool);
 
     // Status
@@ -50,8 +51,9 @@ interface IModuleFactory {
         DealParams calldata params,
         address dac,
         address manager,
+        address dealCell,
         VotingConfig calldata votingConfig
-    ) external returns (address dealCell, address dealAddr);
+    ) external returns (address dealAddr);
 
     function deployEvaluator(
         address dac,
@@ -70,29 +72,22 @@ Key points:
 - **`moduleVersion`** -- semver triple. Increment when upgrading factory logic.
 - **`moduleManifestURI`** -- optional URI pointing to off-chain metadata (description, docs, audit reports).
 - **`supportedDealKinds` / `supportedEvaluatorKinds`** -- enumerate all `bytes4` selectors this module handles.
-- **`supportsEvaluatorKind(dealKind, evaluatorKind)`** -- returns whether a given evaluator kind is compatible with a given deal kind. This is checked on *both* the deal's module and the evaluator's module (see section 6).
+- **`dealAcceptsEvaluator(dealKind, evaluatorKind, evaluatorModule)`** -- called on the deal's module: "can my deal work with this evaluator kind from this module?" See section 6.
+- **`evaluatorAcceptsDeal(evaluatorKind, dealKind, dealModule)`** -- called on the evaluator's module: "can my evaluator work with this deal kind from this module?" See section 6.
 - **`supportsDealRewardPool(dealKind)`** -- whether deals of this kind can allocate a portion of rewards to the deal contract itself (see section 7).
 - **`isActive`** -- the kernel checks this before deploying. Return `false` to pause new deployments.
 - **`safetyCheck(deal)`** -- a hook for runtime invariant checks. The kernel may call this during deal lifecycle transitions.
-- **`deployDeal`** -- creates the DealCell and Deal contract. Returns both addresses. The evaluator is deployed separately by the kernel via `deployEvaluator`.
+- **`deployDeal`** -- receives a pre-deployed `dealCell` address from the kernel and creates the Deal contract. Returns the deal address. The kernel (DACCellGovernanceLib) deploys the DealCell, passes it to `deployDeal`, then initializes the DealCell afterward. Module code never controls DealCell deployment or initialization. The evaluator is deployed separately by the kernel via `deployEvaluator`.
 - **`deployEvaluator`** -- called by the kernel, not by `deployDeal`. Deploys an evaluator instance for a specific deal.
 
 ---
 
 ## 3. Extending ModuleFactory
 
-The protocol provides an abstract `ModuleFactory` base contract that handles DealCell deployment and initialization wiring. Module authors extend it and override two internal methods:
+The protocol provides an abstract `ModuleFactory` base contract that handles deal deployment wiring. Module authors extend it and override two internal methods:
 
 ```solidity
 abstract contract ModuleFactory is IModuleFactory {
-    address public dealCellFactory;
-    address public stakedAgentTokenFactory;
-
-    constructor(
-        address _dealCellFactory,
-        address _stakedAgentTokenFactory
-    ) { ... }
-
     function getDealFactory(bytes4 dealKind) internal virtual returns (IDealFactory);
     function getEvaluatorFactory(bytes4 dealKind, bytes4 evaluatorSelector) internal virtual returns (IEvaluatorFactory);
 }
@@ -100,10 +95,9 @@ abstract contract ModuleFactory is IModuleFactory {
 
 The base `deployDeal` implementation:
 
-1. Deploys a `DealCell` via the kernel's `DealCellFactory` (the DealCell is always a kernel contract, not module-controlled).
+1. Receives the pre-deployed `dealCell` address from the kernel (the kernel's DACCellGovernanceLib deploys and initializes the DealCell -- modules never control this).
 2. Calls your `getDealFactory(dealKind)` to get the appropriate `IDealFactory`.
-3. Calls `factory.deployDeal(...)` to create the deal instance.
-4. Initializes the DealCell with the deal address, staked agent token factory, deal params, and voting config.
+3. Calls `factory.deployDeal(...)` to create the deal instance and returns the deal address.
 
 The base `deployEvaluator` implementation calls your `getEvaluatorFactory(dealKind, evaluatorSelector)` and delegates to it.
 
@@ -390,30 +384,40 @@ Rewards are capped by the DAC-approved `rewardsLimit` in `DealParams`, regardles
 
 Evaluators can be deployed from a **different** module than the deal. This allows specialized evaluation modules to work with deals from other modules. The `DealParams.evaluatorModuleFactory` field specifies which module deploys the evaluator -- if set to `address(0)`, the deal's own module is used.
 
-When an evaluator is being deployed (or later added via `ADD_EVALUATOR`), the kernel calls `supportsEvaluatorKind(dealKind, evaluatorKind)` on **both** modules:
+When an evaluator is being deployed (or later added via `ADD_EVALUATOR`), the kernel calls two separate methods:
 
-1. The deal's module -- "does this deal kind work with that evaluator kind?"
-2. The evaluator's module -- "does this evaluator kind work with that deal kind?"
+1. **`dealAcceptsEvaluator(dealKind, evaluatorKind, evaluatorModule)`** on the deal's module -- "can my deal work with this evaluator from this module?"
+2. **`evaluatorAcceptsDeal(evaluatorKind, dealKind, dealModule)`** on the evaluator's module -- "can my evaluator work with this deal from this module?"
 
-Both must return `true`.
+Both must return `true`. The counter-party module address is included in each call, allowing fine-grained trust decisions (e.g., only accepting evaluators from audited modules).
 
-The core module takes a permissive approach -- it returns `true` for any combination as long as the evaluator kind itself is recognized:
+The core module takes a permissive approach -- it returns `true` for all inputs (no constraints):
 
 ```solidity
-// Core module: permissive -- ignores dealKind, only checks evaluatorKind
-function supportsEvaluatorKind(bytes4, bytes4 evaluatorKind) external pure returns (bool) {
-    return evaluatorKind == CoreEvaluatorType.MILESTONES_EVALUATOR
-        || evaluatorKind == CoreEvaluatorType.REVENUE_EVALUATOR;
+// Core module: permissive -- accepts any counter-party module
+function dealAcceptsEvaluator(bytes4, bytes4, address) external pure returns (bool) {
+    return true;
+}
+
+function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
+    return true;
 }
 ```
 
-Third-party modules should be more restrictive. Return `true` only for evaluator/deal combinations you have tested and validated:
+Third-party modules should be more restrictive. Return `true` only for evaluator/deal combinations you have tested and validated, and optionally restrict which counter-party modules you trust:
 
 ```solidity
-function supportsEvaluatorKind(bytes4 dealKind, bytes4 evaluatorKind) external pure returns (bool) {
+function dealAcceptsEvaluator(bytes4 dealKind, bytes4 evaluatorKind, address evaluatorModule) external view returns (bool) {
     if (dealKind == MyDealType.BOUNTY_DEAL) {
         return evaluatorKind == MyEvaluatorType.BOUNTY_EVALUATOR
             || evaluatorKind == CoreEvaluatorType.MILESTONES_EVALUATOR; // tested with core milestones
+    }
+    return false;
+}
+
+function evaluatorAcceptsDeal(bytes4 evaluatorKind, bytes4 dealKind, address dealModule) external view returns (bool) {
+    if (evaluatorKind == MyEvaluatorType.BOUNTY_EVALUATOR) {
+        return dealKind == MyDealType.BOUNTY_DEAL;
     }
     return false;
 }
@@ -479,9 +483,15 @@ _registerRelatedContract(dacCellDNA.dacAgentToken, bytes32("CHILD_AGENT_TOKEN"),
 
 Deal hooks like `_beforeClose`, `_beforeWithdrawCapital`, and `_beforeRecovery` are called during critical lifecycle transitions. If your hook reverts unconditionally, it can **brick the deal** -- capital becomes permanently locked because the kernel cannot complete the transition. Always ensure hooks have a valid execution path that does not revert, or use them only for validation that should legitimately block the operation.
 
-### Evaluator deployment is kernel-controlled
+### DealCell and evaluator deployment are kernel-controlled
 
-Your `deployDeal` only creates the Deal and DealCell. It does **not** control evaluator deployment. The kernel calls `deployEvaluator` separately, and the evaluator module may be different from the deal module. Do not assume your deal will always be paired with your evaluator.
+Your `deployDeal` only creates the Deal contract. It receives a pre-deployed `dealCell` address from the kernel and must **not** deploy or initialize a DealCell. The kernel (DACCellGovernanceLib) handles DealCell deployment before calling `deployDeal` and DealCell initialization afterward. Similarly, the kernel calls `deployEvaluator` separately, and the evaluator module may be different from the deal module. Do not assume your deal will always be paired with your evaluator.
+
+### `deployDeal` and `deployEvaluator` are publicly callable
+
+`ModuleFactory.deployDeal` and `ModuleFactory.deployEvaluator` have no access control -- anyone can call them directly, not just a DAC's DealManager. A directly-deployed Deal is **economically inert** within the protocol: it will not be registered in any DealManager's deal registry, cannot receive DAC treasury funding, cannot route evaluator results, and cannot mint rewards.
+
+However, the deployed contract is real and may appear on block explorers, indexers, or third-party dashboards. Do **not** assume that a contract deployed by your module was deployed through a legitimate DAC. If your module or related services need to verify provenance, the correct on-chain trust anchor is the DealManager's deal registry -- check `DealManager.state(dealCell).id != 0` to confirm a DealCell was created through proper DAC governance.
 
 ### Kernel-enforced reward caps
 

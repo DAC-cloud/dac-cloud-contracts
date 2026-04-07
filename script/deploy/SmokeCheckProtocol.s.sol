@@ -175,14 +175,9 @@ contract SmokeCheckProtocol is ManifestIO {
         );
 
         _expect(
-            "CoreModuleFactory.dealCellFactory",
-            CoreModuleFactory(deployment.coreModuleFactory).dealCellFactory(),
+            "DACFactory.dealCellFactory",
+            DACFactory(deployment.dacFactory).dealCellFactory(),
             deployment.dealCellFactory
-        );
-        _expect(
-            "CoreModuleFactory.stakedAgentTokenFactory",
-            CoreModuleFactory(deployment.coreModuleFactory).stakedAgentTokenFactory(),
-            deployment.stakedAgentFactory
         );
         _expect(
             "CoreModuleFactory.treasuryDealFactory",

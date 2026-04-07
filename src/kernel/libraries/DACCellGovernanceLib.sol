@@ -11,12 +11,15 @@ import {IModuleRegistry} from "../../interfaces/IModuleRegistry.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {IDealChallengeableProposal} from "../../interfaces/IDealChallengeableProposal.sol";
-import {DealState} from "../interfaces/Structs.sol";
+import {DealState, KernelFactories} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IManagementProposal} from "../../interfaces/IManagementProposal.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {AgentToken} from "../tokens/AgentToken.sol";
 import {DACManagementProposalType} from "../governance/DACManagementProposals.sol";
+import {IDACCellAdapter} from "../interfaces/IDACCellAdapter.sol";
+import {DealCellFactory} from "../factories/DealCellFactory.sol";
+import {DealCell} from "../DealCell.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {MathLib} from "./MathLib.sol";
@@ -45,16 +48,42 @@ library DACCellGovernanceLib {
         }
 
         require(
-            IModuleFactory(params.moduleFactory).supportsEvaluatorKind(params.dealKind, params.evaluatorSelector),
+            IModuleFactory(params.moduleFactory).dealAcceptsEvaluator(params.dealKind, params.evaluatorSelector, evalModule),
             DACErrorsLib.EvaluatorNotCompatible()
         );
         require(
-            IModuleFactory(evalModule).supportsEvaluatorKind(params.dealKind, params.evaluatorSelector),
+            IModuleFactory(evalModule).evaluatorAcceptsDeal(params.evaluatorSelector, params.dealKind, params.moduleFactory),
             DACErrorsLib.EvaluatorNotCompatible()
         );
 
         evaluatorAddr = IModuleFactory(evalModule).deployEvaluator(
             dacCell, id, dealCell, params, params.evaluatorSelector, params.evaluatorConfig
+        );
+    }
+
+    function _deployDealCell(
+        address dacCell,
+        uint256 id,
+        DealParams memory params,
+        VotingConfig memory votingConfig,
+        KernelFactories memory factories
+    ) internal returns (address dealCell, address dealAddr) {
+        dealCell = DealCellFactory(factories.dealCellFactory).deployCell(
+            id,
+            dacCell,
+            address(this),
+            params.governanceFactory,
+            IDACCellAdapter(dacCell).getAgentToken(),
+            IDACCellAdapter(dacCell).getMainToken(),
+            params.proposer
+        );
+
+        dealAddr = IModuleFactory(params.moduleFactory).deployDeal(
+            id, params, dacCell, dealCell, votingConfig
+        );
+
+        DealCell(dealCell).initializeDealCell(
+            dealAddr, factories.stakedAgentTokenFactory, params, votingConfig
         );
     }
 
@@ -64,6 +93,7 @@ library DACCellGovernanceLib {
         DealParams memory params,
         VotingConfig memory votingConfig,
         IModuleRegistry moduleRegistry,
+        KernelFactories memory factories,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealRegistry
     ) public returns (uint256 id, address dealCell, address dealAddr, address evaluatorAddr) {
@@ -79,16 +109,25 @@ library DACCellGovernanceLib {
 
         id = nextId;
 
-        (dealCell, dealAddr) = IModuleFactory(params.moduleFactory).deployDeal(
-            id,
-            params,
-            dacCell,
-            address(this),
-            votingConfig
-        );
+        // Kernel deploys DealCell, module deploys Deal, kernel initializes DealCell
+        (dealCell, dealAddr) = _deployDealCell(dacCell, id, params, votingConfig, factories);
 
+        // Kernel deploys evaluator (potentially cross-module)
         evaluatorAddr = _deployEvaluator(dacCell, id, dealCell, params, moduleRegistry);
 
+        _registerDealAndPropose(dacCell, id, dealCell, dealAddr, evaluatorAddr, params, deals, dealRegistry);
+    }
+
+    function _registerDealAndPropose(
+        address dacCell,
+        uint256 id,
+        address dealCell,
+        address dealAddr,
+        address evaluatorAddr,
+        DealParams memory params,
+        mapping(uint256 => address) storage deals,
+        mapping(address => DealState) storage dealRegistry
+    ) internal {
         deals[id] = dealCell;
 
         address[] memory evaluators = new address[](1);
@@ -101,25 +140,25 @@ library DACCellGovernanceLib {
             active: false,
             liquidated: false,
             evaluators: evaluators,
-            rewardsLimit: 0, // rewards will be added to state once approved by DAC cell
+            rewardsLimit: 0,
             rewardsUnlocked: 0,
             rewardsPaid: 0,
             initParams: abi.encode(params)
         });
-        
+
         ProposalParams memory dealProposal = ProposalParams({
             typ: DACManagementProposalType.APPROVE_DEAL,
             target: params.fundingToken,
             i: bytes32(params.fundingAmount),
-            data: abi.encode(id, 0, params.rewardsLimit) // tranche id 0, rewards limit from config
+            data: abi.encode(id, 0, params.rewardsLimit)
         });
 
         emit DACEventsLib.DealCreated(
             dacCell,
             id,
-            IDACGovernanceAdapter(dacCell).createManagementProposal(dealProposal), 
-            params.proposer, 
-            params.dealKind, 
+            IDACGovernanceAdapter(dacCell).createManagementProposal(dealProposal),
+            params.proposer,
+            params.dealKind,
             dealCell,
             dealAddr
         );

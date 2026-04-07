@@ -14,7 +14,7 @@ import {IGovernanceSchema} from "../interfaces/IGovernanceSchema.sol";
 import {IManagementProposal} from "../interfaces/IManagementProposal.sol";
 import {IDeal} from "../interfaces/IDeal.sol";
 import {IDealCell} from "../interfaces/IDealCell.sol";
-import {DealState} from "./interfaces/Structs.sol";
+import {DealState, KernelFactories} from "./interfaces/Structs.sol";
 import {IDealManager} from "../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "./interfaces/IDealManagerAdapter.sol";
 import {IDealCellAdapter} from "./interfaces/IDealCellAdapter.sol";
@@ -37,6 +37,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     
     address private moduleRegistry;
     address private assetController;
+    address private dealCellFactory;
+    address private stakedAgentTokenFactory;
 
     uint256 private nextId;
     mapping(uint256 => address) public deals;                   // id => Deal cell address
@@ -54,7 +56,9 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         address _agentToken,
         address _moduleRegistry,
         address _dacCell,
-        address _assetController
+        address _assetController,
+        address _dealCellFactory,
+        address _stakedAgentTokenFactory
     ) public initializer {
         nextId = 1;
 
@@ -64,6 +68,8 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         dacCell = _dacCell;
         moduleRegistry = _moduleRegistry;
         assetController = _assetController;
+        dealCellFactory = _dealCellFactory;
+        stakedAgentTokenFactory = _stakedAgentTokenFactory;
     }
 
     function createDealProposal(DealParams calldata params)
@@ -84,6 +90,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             params,
             votingConfig,
             IModuleRegistry(moduleRegistry),
+            KernelFactories(dealCellFactory, stakedAgentTokenFactory),
             deals,
             dealState
         );
@@ -188,11 +195,11 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             DealParams memory dealParams = abi.decode(ds.initParams, (DealParams));
             (bytes4 evaluatorSelector,) = abi.decode(evaluatorConfig, (bytes4, bytes));
             require(
-                IModuleFactory(ds.module).supportsEvaluatorKind(dealParams.dealKind, evaluatorSelector),
+                IModuleFactory(ds.module).dealAcceptsEvaluator(dealParams.dealKind, evaluatorSelector, evalModule),
                 DACErrorsLib.EvaluatorNotCompatible()
             );
             require(
-                IModuleFactory(evalModule).supportsEvaluatorKind(dealParams.dealKind, evaluatorSelector),
+                IModuleFactory(evalModule).evaluatorAcceptsDeal(evaluatorSelector, dealParams.dealKind, address(ds.module)),
                 DACErrorsLib.EvaluatorNotCompatible()
             );
 

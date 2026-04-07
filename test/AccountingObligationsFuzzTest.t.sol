@@ -36,8 +36,6 @@ contract AccountingObligationsFuzzTest is DACTestBase {
 
         vm.prank(moduleOwner);
         mockModule = new MockEvaluatorModuleFactory(
-            address(new DealCellFactory()),
-            address(new StakedAgentFactory()),
             address(new TreasuryDealFactory(permit2)),
             address(new MockEvaluatorFactory())
         );

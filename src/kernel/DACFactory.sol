@@ -35,10 +35,12 @@ contract DACFactory is IDACFactory {
     address public wrappedMainTokenFactory;
     address public governanceOracleFactory;
     address public coreModuleFactory;
-    
+    address public dealCellFactory;
+    address public stakedAgentTokenFactory;
+
     mapping(bytes32 => bytes32) private sleepingCells;
 
-    constructor(address[9] memory coreDeps, address[5] memory hybridDeps) {
+    constructor(address[11] memory coreDeps, address[5] memory hybridDeps) {
         mainTokenFactory = coreDeps[0];
         agentTokenFactory = coreDeps[1];
         cellFactory = coreDeps[2];
@@ -48,6 +50,8 @@ contract DACFactory is IDACFactory {
         governanceFactory = coreDeps[6];
         governanceSchemaFactory = coreDeps[7];
         coreModuleFactory = coreDeps[8];
+        dealCellFactory = coreDeps[9];
+        stakedAgentTokenFactory = coreDeps[10];
 
         existingAssetControllerFactory = hybridDeps[0];
         hybridProposalFactory = hybridDeps[1];
@@ -180,7 +184,9 @@ contract DACFactory is IDACFactory {
             governanceSchemaFactory,
             coreModuleFactory,
             config.dividendsEnabled,
-            config.defaultQuorum
+            config.defaultQuorum,
+            dealCellFactory,
+            stakedAgentTokenFactory
         );
 
         dac.initializeRootCapitalCall(
@@ -207,7 +213,9 @@ contract DACFactory is IDACFactory {
             hybridGovernanceSchemaFactory,
             governanceOracleAddr,
             coreModuleFactory,
-            config
+            config,
+            dealCellFactory,
+            stakedAgentTokenFactory
         );
     }
 
