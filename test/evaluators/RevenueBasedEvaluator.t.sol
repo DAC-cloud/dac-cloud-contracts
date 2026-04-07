@@ -106,7 +106,10 @@ contract RevenueBasedEvaluatorTest is Test {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: CoreEvaluatorType.REVENUE_EVALUATOR,
             dealConfig: abi.encode("deal config"),
-            evaluatorConfig: configData
+            evaluatorConfig: configData,
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         evaluator = RevenueBasedEvaluator(

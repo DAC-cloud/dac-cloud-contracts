@@ -12,6 +12,7 @@ import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {CapitalCallState} from "../interfaces/Structs.sol";
+import {MathLib} from "../libraries/MathLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract NativeAssetController is IAssetController, Initializable {
@@ -85,7 +86,7 @@ contract NativeAssetController is IAssetController, Initializable {
         onlyDACCell
         returns (uint256 previousBalance, uint256 currentBalance)
     {
-        require(IVotes(address(mainToken)).getVotes(holder) > qualification, DACErrorsLib.InsufficientBalance());
+        require(IVotes(address(mainToken)).getVotes(holder) > MathLib.mul(this.totalReleasedVotable(), qualification), DACErrorsLib.InsufficientBalance());
 
         previousBalance = treasuryBalances[token];
         currentBalance = IERC20(token).balanceOf(address(this));
@@ -175,8 +176,8 @@ contract NativeAssetController is IAssetController, Initializable {
 
         dividendClaimed[claimedKey] = true;
         token = dividendPayouts[proposalId].token;
-        committedBalances[token] -= amount;
-        treasuryBalances[token] -= amount;
+        committedBalances[token] = committedBalances[token] >= amount ? committedBalances[token] - amount : 0;
+        treasuryBalances[token] = treasuryBalances[token] >= amount ? treasuryBalances[token] - amount : 0;
 
         require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
     }
@@ -213,12 +214,12 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     function settleMainRewardClaim(address to, uint256 amount) external onlyDealManager {
-        _mainTokenObligations -= amount;
+        _mainTokenObligations = _mainTokenObligations >= amount ? _mainTokenObligations - amount : 0;
         mainToken.mint(to, amount);
     }
 
     function releaseUnusedMintRewards(uint256 amount) external onlyDealManager {
-        _mainTokenObligations -= amount;
+        _mainTokenObligations = _mainTokenObligations >= amount ? _mainTokenObligations - amount : 0;
     }
 
     function mintMainToTreasury(uint256 amount) external onlyDACCell {

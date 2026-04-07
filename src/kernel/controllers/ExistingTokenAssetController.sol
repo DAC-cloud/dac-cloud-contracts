@@ -12,6 +12,7 @@ import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {WrappedMainToken} from "../tokens/WrappedMainToken.sol";
 import {CapitalCallState} from "../interfaces/Structs.sol";
+import {MathLib} from "../libraries/MathLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract ExistingTokenAssetController is IAssetController, Initializable {
@@ -86,7 +87,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         onlyDACCell
         returns (uint256 previousBalance, uint256 currentBalance)
     {
-        require(IVotes(address(mainToken)).getVotes(holder) > qualification, DACErrorsLib.InsufficientBalance());
+        require(IVotes(address(mainToken)).getVotes(holder) > MathLib.mul(this.totalReleasedVotable(), qualification), DACErrorsLib.InsufficientBalance());
 
         previousBalance = treasuryBalances[token];
         currentBalance = IERC20(token).balanceOf(address(this));
@@ -181,8 +182,8 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
         dividendClaimed[claimedKey] = true;
         token = dividendPayouts[proposalId].token;
-        committedBalances[token] -= amount;
-        treasuryBalances[token] -= amount;
+        committedBalances[token] = committedBalances[token] >= amount ? committedBalances[token] - amount : 0;
+        treasuryBalances[token] = treasuryBalances[token] >= amount ? treasuryBalances[token] - amount : 0;
 
         require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
     }
@@ -216,16 +217,16 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     }
 
     function settleMainRewardClaim(address to, uint256 amount) external onlyDealManager {
-        committedBalances[address(mainToken)] -= amount;
-        treasuryBalances[address(mainToken)] -= amount;
-        _mainTokenObligations -= amount;
+        committedBalances[address(mainToken)] = committedBalances[address(mainToken)] >= amount ? committedBalances[address(mainToken)] - amount : 0;
+        treasuryBalances[address(mainToken)] = treasuryBalances[address(mainToken)] >= amount ? treasuryBalances[address(mainToken)] - amount : 0;
+        _mainTokenObligations = _mainTokenObligations >= amount ? _mainTokenObligations - amount : 0;
 
         require(IERC20(address(mainToken)).transfer(to, amount), DACErrorsLib.TransferFailed());
     }
 
     function releaseUnusedMintRewards(uint256 amount) external onlyDealManager {
-        committedBalances[address(mainToken)] -= amount;
-        _mainTokenObligations -= amount;
+        committedBalances[address(mainToken)] = committedBalances[address(mainToken)] >= amount ? committedBalances[address(mainToken)] - amount : 0;
+        _mainTokenObligations = _mainTokenObligations >= amount ? _mainTokenObligations - amount : 0;
     }
 
     function mintMainToTreasury(uint256) external pure {
@@ -289,7 +290,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
     function onMainMove(address from, address to, uint256 amount) external onlyWrappedMainToken {
         if (from != address(0) && controlledAddresses[from]) {
-            controlledWrappedBalance -= amount;
+            controlledWrappedBalance = controlledWrappedBalance >= amount ? controlledWrappedBalance - amount : 0;
         }
         if (to != address(0) && controlledAddresses[to]) {
             controlledWrappedBalance += amount;

@@ -8,6 +8,7 @@ import {CapitalCallState} from "../interfaces/Structs.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {DACManagementProposal} from "../governance/DACManagementProposal.sol";
+import {MathLib} from "./MathLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
@@ -76,7 +77,7 @@ library DACCellCapitalLib {
         mapping(address => uint256) storage treasuryBalances
     ) public {
         require(
-            mainToken.balanceOf(msg.sender) > votingConfig.qualification,
+            mainToken.balanceOf(msg.sender) > MathLib.mul(mainToken.totalSupply(), votingConfig.qualification),
             DACErrorsLib.InsufficientBalance()
         );
 

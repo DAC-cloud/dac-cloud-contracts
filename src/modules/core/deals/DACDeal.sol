@@ -162,15 +162,16 @@ contract DACDeal is Deal {
 
     function _beforeClose() internal override {
         // On close we transfer child Main token to our DAC
-        // Now this equity is chickens' problem, they can distribute 
+        // Now this equity is chickens' problem, they can distribute
         // these equity tokens as dividends, or establish a new Deal
         // with new management
 
         address token = IDACCell(managedEntity).getMainToken();
+        uint256 balance = IERC20(token).balanceOf(address(this));
 
-        IERC20(token).forceApprove(dealCell, _allocation);
+        IERC20(token).forceApprove(dealCell, balance);
 
-        IDealCellAdapter(dealCell).transferCapital(token, _allocation);
+        IDealCellAdapter(dealCell).transferCapital(token, balance);
     }
 
     function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {

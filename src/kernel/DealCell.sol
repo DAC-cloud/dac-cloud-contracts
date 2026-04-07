@@ -43,6 +43,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     
     uint256 internal _tokenRewardsLimit;
     uint256 internal _dealRewardPoolPercent;
+    uint256 internal _agentsLimit;
+    uint256 internal _minimalStake;
     
     uint256 public startTime;
     uint256 internal _approveDeadline;
@@ -146,6 +148,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         _tokenRewardsLimit = params.rewardsLimit;
         _dealRewardPoolPercent = params.dealRewardPoolPercent;
+        _agentsLimit = params.agentsLimit;
+        _minimalStake = params.minimalStake;
         _approveDeadline = params.approveDeadline;
         _evaluationDeadline = params.evaluationDeadline;
         _dealDeadline = params.dealDeadline;
@@ -196,7 +200,9 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             id,
             deal,
             token,
-            holders
+            holders,
+            _agentsLimit,
+            _minimalStake
         );
     }
 
@@ -439,7 +445,9 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
                 deal,
                 agentTokenAddr,
                 token,
-                holders
+                holders,
+                _agentsLimit,
+                _minimalStake
             );
         }
 
@@ -518,6 +526,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
     function dealRewardPoolPercent() external view returns (uint256) { return _dealRewardPoolPercent; }
     function rewardsConvertedPct() external view returns (uint256) { return rewardsConverted; }
     
+    function agentsLimit() external view returns (uint256) { return _agentsLimit; }
+    function minimalStake() external view returns (uint256) { return _minimalStake; }
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external view returns (bool) { return approved; }
     function isClosed() external view returns (bool) { return closed; }

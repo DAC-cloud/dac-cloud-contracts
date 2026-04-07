@@ -259,7 +259,10 @@ contract DACCellDealTest is Test {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode(dacDealConfig),
-            evaluatorConfig: abi.encode(evaluatorCfg)
+            evaluatorConfig: abi.encode(evaluatorCfg),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         (,, address deal,) = IDealManager(dac.getDealManager()).createDealProposal(params);

@@ -344,7 +344,10 @@ contract DACGovernanceControlTest is DACTestBase {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: DAC_TEST_EVALUATOR_SELECTOR,
             dealConfig: abi.encode("module test"),
-            evaluatorConfig: bytes("")
+            evaluatorConfig: bytes(""),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         (handle.dealId, handle.dealCell, handle.dealAddr, handle.evaluatorAddr) =

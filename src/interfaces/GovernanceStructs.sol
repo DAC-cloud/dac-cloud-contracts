@@ -40,7 +40,7 @@ struct GovernanceStrategyConfig {
     uint256 highQuorumPercent;
     uint256 blockingPercent;
     uint256 duration;
-    uint256 qualification;
+    uint256 qualification;          // Qualification percent (0 to SCALE) of voting supply
     uint256 executionValidityDuration;
     uint256 oraclePublishDeadline;
     uint256 fallbackWarmupDuration;

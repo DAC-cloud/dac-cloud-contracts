@@ -37,7 +37,7 @@ abstract contract ModuleFactory is IModuleFactory {
         address dac,
         address manager,
         VotingConfig calldata votingConfig
-    ) external returns (address dealCell, address dealAddr, address evaluatorAddr) {
+    ) external returns (address dealCell, address dealAddr) {
         dealCell = DealCellFactory(dealCellFactory).deployCell(
             id,
             dac,
@@ -61,13 +61,9 @@ abstract contract ModuleFactory is IModuleFactory {
         DealCell(dealCell).initializeDealCell(
             dealAddr,
             stakedAgentTokenFactory,
-            params, 
+            params,
             votingConfig
         );
-
-        IEvaluatorFactory evaluatorFactory = getEvaluatorFactory(params.dealKind, params.evaluatorSelector);
-
-        evaluatorAddr = evaluatorFactory.deployEvaluator(dac, id, dealCell, params, params.evaluatorConfig);
     }
 
     function deployEvaluator(

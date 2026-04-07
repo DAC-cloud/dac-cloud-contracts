@@ -29,10 +29,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     
     // DACCell has no upgrade or pause capabilities by design.
     
-    // Deployer role limited to initialization call only, in fact deployer will be always 
-    // a Create2 DACFactory, and once initialized, DACCell is independent of the factory.
-    address private immutable deployer;
-
     address private dacCell;
 
     // Tokens for chickens and pigs
@@ -177,9 +173,27 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     function executeProp(address msgSender, IManagementProposal prop) external onlyDACCell {
         if (prop.typ() == DACManagementProposalType.ADD_EVALUATOR) {
-            (uint256 dealId, bytes memory evaluatorConfig) = abi.decode(
+            (uint256 dealId, address evalModule, bytes memory evaluatorConfig) = abi.decode(
                 prop.data(),
-                (uint256, bytes)
+                (uint256, address, bytes)
+            );
+
+            // Validate evaluator module
+            require(IModuleRegistry(moduleRegistry).isModuleApproved(evalModule), DACErrorsLib.ModuleNotApproved());
+            require(IModuleFactory(evalModule).isActive(), DACErrorsLib.ModuleDisabled());
+
+            // Cross-validate compatibility
+            require(deals[dealId] != address(0), DACErrorsLib.NotFound());
+            DealState memory ds = dealState[deals[dealId]];
+            DealParams memory dealParams = abi.decode(ds.initParams, (DealParams));
+            (bytes4 evaluatorSelector,) = abi.decode(evaluatorConfig, (bytes4, bytes));
+            require(
+                IModuleFactory(ds.module).supportsEvaluatorKind(dealParams.dealKind, evaluatorSelector),
+                DACErrorsLib.EvaluatorNotCompatible()
+            );
+            require(
+                IModuleFactory(evalModule).supportsEvaluatorKind(dealParams.dealKind, evaluatorSelector),
+                DACErrorsLib.EvaluatorNotCompatible()
             );
 
             ProposalParams memory addEvaluatorParams = ProposalParams({
@@ -188,17 +202,18 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
                 i: 0,
                 data: abi.encode(
                     prop.id(),
+                    evalModule,
                     evaluatorConfig
                 )
             });
 
-            require(deals[dealId] != address(0), DACErrorsLib.NotFound());
-            IDeal(dealState[deals[dealId]].deal).createStakedAgentProposal(addEvaluatorParams);
+            IDeal(ds.deal).createStakedAgentProposal(addEvaluatorParams);
 
             bytes32 propHash = keccak256(
                 abi.encode(
                     deals[dealId],
                     keccak256(evaluatorConfig),
+                    evalModule,
                     prop.id()
                 )
             );
@@ -263,9 +278,10 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     function onDealClosed(uint256 dealId) external onlyDealCell {
         require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
 
-        IAssetController(assetController).releaseUnusedMintRewards(
-            dealState[deals[dealId]].rewardsLimit - dealState[deals[dealId]].rewardsUnlocked
-        );
+        uint256 unused = dealState[deals[dealId]].rewardsLimit >= dealState[deals[dealId]].rewardsUnlocked
+            ? dealState[deals[dealId]].rewardsLimit - dealState[deals[dealId]].rewardsUnlocked
+            : 0;
+        IAssetController(assetController).releaseUnusedMintRewards(unused);
 
         dealState[deals[dealId]].active = false;
     }

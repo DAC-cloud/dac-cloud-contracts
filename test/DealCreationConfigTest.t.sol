@@ -111,7 +111,10 @@ contract DealCreationConfigTest is Test, DACTestBase {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
             dealConfig: abi.encode("deal config"),
-            evaluatorConfig: abi.encode(evaluatorCfg)
+            evaluatorConfig: abi.encode(evaluatorCfg),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
     }
 }

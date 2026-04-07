@@ -272,7 +272,10 @@ contract DACCellAgentTest is Test {
             dealConfig: abi.encode("deal config"),
             evaluatorConfig: abi.encode(
                 MilestoneBasedEvaluator.Config(MathLib.atScale(100), milestones)
-            )
+            ),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         assertEq(agentToken.qualifiedBalanceOf(distributor), 0);

@@ -42,8 +42,12 @@ library DealCellGovernanceLib {
         uint256 id,
         IDeal deal,
         StakedAgent token,
-        address[] storage holders
+        address[] storage holders,
+        uint256 agentsLimit,
+        uint256 minimalStake
     ) public {
+        require(minimalStake == 0 || amount >= minimalStake, DACErrorsLib.InsufficientStake());
+
         deal.beforeEveryStake(staker, amount);
 
         bool newHolder = true;
@@ -54,6 +58,7 @@ library DealCellGovernanceLib {
         }
 
         if (newHolder) {
+            require(agentsLimit == 0 || holders.length < agentsLimit, DACErrorsLib.AgentsLimitReached());
             holders.push(staker);
         }
         
@@ -72,8 +77,12 @@ library DealCellGovernanceLib {
         IDeal deal,
         address agentTokenAddr,
         StakedAgent token,
-        address[] storage holders
+        address[] storage holders,
+        uint256 agentsLimit,
+        uint256 minimalStake
     ) public {
+        require(minimalStake == 0 || amount >= minimalStake, DACErrorsLib.InsufficientStake());
+
         require(
             AgentToken(agentTokenAddr).transferFrom(
                 staker, address(this), amount
@@ -89,8 +98,9 @@ library DealCellGovernanceLib {
                 newHolder = false;
             }
         }
-        
+
         if (newHolder) {
+            require(agentsLimit == 0 || holders.length < agentsLimit, DACErrorsLib.AgentsLimitReached());
             holders.push(staker);
         }
         
@@ -214,7 +224,7 @@ library DealCellGovernanceLib {
                 );
 
                 require(
-                    IVotes(IDealCell(dealCell).stakeToken()).getVotes(msg.sender) > votingConfig.qualification,
+                    IVotes(IDealCell(dealCell).stakeToken()).getVotes(msg.sender) > MathLib.mul(IERC20(IDealCell(dealCell).stakeToken()).totalSupply(), votingConfig.qualification),
                     DACErrorsLib.NotEnoughBalance()
                 );
             }
@@ -236,14 +246,13 @@ library DealCellGovernanceLib {
             
             require(_votingConfig.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.blockingPercent >= 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(
-                _votingConfig.qualification < IERC20(IDealCell(dealCell).stakeToken()).totalSupply(), 
+                _votingConfig.qualification <= MathLib.SCALE / 2,
                 DACErrorsLib.InvalidVotingConfig()
             );
         }
@@ -335,6 +344,7 @@ library DealCellGovernanceLib {
         }
 
         tranche.settled = true;
+        _fundingTranches[trancheId].settled = true;
 
         if (!approved) {
             // This is the initial deal approval, no need to adjust rewards

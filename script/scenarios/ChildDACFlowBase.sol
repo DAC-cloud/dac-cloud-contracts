@@ -269,7 +269,10 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
             dealDeadline: block.timestamp + 30 days,
             dealConfig: abi.encode(dacDealConfig),
             evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
-            evaluatorConfig: abi.encode(evaluatorCfg)
+            evaluatorConfig: abi.encode(evaluatorCfg),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
     }
 

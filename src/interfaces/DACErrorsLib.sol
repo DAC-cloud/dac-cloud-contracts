@@ -93,4 +93,8 @@ library DACErrorsLib {
     error CapitalWithdrawNotSupported();
 
     error InvalidToken();
+
+    error AgentsLimitReached();
+    error InsufficientStake();
+    error EvaluatorNotCompatible();
 }

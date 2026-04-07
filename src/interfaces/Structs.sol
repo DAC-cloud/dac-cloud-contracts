@@ -36,7 +36,7 @@ struct VotingConfig {
     uint256 blockingPercent;        // Blocking percent, if applicable
     uint256 highQuorumPercent;      // Quorum percent for operations requiring "unanimous" approve
     uint256 duration;               // Voting duration in seconds
-    uint256 qualification;          // Min amount of LP tokens needed to create a proposal
+    uint256 qualification;          // Qualification percent (0 to SCALE) of voting supply needed to create a proposal
     uint256 executionValidityDuration; // Time window after becoming executable when execution remains valid
 }
 
@@ -82,6 +82,9 @@ struct DealParams {
     bytes dealConfig;               // future-proof field for deal-specific init data (like DACConfig)
     bytes4 evaluatorSelector;       // evaluator selector. Deal factory shall confirm that the evaluator supports the deal
     bytes evaluatorConfig;          // config for evaluator (e.g. abi.encode(Milestone[]))
+    address evaluatorModuleFactory;  // Module for evaluator deployment (address(0) = use deal's moduleFactory)
+    uint256 agentsLimit;            // Maximum number of stakers (0 = no limit)
+    uint256 minimalStake;           // Minimum stake amount per agent (0 = no minimum)
 }
 
 struct EvaluationResult {

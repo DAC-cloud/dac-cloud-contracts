@@ -298,7 +298,7 @@ contract DealGovernanceFlowTest is DACTestBase {
                 typ: DACManagementProposalType.ADD_EVALUATOR,
                 target: address(0),
                 i: 0,
-                data: abi.encode(handle.dealId, evaluatorConfig)
+                data: abi.encode(handle.dealId, address(coreModule), evaluatorConfig)
             })
         );
         vm.warp(block.timestamp + 1);
@@ -1011,7 +1011,10 @@ contract DealGovernanceFlowTest is DACTestBase {
                     dealDeadline: block.timestamp + 30 days,
                     evaluatorSelector: CoreEvaluatorType.MILESTONES_EVALUATOR,
                     dealConfig: abi.encode("deal config"),
-                    evaluatorConfig: abi.encode(evaluatorCfg)
+                    evaluatorConfig: abi.encode(evaluatorCfg),
+                    evaluatorModuleFactory: address(0),
+                    agentsLimit: 0,
+                    minimalStake: 0
                 })
             );
 

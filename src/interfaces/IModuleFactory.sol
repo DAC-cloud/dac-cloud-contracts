@@ -22,7 +22,7 @@ interface IModuleFactory {
         address dac,
         address manager,
         VotingConfig calldata votingConfig
-    ) external returns (address dealCell, address dealAddr, address evaluatorAddr);
+    ) external returns (address dealCell, address dealAddr);
 
     function deployEvaluator(
         address dac,

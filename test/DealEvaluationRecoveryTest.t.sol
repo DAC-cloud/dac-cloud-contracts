@@ -464,7 +464,10 @@ contract DealEvaluationRecoveryTest is DACTestBase {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: MOCK_EVALUATOR_SELECTOR,
             dealConfig: abi.encode("mock deal config"),
-            evaluatorConfig: abi.encode(address(this), new EvaluationResult[](0))
+            evaluatorConfig: abi.encode(address(this), new EvaluationResult[](0)),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         (uint256 dealId, address dealCell, address dealAddr, address evaluatorAddr) = DealManager(dealManager).createDealProposal(params);

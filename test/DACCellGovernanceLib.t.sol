@@ -75,7 +75,10 @@ contract DACCellGovernanceLibTest is Test {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: bytes4(keccak256("TestEvaluator")),
             dealConfig: abi.encode("deal config"),
-            evaluatorConfig: abi.encode("evaluator config")
+            evaluatorConfig: abi.encode("evaluator config"),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         VotingConfig memory votingConfig = VotingConfig({
@@ -91,13 +94,25 @@ contract DACCellGovernanceLibTest is Test {
         vm.mockCall(
             mockModuleFactory,
             abi.encodeWithSelector(IModuleFactory.deployDeal.selector),
-            abi.encode(mockDealCell, mockDeal, mockEvaluator)
+            abi.encode(mockDealCell, mockDeal)
         );
 
         vm.mockCall(
             mockModuleFactory,
             abi.encodeWithSelector(IModuleFactory.isActive.selector),
             abi.encode(true)
+        );
+
+        vm.mockCall(
+            mockModuleFactory,
+            abi.encodeWithSelector(IModuleFactory.supportsEvaluatorKind.selector),
+            abi.encode(true)
+        );
+
+        vm.mockCall(
+            mockModuleFactory,
+            abi.encodeWithSelector(IModuleFactory.deployEvaluator.selector),
+            abi.encode(mockEvaluator)
         );
 
         vm.mockCall(

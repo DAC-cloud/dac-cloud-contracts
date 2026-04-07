@@ -29,6 +29,35 @@ interface IDACGovernanceAdapter {
 
 library DACCellGovernanceLib {
 
+    function _deployEvaluator(
+        address dacCell,
+        uint256 id,
+        address dealCell,
+        DealParams memory params,
+        IModuleRegistry moduleRegistry
+    ) internal returns (address evaluatorAddr) {
+        address evalModule = params.evaluatorModuleFactory;
+        if (evalModule == address(0) || evalModule == params.moduleFactory) {
+            evalModule = params.moduleFactory;
+        } else {
+            require(moduleRegistry.isModuleApproved(evalModule), DACErrorsLib.ModuleNotApproved());
+            require(IModuleFactory(evalModule).isActive(), DACErrorsLib.ModuleDisabled());
+        }
+
+        require(
+            IModuleFactory(params.moduleFactory).supportsEvaluatorKind(params.dealKind, params.evaluatorSelector),
+            DACErrorsLib.EvaluatorNotCompatible()
+        );
+        require(
+            IModuleFactory(evalModule).supportsEvaluatorKind(params.dealKind, params.evaluatorSelector),
+            DACErrorsLib.EvaluatorNotCompatible()
+        );
+
+        evaluatorAddr = IModuleFactory(evalModule).deployEvaluator(
+            dacCell, id, dealCell, params, params.evaluatorSelector, params.evaluatorConfig
+        );
+    }
+
     function createDealProposal(
         address dacCell,
         uint256 nextId,
@@ -50,13 +79,15 @@ library DACCellGovernanceLib {
 
         id = nextId;
 
-        (dealCell, dealAddr, evaluatorAddr) = IModuleFactory(params.moduleFactory).deployDeal(
+        (dealCell, dealAddr) = IModuleFactory(params.moduleFactory).deployDeal(
             id,
             params,
             dacCell,
             address(this),
             votingConfig
         );
+
+        evaluatorAddr = _deployEvaluator(dacCell, id, dealCell, params, moduleRegistry);
 
         deals[id] = dealCell;
 
@@ -242,12 +273,12 @@ library DACCellGovernanceLib {
             );
 
             require(
-                mainToken.getVotes(msg.sender) > votingConfig.qualification,
+                mainToken.getVotes(msg.sender) > MathLib.mul(totalVotingSupply, votingConfig.qualification),
                 DACErrorsLib.InsufficientBalance()
             );
 
             if (params.typ == DACManagementProposalType.ADD_EVALUATOR) {
-                (uint256 dealId,) = abi.decode(params.data, (uint256, bytes));
+                (uint256 dealId, address evalModule,) = abi.decode(params.data, (uint256, address, bytes));
 
                 address dealCell = dealManager.deals(dealId);
                 require(dealCell != address(0), DACErrorsLib.NotFound());
@@ -271,14 +302,13 @@ library DACCellGovernanceLib {
                 
                 require(_votingConfig.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
-                require(_votingConfig.blockingPercent >= 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
                 require(
-                    _votingConfig.qualification < IDealManager(address(dealManager)).totalReleasedVotable() / 2, 
+                    _votingConfig.qualification <= MathLib.SCALE / 2,
                     DACErrorsLib.InvalidVotingConfig()
                 );
             }
@@ -418,7 +448,7 @@ library DACCellGovernanceLib {
     }
 
     function permitEvaluatorAdd(
-        uint256 dealId, 
+        uint256 dealId,
         bytes memory evaluatorHandle,
         address dacCell,
         address dealCell,
@@ -427,16 +457,17 @@ library DACCellGovernanceLib {
     ) public {
         require(msg.sender == dealCell, DACErrorsLib.NotAuthorized());
 
-        (uint256 nonce, bytes memory evaluatorConfig) = abi.decode(evaluatorHandle, (uint256, bytes));
+        (uint256 nonce, address evalModule, bytes memory evaluatorConfig) = abi.decode(evaluatorHandle, (uint256, address, bytes));
 
         require(
             evaluatorWhitelist[keccak256(
                 abi.encode(
                     dealCell,
                     keccak256(evaluatorConfig),
+                    evalModule,
                     nonce
                 )
-            )], 
+            )],
             DACErrorsLib.NotAllowed()
         );
 
@@ -447,7 +478,7 @@ library DACCellGovernanceLib {
 
         DealState memory state = dealState[dealCell];
 
-        address evaluator = IModuleFactory(state.module).deployEvaluator(
+        address evaluator = IModuleFactory(evalModule).deployEvaluator(
             dacCell,
             dealId,
             dealCell,

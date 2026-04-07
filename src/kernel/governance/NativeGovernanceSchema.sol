@@ -77,12 +77,12 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
             );
 
             require(
-                mainToken.getVotes(creator) > votingConfig.qualification,
+                mainToken.getVotes(creator) > MathLib.mul(IDealManager(dealManager).totalReleasedVotable(), votingConfig.qualification),
                 DACErrorsLib.InsufficientBalance()
             );
 
             if (params.typ == DACManagementProposalType.ADD_EVALUATOR) {
-                (uint256 dealId,) = abi.decode(params.data, (uint256, bytes));
+                (uint256 dealId, address evalModule,) = abi.decode(params.data, (uint256, address, bytes));
 
                 address dealCell = IDealManager(dealManager).deals(dealId);
                 require(dealCell != address(0), DACErrorsLib.NotFound());
@@ -258,9 +258,8 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
 
-        uint256 totalReleasedVotable = IDealManager(dealManager).totalReleasedVotable();
         require(
-            config.qualification == 0 || config.qualification < totalReleasedVotable / 2,
+            config.qualification <= MathLib.SCALE / 2,
             DACErrorsLib.InvalidVotingConfig()
         );
     }

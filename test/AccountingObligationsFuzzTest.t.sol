@@ -164,7 +164,10 @@ contract AccountingObligationsFuzzTest is DACTestBase {
             dealDeadline: block.timestamp + 30 days,
             evaluatorSelector: FUZZ_MOCK_EVALUATOR_SELECTOR,
             dealConfig: abi.encode("accounting fuzz config"),
-            evaluatorConfig: abi.encode(address(this), new EvaluationResult[](0))
+            evaluatorConfig: abi.encode(address(this), new EvaluationResult[](0)),
+            evaluatorModuleFactory: address(0),
+            agentsLimit: 0,
+            minimalStake: 0
         });
 
         (handle.dealId, handle.dealCell, handle.dealAddr, handle.evaluatorAddr) =
