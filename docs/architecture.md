@@ -1,21 +1,21 @@
 # DAC Cloud Architecture
 
-Updated: April 3, 2026
+Updated: April 7, 2026
 
-For the contract-by-contract inventory, see [contracts.md](contracts.md). For build, test, deployment, and scenario scripts, see [development.md](development.md). For indexer / SDK-facing surfaces, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md).
+For the contract-by-contract inventory, see [contracts.md](contracts.md). For build, test, deployment, and scenario scripts, see [development.md](development.md).
 
 ## 1. Summary
 
 DAC Cloud is a governance micro-kernel for modular onchain corporations.
 
-At the current implementation stage, the architecture is intentionally split into four concerns:
+The architecture is split into four concerns:
 
 - `DACCell`: DAC identity, legal-wrapper integration, proposal routing, and DAC-level execution entrypoints
 - `GovernanceSchema`: DAC proposal policy, qualification, quorum rules, and proposal deployment
 - `AssetController`: treasury custody/accounting and DAC main-asset policy
 - `DealManager`: deal lifecycle, evaluator routing, and module-driven execution
 
-This split replaces the older model where DAC governance, treasury accounting, and deal accounting all accumulated inside `DACCell`, `DealManager`, and DAC-side libraries.
+This separation keeps governance policy, treasury accounting, and deal execution in distinct, auditable boundaries.
 
 ## 2. Core Philosophy & Origin Story
 
@@ -23,18 +23,18 @@ DAC Cloud was born from a simple but powerful observation: **modern organization
 
 Traditional corporations are hierarchical, slow to adapt, and misaligned between capital and execution. Classic DAOs are transparent but suffer from speculation, low skin-in-the-game for managers, and governance theater.
 
-The original "DAC engine" idea of 2021–2022 captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** — agile teams of 5–9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
+The original "DAC engine" idea of 2021-2022 captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** -- agile teams of 5-9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
 
 From these ideas DAC engine was born originally as a "Scrum-plugin" to enhance brand-aggregators and venture-studios businesses. With the rise of AI agents in 2026, the protocol was reborn as a corporation-as-code framework for EVM.
 
 This is the **lego idea** at the heart of DAC Cloud.
 
-Every team, product group, or service unit becomes its own **DAC** — a lightweight, self-sovereign corporation with its own treasury, governance, and incentives. These DACs connect through **Deals** (capital calls, service agreements, revenue shares) and settle payments instantly via x402, Permit2, or direct ERC-20 transfers.
+Every team, product group, or service unit becomes its own **DAC** -- a lightweight, self-sovereign corporation with its own treasury, governance, and incentives. These DACs connect through **Deals** (capital calls, service agreements, revenue shares) and settle payments instantly via x402, Permit2, or direct ERC-20 transfers.
 
-The result is a living, breathing organizational fractal:  
-- Small teams move fast.  
-- Capital flows where value is created.  
-- Performance is measured and rewarded transparently.  
+The result is a living, breathing organizational fractal:
+- Small teams move fast.
+- Capital flows where value is created.
+- Performance is measured and rewarded transparently.
 - The whole system scales without losing alignment.
 
 ### 2.1 Two DAC Modes
@@ -53,7 +53,7 @@ Native DACs are the original flow:
 - use `NativeAssetController`
 - settle main-token rewards through native mint-backed accounting
 
-This is still the simplest launch path for a new tokenized organization.
+This is the simplest launch path for a new tokenized organization.
 
 #### 2.1.2 Existing-Token DAC
 
@@ -74,7 +74,7 @@ This lets teams adopt DAC governance and deal mechanics without replacing a live
 
 `DACFactory` is the bootstrap entrypoint.
 
-It currently exposes two deployment paths:
+It exposes two deployment paths:
 
 - `deployDAC(...)` for native DACs
 - `deployExistingTokenDAC(...)` for existing-token DACs
@@ -83,7 +83,7 @@ The factory deploys proxies for the kernel subcomponents through dedicated facto
 
 ### 3.2 DACCell
 
-`DACCell` is now a thinner DAC kernel.
+`DACCell` is the DAC kernel.
 
 Its responsibilities are:
 
@@ -99,13 +99,13 @@ Its responsibilities are:
 - legal-wrapper messaging
 - DAC-level event emission
 
-`DACCell` does not own deals, treasury balances or main-token obligation accounting.
+`DACCell` does not own deals, treasury balances, or main-token commitment accounting.
 
 ### 3.3 GovernanceSchema
 
 The governance schema owns DAC-level governance policy.
 
-Current implementations:
+Implementations:
 
 - `NativeGovernanceSchema`
 - `HybridGovernanceSchema`
@@ -127,7 +127,7 @@ The schema deliberately separates DAC governance policy from DAC execution.
 
 The asset controller is the treasury and main-asset accounting boundary.
 
-Current implementations:
+Implementations:
 
 - `NativeAssetController`
 - `ExistingTokenAssetController`
@@ -139,16 +139,20 @@ The controller owns:
 - treasury sync / recovery logic
 - capital-call state
 - dividend payout commitments and claims
-- main-token reward obligations
+- main-token reward commitments
 - settlement of main rewards
 - controlled-address / non-votable-balance exclusions
 - capability checks for mint / burn / capital-call support
 
 DAC treasury state is controller-owned, not cell-owned.
 
+#### 3.4.1 Accounting Hardening
+
+Committed and treasury balances use safe floor-at-zero subtraction: if a subtraction would underflow (e.g., due to external ERC-20 balance drift or rounding), the balance floors to zero rather than reverting. This prevents edge-case lockups where an external transfer or fee-on-transfer token causes the tracked balance to diverge slightly from the actual on-chain balance.
+
 ### 3.5 DealManager
 
-`DealManager` is focused on deal lifecycle, not DAC treasury policy.
+`DealManager` owns deal lifecycle, not DAC treasury policy.
 
 It owns:
 
@@ -159,11 +163,11 @@ It owns:
 - evaluator execution
 - deal state transitions such as approval, close, recovery eligibility, and reward/slash orchestration
 
-Where DAC-level token accounting is needed, `DealManager` now calls into the active `AssetController`.
+Where DAC-level token accounting is needed, `DealManager` calls into the active `AssetController`.
 
 ### 3.6 ModuleRegistry
 
-Approved module state now lives in `ModuleRegistry`, not `DealManager`.
+Approved module state lives in `ModuleRegistry`, not `DealManager`.
 
 This keeps module approval semantically owned by the DAC kernel while keeping the registry logic out of the manager itself.
 
@@ -174,7 +178,7 @@ This keeps module approval semantically owned by the DAC kernel while keeping th
 
 ### 4.1 MainToken
 
-In native mode, `MainToken` remains the DAC governance token:
+In native mode, `MainToken` is the DAC governance token:
 
 - transferable
 - capped
@@ -197,7 +201,7 @@ In existing-token mode, `WrappedMainToken` is the DAC-native governance and acco
 
 ### 4.3 AgentToken
 
-`AgentToken` remains the DAC-level operator token:
+`AgentToken` is the DAC-level operator token:
 
 - minted and revoked by DAC governance
 - can be minted either:
@@ -210,7 +214,7 @@ In existing-token mode, `WrappedMainToken` is the DAC-native governance and acco
 
 Distributor flow is the easy way to onboard a list of agents.
 
-DAC governance still uses the same `MINT_AGENT_TOKENS` proposal selector, but the payload can now choose among:
+DAC governance uses the same `MINT_AGENT_TOKENS` proposal selector, but the payload can choose among:
 
 - direct mint to a bound agent
 - mint of transferable inventory to a distributor wallet
@@ -229,7 +233,7 @@ This reduces onboarding friction for large agent networks without weakening the 
 
 ### 4.4 StakedAgent
 
-`StakedAgent` remains the deal-local governance token:
+`StakedAgent` is the deal-local governance token:
 
 - minted per deal
 - non-transferable
@@ -307,13 +311,21 @@ Important properties:
 
 ### 5.5 Qualification
 
-Proposal qualification now uses delegated voting power rather than raw token balances:
+Proposal qualification uses delegated voting power rather than raw token balances:
 
 - native DAC proposals: delegated `MainToken` votes
 - hybrid DAC proposals: delegated `WrappedMainToken` votes
 - deal proposals: delegated `StakedAgent` votes
 
-This makes governance participation more intentional and gives communities a way to raise proposer thresholds without forcing token transfers.
+Qualification thresholds are **percent-based**. A qualification value ranges from 0 to `1e18` (where `1e18 = SCALE = 100%`). The effective threshold is computed at runtime as:
+
+```
+threshold = MathLib.mul(totalVotingSupply, qualificationPercent)
+```
+
+Because the threshold is derived from current total voting supply, it scales automatically as supply changes -- new mints, burns, wraps, or unwraps shift the absolute threshold without requiring governance to update qualification parameters.
+
+This makes governance participation intentional and gives communities a way to set proposer thresholds that remain meaningful regardless of supply dynamics.
 
 ## 6. Deal Creation and Anti-Spam Controls
 
@@ -331,16 +343,24 @@ These values apply when creating a new deal proposal:
 
 This prevents unbacked deal creation and ties proposal spam resistance to real operator capital.
 
+### 6.1 Per-Deal Participation Controls
+
+`DealParams` includes two additional participation controls:
+
+- `agentsLimit`: maximum number of unique stakers in a deal (0 = no limit)
+- `minimalStake`: minimum stake required per agent to join the deal (0 = no minimum)
+
+When `agentsLimit` is nonzero, the deal enforces a cap on the number of unique stakers. When `minimalStake` is nonzero, any agent staking into the deal must commit at least that amount. These controls let deal creators tune participation density -- from open-access pools to tight, high-commitment working groups.
+
 ## 7. Deal Governance Model
 
-Deal governance intentionally remains separate from DAC governance.
+Deal governance is separate from DAC governance.
 
-It still uses `DealManagementProposal` on `StakedAgent`, but the DAC interaction model changed materially:
+It uses `DealManagementProposal` on `StakedAgent`, with a DAC oversight model based on bounded challenges rather than veto:
 
-- DAC-level proposals no longer have veto semantics
-- instead, DAC governance can open a bounded challenge against a challengeable deal proposal
-- challenge state now lives on the deal proposal contract itself, not on `Deal`
-- deal execution is delayed, not vote resolution
+- DAC governance can open a bounded challenge against a challengeable deal proposal
+- challenge state lives on the deal proposal contract itself
+- deal execution is delayed while a challenge is unresolved, not vote resolution
 
 This preserves bytecode headroom for module-specific `Deal` implementations while making DAC oversight workable for short-duration deal votes.
 
@@ -359,7 +379,7 @@ Only one DAC challenge can be opened per deal proposal.
 
 ### 7.2 Execution Validity
 
-Both DAC and deal proposals now have execution-validity windows.
+Both DAC and deal proposals have execution-validity windows.
 
 That means:
 
@@ -371,16 +391,14 @@ This avoids indefinitely executable governance decisions and makes challenge del
 
 ## 8. Treasury and Main-Asset Accounting
 
-One of the largest refactor outcomes is the move to controller-owned commitments.
+Treasury accounting is controller-owned, with committed-balance tracking that separates free and reserved funds.
 
 ### 8.1 Native Mode
 
-Native mode still supports mint-backed main-token flows, but the accounting now lives in the asset controller.
-
-The controller tracks:
+Native mode supports mint-backed main-token flows. The asset controller tracks:
 
 - treasury-held `MainToken`
-- main-token obligations
+- main-token committed balances (reserved for rewards, dividends, and active obligations)
 - DAC-controlled / excluded balances
 - capital-call state
 - dividend payout commitments
@@ -399,15 +417,15 @@ This affects:
 - treasury spend safety
 - wrapped votable-supply exclusions for DAC-controlled balances
 
-The existing-token flow therefore behaves more like reserved treasury accounting than mint-headroom accounting.
+The existing-token flow therefore behaves like reserved treasury accounting rather than mint-headroom accounting.
 
 ### 8.3 Rewards
 
-Staked agents receive rewards from participating in deals if deal was evaluated positively.
+Staked agents receive rewards from participating in deals if the deal was evaluated positively.
 
-Some deals also will receive allocation of rewards to the Deal contract itself.
+Some deals also receive allocation of rewards to the Deal contract itself.
 
-Each deal can now configure:
+Each deal can configure:
 
 - `dealRewardPoolPercent`
 
@@ -431,11 +449,11 @@ This feature is capability-gated by the selected module factory.
 
 ## 9. Capital Calls and Dividends
 
-Capital calls and dividends are now routed through the asset controller.
+Capital calls and dividends are routed through the asset controller.
 
-This is important because obligations are no longer just a main-token problem.
+This is important because commitments are not just a main-token problem.
 
-Current implications:
+Implications:
 
 - capital calls are tracked centrally by the controller
 - dividend payouts reserve actual treasury balances
@@ -444,7 +462,7 @@ Current implications:
 
 ## 10. Module System
 
-Modules remain the execution extension point.
+Modules are the execution extension point.
 
 Each module factory exposes:
 
@@ -455,14 +473,14 @@ Each module factory exposes:
 - supported evaluator kinds
 - whether a given deal kind supports deal reward pools
 
-The current shipped module is `CoreModuleFactory`, which includes:
+The shipped module is `CoreModuleFactory`, which includes:
 
 - `DACDeal`
 - `TreasuryDeal`
 - `MilestoneBasedEvaluator`
 - `RevenueBasedEvaluator`
 
-The core module currently declares support for deal reward pools on both shipped deal kinds.
+The core module declares support for deal reward pools on both shipped deal kinds.
 
 Module deals can emit standardized `DealRelatedContract` events so indexers can discover runtime-linked addresses such as:
 
@@ -471,6 +489,20 @@ Module deals can emit standardized `DealRelatedContract` events so indexers can 
 - child tokens
 
 without module-specific storage reads.
+
+### 10.1 Cross-Module Evaluator Deployment
+
+Deals can specify a separate `evaluatorModuleFactory` in `DealParams`, distinct from the deal's own `moduleFactory`. This lets the kernel deploy the evaluator independently from the deal's module.
+
+When `evaluatorModuleFactory` is `address(0)`, the deal's own `moduleFactory` is used (backward compatible). When a separate module is specified:
+
+- the kernel deploys the evaluator using the evaluator module factory
+- both the deal module and the evaluator module must agree on compatibility via `supportsEvaluatorKind(dealKind, evaluatorSelector)`
+- the evaluator is deployed at the kernel level (inside `DACCellGovernanceLib.createDealProposal`), using the module specified by `evaluatorModuleFactory`
+
+Later-added evaluators (via the `ADD_EVALUATOR` proposal) can also independently specify any approved module as their evaluator factory. The `ADD_EVALUATOR` proposal data encoding includes the `evaluatorModuleFactory` field, giving each evaluator its own module provenance.
+
+This architecture creates a **trust stratification** between deal risk and reward risk. The deal module governs capital flow and state transitions, while the evaluator module governs performance assessment. By allowing these to come from different approved modules, a DAC can mix and match deal types with evaluation strategies -- for example, running a treasury deal with a third-party evaluation oracle, or attaching a custom milestone tracker to a standard deal shell.
 
 ## 11. Deployment Paths
 
@@ -510,9 +542,7 @@ This path emits dedicated existing-token deployment metadata for indexers.
 
 ## 12. Event Surface
 
-The event catalog now reflects the refactor more closely.
-
-Important additions and semantics:
+Important events and their semantics:
 
 - `ExistingTokenDACDeployed(...)`
   identifies the underlying token, wrapped token, oracle, asset controller, creator, and initial wrapped treasury seed
@@ -523,24 +553,46 @@ Important additions and semantics:
 - `DealProposalChallenged(...)`
   surfaces the DAC challenge hold on a deal proposal
 - `DealChallengeEnabled(...)`
-  replaces the old veto-right enablement event
+  surfaces challenge enablement on a deal
 - `AgentDistributorApproved(...)` / `AgentDistributorRevoked(...)` / `AgentTokenDistributed(...)`
   surface DAC-managed onboarding inventory and downstream distribution
 - `DealRewardPoolAllocated(...)` / `DealRewardClaimed(...)`
   surface deal-local reward routing and settlement
 - `ProposalResolved(...)`
-  is now neutral and no longer carries a stale `vetoed` field
+  is neutral and does not carry legacy veto state
 
 For a full integration-oriented event and data-model guide, see the indexer/SDK handoff document referenced from the repo root.
 
-## 13. Current Architectural Direction
+## 13. Design Principles
 
-The current codebase is still recognizably DAC Cloud, but it now operates with cleaner boundaries:
+The following principles guide the protocol's architecture and inform ongoing development:
 
-- `DACCell` is much closer to a real governance micro-kernel
-- `DealManager` is much closer to a real deal lifecycle controller
-- DAC governance policy is schema-owned
-- DAC treasury and main-asset policy are controller-owned
-- native and existing-token modes coexist without turning the kernel into a single-mode special case
+**Governance micro-kernel, not monolith.** `DACCell` is a thin routing kernel. Policy lives in the schema, accounting lives in the controller, deal execution lives in the manager. No single contract accumulates cross-cutting concerns.
 
-That is the main architectural outcome of this iteration.
+**Controller-owned commitments.** Treasury balances, reward reservations, dividend payouts, and capital-call state are tracked by the asset controller, not scattered across deal or cell contracts. This creates a single source of truth for financial obligations.
+
+**Defensive accounting.** Committed and treasury balance operations use floor-at-zero subtraction to absorb minor drift between tracked balances and actual ERC-20 balances. The protocol prefers graceful degradation over hard reverts in edge-case accounting paths.
+
+**Module-driven extensibility.** The kernel defines deal lifecycle, evaluator routing, and state transitions. Module factories define deal behavior, evaluation logic, and reward-pool semantics. New deal types and evaluator strategies ship as new modules without kernel changes.
+
+**Trust stratification.** Deal modules and evaluator modules can come from different approved factories. This separates the trust model for capital management from the trust model for performance evaluation, letting DACs compose risk profiles rather than accepting monolithic module bundles.
+
+**Percent-based thresholds.** Qualification, quorum, and blocking thresholds are expressed as percentages of current supply rather than absolute token amounts. This keeps governance parameters stable across supply changes.
+
+**Bounded governance execution.** Proposals have execution-validity windows. Challenge holds are bounded. No governance decision remains indefinitely executable.
+
+**Native and existing-token parity.** Both DAC modes share the same kernel interfaces. The difference is entirely in how the asset controller and governance schema are configured -- mint-backed vs. reserve-backed, direct voting vs. hybrid oracle/wrapped voting.
+
+## 14. Supporting Libraries
+
+The protocol uses several supporting libraries for shared logic:
+
+- `MathLib`: fixed-point arithmetic, percentage computation (`SCALE = 1e18`), safe multiplication
+- `DACErrorsLib`: centralized error definitions
+- `DACEventsLib`: centralized event definitions
+- `GovernanceLib`: shared governance utilities (voting math, proposal state derivation)
+- `DACCellGovernanceLib`: DAC-level proposal creation, execution routing, and deal-creation orchestration
+- `DealManagerLib`: deal state transitions, evaluator orchestration, reward/slash settlement
+- `AssetControllerLib`: shared treasury accounting helpers
+
+These libraries keep contract sizes manageable and provide consistent behavior across the native and existing-token code paths.

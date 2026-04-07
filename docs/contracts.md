@@ -1,8 +1,8 @@
 # DAC Cloud Contract Inventory
 
-Updated: April 3, 2026
+Updated: April 7, 2026
 
-For the architectural overview, see [architecture.md](architecture.md). For scripts and manifests, see [development.md](development.md). For integration-facing lifecycle and event guidance, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md).
+For the architectural overview, see [architecture.md](architecture.md). For scripts and manifests, see [development.md](development.md).
 
 ## 1. Current Topology
 
@@ -67,13 +67,6 @@ Current responsibilities:
 - asset-controller treasury sync entrypoints
 - DAC-level event emission
 
-Notably no longer responsible for:
-
-- canonical treasury custody
-- main-token obligation storage
-- module-registry ownership
-- DAC proposal policy logic
-
 ### `src/kernel/DealManager.sol`
 
 Deal lifecycle controller.
@@ -88,12 +81,6 @@ Current responsibilities:
 - determine recoverability / active lifecycle state
 - interact with the asset controller for reward and main-asset accounting
 
-No longer owns:
-
-- module approval registry
-- DAC treasury accounting
-- canonical main-token obligation storage
-
 ### `src/kernel/DealCell.sol`
 
 Per-deal state shell.
@@ -102,6 +89,8 @@ Current responsibilities:
 
 - holds generic deal state
 - staking bridge between `AgentToken` and `StakedAgent`
+- enforces `agentsLimit` (maximum number of stakers per deal)
+- enforces `minimalStake` (minimum stake amount per agent)
 - tranche state
 - whitelist / early-return state
 - reward distribution state
@@ -121,7 +110,7 @@ Current responsibilities:
 - standardized `DealRelatedContract` discovery helper
 - generic claim entrypoint for deal-owned reward pools via `claimDealRewardPool(...)`
 
-The deal contract intentionally stays lean; DAC challenge state now lives on deal proposal contracts instead of in `Deal`.
+The deal contract intentionally stays lean; DAC challenge state lives on deal proposal contracts instead of in `Deal`.
 
 ## 4. Governance Boundary Contracts
 
@@ -238,7 +227,7 @@ Stores:
 - whether the proposal is DAC-challengeable
 - the linked DAC challenge proposal, if any
 
-This contract now covers both voluntary and forced deal exits:
+This contract covers both voluntary and forced deal exits:
 
 - `PERMIT_UNSTAKE`
 - `STRIKE_OUT_AGENT`
@@ -320,6 +309,8 @@ Canonical DAC-owned approved-module storage.
 ### `src/interfaces/IModuleFactory.sol`
 
 Module deployment and discovery interface.
+
+`IModuleFactory.deployDeal` deploys only the `DealCell` and `Deal` for a given deal. `IModuleFactory.deployEvaluator` is called separately by the kernel to deploy the evaluator, allowing the evaluator to use a different module than the deal itself. Evaluator deployment is kernel-controlled.
 
 Current discovery surface includes:
 
@@ -413,6 +404,8 @@ Supports:
 - revenue evaluator
 
 The core module also declares reward-pool support through `supportsDealRewardPool(...)` for its shipped deal kinds.
+
+Evaluator deployment is kernel-controlled and handled separately from deal deployment. The evaluator can use a different module factory than the deal, as specified by `DealParams.evaluatorModuleFactory`. `IModuleFactory.deployDeal` deploys only the `DealCell` and `Deal`; `IModuleFactory.deployEvaluator` is called separately by the kernel.
 
 ### `src/modules/core/CoreModuleDeals.sol`
 
@@ -513,9 +506,12 @@ Key shared structs:
 - `EvaluationResult`
 - `Tranche`
 
-Notable recent addition:
+`DealParams` fields of note:
 
-- `DealParams.dealRewardPoolPercent`
+- `dealRewardPoolPercent` — percentage of deal funding allocated to the deal reward pool
+- `evaluatorModuleFactory` — module factory for evaluator deployment; `address(0)` means use the deal's own module factory
+- `agentsLimit` — maximum number of stakers in a deal; `0` means no limit
+- `minimalStake` — minimum stake per agent; `0` means no minimum
 
 ### `src/interfaces/GovernanceStructs.sol`
 
@@ -575,13 +571,15 @@ Important current groups:
 
 Shared custom error catalog used across the kernel, controllers, governance layer, and modules.
 
-## 14. Legacy Libraries Still Present
+Errors of note:
 
-These files still exist and remain part of the current implementation, but they are no longer the primary architectural boundary the way they were before the refactor:
+- `AgentsLimitReached` — reverts when a deal's staker count would exceed `agentsLimit`
+- `InsufficientStake` — reverts when a staking amount is below `minimalStake`
+- `EvaluatorNotCompatible` — reverts when the evaluator module does not support the requested evaluator kind
 
-- `src/kernel/libraries/DACCellGovernanceLib.sol`
-- `src/kernel/libraries/DACCellCapitalLib.sol`
-- `src/kernel/libraries/DealCellGovernanceLib.sol`
-- `src/kernel/libraries/MathLib.sol`
+## 14. Supporting Libraries
 
-They now support thinner top-level contracts rather than defining the full architecture alone.
+- `src/kernel/libraries/DACCellGovernanceLib.sol` — governance routing helpers used by `DACCell`
+- `src/kernel/libraries/DACCellCapitalLib.sol` — capital-call and treasury helpers used by `DACCell`
+- `src/kernel/libraries/DealCellGovernanceLib.sol` — governance routing helpers used by `DealCell`
+- `src/kernel/libraries/MathLib.sol` — shared fixed-point and percentage math utilities

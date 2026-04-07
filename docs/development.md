@@ -1,6 +1,6 @@
 # DAC Cloud Development Guide
 
-Updated: April 3, 2026
+Updated: April 7, 2026
 
 This guide covers local development, test commands, deployment scripts, and manifest-driven scenario seeding.
 
@@ -156,7 +156,7 @@ The deployment flow is split into two layers:
 - `EXISTING_DAC_HIGH_QUORUM`
 - `EXISTING_DAC_BLOCKING_QUORUM`
 - `EXISTING_DAC_DURATION`
-- `EXISTING_DAC_QUALIFICATION`
+- `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
 - `EXISTING_DAC_FALLBACK_WARMUP`
@@ -375,7 +375,7 @@ Useful environment variables for this mode:
 - `EXISTING_DAC_HIGH_QUORUM`
 - `EXISTING_DAC_BLOCKING_QUORUM`
 - `EXISTING_DAC_DURATION`
-- `EXISTING_DAC_QUALIFICATION`
+- `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
 - `EXISTING_DAC_FALLBACK_WARMUP`
@@ -547,11 +547,22 @@ cast rpc --rpc-url http://127.0.0.1:8545 evm_mine
 
 This is generally not needed on real testnets, where proposal creation and later voting naturally occur in different blocks and timestamps.
 
-## 12. Recommended Contributor Workflow
+## 12. Full Local Seed (All Flows)
+
+A single shell script runs the entire seed sequence — protocol deployment, all DAC modes, all deal flows, and all governance paths:
+
+```bash
+export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+./script/seed-all.sh
+```
+
+This requires an Anvil instance on `127.0.0.1:8545`. The script handles Permit2 deployment, time advances, and manifest output. On completion, `deployments/31337/` contains all manifests ready for indexer and SDK consumption.
+
+## 13. Recommended Contributor Workflow
 
 1. `forge build`
 2. `forge test`
 3. `forge coverage --report summary`
 4. `forge build --sizes`
-5. Validate deployment and scenario scripts on constrained local Anvil
+5. Validate deployment and scenario scripts on constrained local Anvil (or run `./script/seed-all.sh`)
 6. Use the generated manifests as fixtures for indexer, SDK, and frontend work

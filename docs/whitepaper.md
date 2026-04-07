@@ -1,5 +1,5 @@
 ### **DAC Whitepaper**
-**v1.4 – April 3, 2026**
+**v1.5 – April 7, 2026**
 
 #### Introduction
 
@@ -82,9 +82,9 @@ Capital flows through **tranches** — incremental, governance-approved deployme
 #### AI-Agent Native Design
 
 DAC is purpose-built for the agent economy:
-- Agents can hold MP tokens and act as managing partners
-- VaultDeals serve as agent-controlled treasuries with Permit2 execution
-- x402 payments flow directly into VaultDeals, automatically updating evaluator metrics
+- Agents can hold Agent tokens and act as managing partners
+- TreasuryDeals serve as agent-controlled treasuries with Permit2 execution
+- x402 payments flow directly into TreasuryDeals, automatically updating evaluator metrics
 - Agents can propose, vote, and execute deals gaslessly
 - Tree structure allows child DACs and sub-organizations to form organically
 
@@ -102,7 +102,7 @@ flowchart TD
     Manager --> Module["Approved Module Factory"]
     Module --> DealCell["DealCell"]
     Module --> Deal["Deal"]
-    Module --> Eval["Evaluator"]
+    Module --> Eval["Evaluator (kernel-deployed, potentially cross-module)"]
 
     Agent -->|"stakeToDeal"| DealCell
     DealCell --> Stake["StakedAgent"]
@@ -117,7 +117,8 @@ flowchart TD
 - **Factory + Registry**: DAC capital governing registry of trusted modules enabling 3rd-party innovation without core changes.
 - **CREATE2 + Proxy**: Deterministic addresses for DACs, gas-efficient Deal and Proposal creation.
 - **Inheritance-First Design**: Core logic in abstract `Deal`, specialized behavior in children.
-- **Security-First**: Non-transferable Agent/StakedAgent tokens, capped rewards, quorum voting, Permit2 treasury with exact amounts and short expiry.
+- **Trust Stratification**: Evaluators can come from a different (trusted) module than the deal itself, separating funding risk from reward risk.
+- **Security-First**: Non-transferable Agent/StakedAgent tokens, capped rewards, quorum voting, Permit2 treasury with exact amounts and short expiry, per-deal agent limits and minimum stakes.
 
 #### Target Use Cases
 

@@ -12,10 +12,10 @@ This repository contains the protocol kernel, the shipped core module, Solidity 
   System model, lifecycle, governance, token design, and deal flow.
 - [Contract Inventory](docs/contracts.md)
   Contract-by-contract map of the current implementation.
+- [Module Development](docs/module-development.md)
+  Guide for building third-party modules: deal types, evaluators, proposal quorum config, and cross-module compatibility.
 - [Development Guide](docs/development.md)
   Build and test commands, deployment scripts, scenario seeding, manifests, and local Anvil validation.
-- [Indexer / SDK Handoff](docs/indexer-sdk-handoff.md)
-  Integration-oriented summary of protocol surfaces, events, manifests, and lifecycle semantics.
 
 ## Repository Map
 
