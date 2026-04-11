@@ -126,15 +126,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(snapshot.merkleRoot != bytes32(0), DACErrorsLib.NotFound());
         require(snapshot.snapshotBlock == primarySnapshotBlock, DACErrorsLib.NotAllowed());
 
-        oracleMerkleRoot = snapshot.merkleRoot;
-        totalUnderlyingVotingPower = snapshot.totalUnderlyingVotingPower;
-
-        _activateVotingPhase(
-            ProposalPhase.PrimaryVoting,
-            primarySnapshotBlock,
-            totalUnderlyingVotingPower + IVotes(wrappedToken).getPastTotalSupply(primarySnapshotBlock),
-            strategy.duration
-        );
+        _tryActivatePrimary();
     }
 
     function beginFallbackWarmup() external {
@@ -198,14 +190,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(block.timestamp > phaseEndTime, DACErrorsLib.NotAllowed());
         require(block.number > 0, DACErrorsLib.NotAllowed());
 
-        fallbackSnapshotBlock = block.number - 1;
-
-        _activateVotingPhase(
-            ProposalPhase.FallbackVoting,
-            fallbackSnapshotBlock,
-            IVotes(wrappedToken).getPastTotalSupply(fallbackSnapshotBlock),
-            strategy.fallbackDuration
-        );
+        _activateFallbackInternal();
     }
 
     function vote(bool support) external override nonReentrant {
@@ -326,6 +311,14 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     }
 
     function _voteWrapped(address voter, bool support) internal {
+        // Opportunistic phase activation — only for transitions that land in a votable phase.
+        // Keeps vote() usable by lightweight clients that don't implement explicit activation calls.
+        if (phase == ProposalPhase.AwaitingOracleSnapshot) {
+            _tryActivatePrimary();
+        } else if (phase == ProposalPhase.FallbackWarmup && block.timestamp > phaseEndTime) {
+            _activateFallbackInternal();
+        }
+
         require(
             phase == ProposalPhase.PrimaryVoting || phase == ProposalPhase.FallbackVoting,
             DACErrorsLib.NotAllowed()
@@ -349,6 +342,37 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         emit DACEventsLib.Voted(voter, support, weight);
 
         _checkAndEmitResolution();
+    }
+
+    function _tryActivatePrimary() internal {
+        if (!strategy.oraclePrimaryEnabled) return;
+        if (block.timestamp > oracleSnapshotDeadline) return;
+        if (!IGovernanceOracle(governanceOracle).isActive()) return;
+
+        OracleSnapshot memory snapshot = IGovernanceOracle(governanceOracle).getSnapshot(id);
+        if (snapshot.merkleRoot == bytes32(0)) return;
+        if (snapshot.snapshotBlock != primarySnapshotBlock) return;
+
+        oracleMerkleRoot = snapshot.merkleRoot;
+        totalUnderlyingVotingPower = snapshot.totalUnderlyingVotingPower;
+
+        _activateVotingPhase(
+            ProposalPhase.PrimaryVoting,
+            primarySnapshotBlock,
+            totalUnderlyingVotingPower + IVotes(wrappedToken).getPastTotalSupply(primarySnapshotBlock),
+            strategy.duration
+        );
+    }
+
+    function _activateFallbackInternal() internal {
+        fallbackSnapshotBlock = block.number - 1;
+
+        _activateVotingPhase(
+            ProposalPhase.FallbackVoting,
+            fallbackSnapshotBlock,
+            IVotes(wrappedToken).getPastTotalSupply(fallbackSnapshotBlock),
+            strategy.fallbackDuration
+        );
     }
 
     function _countVote(bool support, uint256 weight) internal {
