@@ -130,14 +130,16 @@ contract DACDeployTest is Test {
         MockUnderlyingToken underlying = new MockUnderlyingToken();
         underlying.mint(user, 1_000_000e18);
 
+        vm.startPrank(user);
+        address oracleAddress = dacFactory.deployGovernanceOracle(owner, owner);
+
         ExistingDACConfig memory config = ExistingDACConfig({
             symbol: "EXIST",
             name: "Existing DAC",
             description: "existing token governance",
             underlyingToken: address(underlying),
             treasurySeedAmount: 1_000e18,
-            oracleAdmin: owner,
-            initialOraclePublisher: owner,
+            governanceOracle: oracleAddress,
             dividendsEnabled: false,
             governanceStrategy: GovernanceStrategyConfig({
                 quorumPercent: MathLib.atScale(50),
@@ -155,10 +157,9 @@ contract DACDeployTest is Test {
             })
         });
 
-        vm.startPrank(user);
         underlying.approve(address(dacFactory), config.treasurySeedAmount);
         vm.recordLogs();
-        (address dacAddress, address wrappedAddress, address existingAgentToken, address oracleAddress) =
+        (address dacAddress, address wrappedAddress, address existingAgentToken) =
             dacFactory.deployExistingTokenDAC(abi.encode(config), bytes32("existing"));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.stopPrank();

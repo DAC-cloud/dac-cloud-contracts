@@ -28,7 +28,8 @@ interface IDACFactory {
     ) external returns (
         address dacAddr,
         address wrappedMainTokenAddr,
-        address agentTokenAddr,
-        address governanceOracleAddr
+        address agentTokenAddr
     );
+
+    function deployGovernanceOracle(address admin, address initialPublisher) external returns (address oracle);
 }

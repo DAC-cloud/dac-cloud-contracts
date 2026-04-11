@@ -47,7 +47,11 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(_dealManager != address(0), DACErrorsLib.NotAllowed());
         require(_assetController != address(0), DACErrorsLib.NotAllowed());
         require(_proposalFactory != address(0), DACErrorsLib.NotAllowed());
-        require(_governanceOracle != address(0), DACErrorsLib.NotAllowed());
+        // Oracle is optional; required only when oracle-primary mode is enabled
+        require(
+            !_strategyConfig.oraclePrimaryEnabled || _governanceOracle != address(0),
+            DACErrorsLib.NotAllowed()
+        );
 
         dacCell = _dacCell;
         wrappedMainToken = IERC20(_wrappedMainToken);
@@ -170,7 +174,11 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     }
 
     function setGovernanceOracle(address oracle) external onlyDACCell {
-        require(oracle != address(0), DACErrorsLib.NotAllowed());
+        // Allow unplugging the oracle (address(0)), but only when oracle-primary mode is off.
+        // Plugging in a non-zero oracle is always allowed (enables future oracle-primary strategy updates).
+        if (oracle == address(0)) {
+            require(!strategyConfig.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
+        }
         governanceOracle = oracle;
     }
 
@@ -226,6 +234,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.oraclePublishDeadline > 0 || !config.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
+        // Oracle-primary mode requires a non-zero oracle to already be plugged in
+        require(!config.oraclePrimaryEnabled || governanceOracle != address(0), DACErrorsLib.InvalidVotingConfig());
     }
 
     function _validateVotingConfig(VotingConfig memory config) internal view {

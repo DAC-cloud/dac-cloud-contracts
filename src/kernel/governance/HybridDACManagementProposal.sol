@@ -69,7 +69,8 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(block.number > 0, DACErrorsLib.NotAllowed());
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
         require(_wrappedToken != address(0), DACErrorsLib.NotAllowed());
-        require(_governanceOracle != address(0), DACErrorsLib.NotAllowed());
+        // Oracle is only required when oracle-primary mode is enabled
+        require(!_strategy.oraclePrimaryEnabled || _governanceOracle != address(0), DACErrorsLib.NotAllowed());
         require(_strategy.duration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.oraclePublishDeadline > 0 || !_strategy.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());

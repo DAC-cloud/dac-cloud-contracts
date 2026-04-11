@@ -49,14 +49,20 @@ contract SeedExistingTokenDAC is ManifestIO {
             seed.usedMockUnderlyingToken = true;
         }
 
+        // Deploy the reference governance oracle up-front, separately from DAC creation.
+        // Set to address(0) to start without an oracle (only valid when oraclePrimaryEnabled is false).
+        address governanceOracle = config.oraclePrimaryEnabled
+            ? DACFactory(protocol.dacFactory).deployGovernanceOracle(config.oracleAdmin, config.oraclePublisher)
+            : address(0);
+        seed.governanceOracle = governanceOracle;
+
         ExistingDACConfig memory dacConfig = ExistingDACConfig({
             symbol: config.symbol,
             name: config.name,
             description: config.description,
             underlyingToken: config.underlyingToken,
             treasurySeedAmount: config.treasurySeedAmount,
-            oracleAdmin: config.oracleAdmin,
-            initialOraclePublisher: config.oraclePublisher,
+            governanceOracle: governanceOracle,
             dividendsEnabled: config.dividendsEnabled,
             governanceStrategy: GovernanceStrategyConfig({
                 quorumPercent: config.quorumPercent,
@@ -76,7 +82,7 @@ contract SeedExistingTokenDAC is ManifestIO {
 
         IERC20(config.underlyingToken).approve(protocol.dacFactory, config.treasurySeedAmount);
         bytes32 salt = keccak256(abi.encode(config.label, seed.founder, block.chainid, protocol.dacFactory));
-        (seed.dac, seed.mainToken, seed.agentToken, seed.governanceOracle) =
+        (seed.dac, seed.mainToken, seed.agentToken) =
             DACFactory(protocol.dacFactory).deployExistingTokenDAC(abi.encode(dacConfig), salt);
 
         seed.underlyingToken = config.underlyingToken;

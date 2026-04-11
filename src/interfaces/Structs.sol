@@ -22,8 +22,7 @@ struct ExistingDACConfig {
     string description;
     address underlyingToken;
     uint256 treasurySeedAmount;
-    address oracleAdmin;
-    address initialOraclePublisher;
+    address governanceOracle;       // Optional, address(0) = no oracle (oraclePrimaryEnabled must be false)
     bool dividendsEnabled;
     GovernanceStrategyConfig governanceStrategy;
 }

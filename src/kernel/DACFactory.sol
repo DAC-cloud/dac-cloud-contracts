@@ -120,25 +120,27 @@ contract DACFactory is IDACFactory {
     ) external returns (
         address dacAddr,
         address wrappedMainTokenAddr,
-        address agentTokenAddr,
-        address governanceOracleAddr
+        address agentTokenAddr
     ) {
         ExistingDACConfig memory config = abi.decode(encodedConfig, (ExistingDACConfig));
 
         require(config.underlyingToken != address(0));
         require(config.treasurySeedAmount > 0);
-        require(config.oracleAdmin != address(0));
+        // If oracle primary mode is enabled, a governance oracle must be supplied.
+        // Otherwise the DAC can start without an oracle and plug one in later via governance.
+        require(
+            !config.governanceStrategy.oraclePrimaryEnabled || config.governanceOracle != address(0)
+        );
 
         dacAddr = _predictExistingDACAddress(config, salt);
         wrappedMainTokenAddr = _deployWrappedMainToken(config, dacAddr);
         agentTokenAddr = _deployAgentToken(config, dacAddr);
-        governanceOracleAddr = _deployGovernanceOracle(config);
 
         DACCell dac = _deployExistingDACCell(config, salt);
 
         require(address(dac) == dacAddr, Create2Failed());
 
-        _initializeExistingDAC(dac, config, wrappedMainTokenAddr, agentTokenAddr, governanceOracleAddr);
+        _initializeExistingDAC(dac, config, wrappedMainTokenAddr, agentTokenAddr, config.governanceOracle);
         _seedExistingDACTreasury(config, wrappedMainTokenAddr, dacAddr);
 
         emit DACEventsLib.DACDeployed(dacAddr, wrappedMainTokenAddr, agentTokenAddr, true);
@@ -146,12 +148,18 @@ contract DACFactory is IDACFactory {
             dacAddr,
             config.underlyingToken,
             wrappedMainTokenAddr,
-            governanceOracleAddr,
+            config.governanceOracle,
             agentTokenAddr,
             dac.getAssetController(),
             msg.sender,
             config.treasurySeedAmount
         );
+    }
+
+    /// @notice Standalone helper to deploy a reference GovernanceOracle.
+    /// @dev Unrestricted; the caller provides their own admin and initial publisher.
+    function deployGovernanceOracle(address admin, address initialPublisher) external returns (address oracle) {
+        oracle = GovernanceOracleFactory(governanceOracleFactory).deployGovernanceOracle(admin, initialPublisher);
     }
 
     function startDAC(
@@ -254,15 +262,6 @@ contract DACFactory is IDACFactory {
             dacAddr,
             string.concat(config.name, " Agent Token"),
             string.concat(config.symbol, "A")
-        );
-    }
-
-    function _deployGovernanceOracle(
-        ExistingDACConfig memory config
-    ) internal returns (address governanceOracleAddr) {
-        governanceOracleAddr = GovernanceOracleFactory(governanceOracleFactory).deployGovernanceOracle(
-            config.oracleAdmin,
-            config.initialOraclePublisher
         );
     }
 
