@@ -316,6 +316,12 @@ contract NativeAssetController is IAssetController, Initializable {
             - (mainToken.balanceOf(address(this)) - lockedMainTokens[address(this)]);
     }
 
+    // Native mode uses mint-provenance tracking, not controlled-balance checkpoints.
+    // This stub satisfies the interface; native DAC proposals use ERC20Votes snapshots directly.
+    function getPastControlledBalance(uint256) external pure returns (uint256) {
+        return 0;
+    }
+
     function mainTokenObligations() external view returns (uint256) {
         return _mainTokenObligations;
     }

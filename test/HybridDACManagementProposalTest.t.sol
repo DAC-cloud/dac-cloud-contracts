@@ -29,6 +29,7 @@ contract HybridDACManagementProposalTest is Test {
     address internal wrappedHolder = makeAddr("wrapped-holder");
     address internal underlyingHolder = makeAddr("underlying-holder");
     address internal fallbackHolder = makeAddr("fallback-holder");
+    address internal mockAssetController = makeAddr("assetController");
 
     function setUp() external {
         underlying = new MockHybridUnderlyingToken();
@@ -58,6 +59,9 @@ contract HybridDACManagementProposalTest is Test {
             address(new UUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
         );
 
+        // Mock asset controller: no controlled balances (returns 0 for any block)
+        vm.mockCall(mockAssetController, abi.encodeWithSelector(bytes4(keccak256("getPastControlledBalance(uint256)"))), abi.encode(uint256(0)));
+
         underlying.mint(wrappedHolder, 1_000e18);
         underlying.mint(fallbackHolder, 1_000e18);
 
@@ -81,6 +85,7 @@ contract HybridDACManagementProposalTest is Test {
             address(this),
             address(wrapped),
             address(oracle),
+            mockAssetController,
             ProposalParams({
                 typ: bytes4(keccak256("TEST")),
                 target: address(0),
@@ -127,6 +132,7 @@ contract HybridDACManagementProposalTest is Test {
             address(this),
             address(wrapped),
             address(oracle),
+            mockAssetController,
             ProposalParams({
                 typ: bytes4(keccak256("TEST_FALLBACK")),
                 target: address(0),
@@ -171,6 +177,7 @@ contract HybridDACManagementProposalTest is Test {
             address(this),
             address(wrapped),
             address(oracle),
+            mockAssetController,
             ProposalParams({
                 typ: bytes4(keccak256("TEST_WRAPPED_BOOTSTRAP")),
                 target: address(0),
@@ -209,6 +216,7 @@ contract HybridDACManagementProposalTest is Test {
             address(this),
             address(wrapped),
             address(oracle),
+            mockAssetController,
             ProposalParams({
                 typ: bytes4(keccak256("TEST_BLOCKING_FLAGS")),
                 target: address(0),
@@ -232,6 +240,7 @@ contract HybridDACManagementProposalTest is Test {
             address(this),
             address(wrapped),
             address(oracle),
+            mockAssetController,
             ProposalParams({
                 typ: bytes4(keccak256("TEST_BLOCKING_DISABLED")),
                 target: address(0),
@@ -280,6 +289,7 @@ contract HybridDACManagementProposalTest is Test {
             address(this),
             address(wrapped),
             address(oracle),
+            mockAssetController,
             ProposalParams({
                 typ: bytes4(keccak256("TEST_EMERGENCY")),
                 target: address(0),

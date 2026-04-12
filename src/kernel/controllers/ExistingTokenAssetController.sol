@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
@@ -16,6 +17,8 @@ import {MathLib} from "../libraries/MathLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract ExistingTokenAssetController is IAssetController, Initializable {
+    using Checkpoints for Checkpoints.Trace208;
+
     struct DividendPayoutState {
         address token;
         uint256 totalPayout;
@@ -38,6 +41,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     uint256 private _mainTokenObligations;
     mapping(address => bool) private controlledAddresses;
     uint256 private controlledWrappedBalance;
+    Checkpoints.Trace208 private _controlledBalanceCheckpoints;
     mapping(address => bool) private distributorAddresses;
     mapping(address => uint256) private distributorAllowances;
 
@@ -247,7 +251,11 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         require(controlled != address(mainToken), DACErrorsLib.NotAllowed());
         if (controlledAddresses[controlled]) return;
         controlledAddresses[controlled] = true;
-        controlledWrappedBalance += IERC20(address(mainToken)).balanceOf(controlled);
+        uint256 existingBalance = IERC20(address(mainToken)).balanceOf(controlled);
+        if (existingBalance > 0) {
+            controlledWrappedBalance += existingBalance;
+            _controlledBalanceCheckpoints.push(uint48(block.number), uint208(controlledWrappedBalance));
+        }
     }
 
     function validateBoundAgentRecipient(address recipient) external view {
@@ -289,11 +297,19 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     }
 
     function onMainMove(address from, address to, uint256 amount) external onlyWrappedMainToken {
+        bool changed = false;
+
         if (from != address(0) && controlledAddresses[from]) {
             controlledWrappedBalance = controlledWrappedBalance >= amount ? controlledWrappedBalance - amount : 0;
+            changed = true;
         }
         if (to != address(0) && controlledAddresses[to]) {
             controlledWrappedBalance += amount;
+            changed = true;
+        }
+
+        if (changed) {
+            _controlledBalanceCheckpoints.push(uint48(block.number), uint208(controlledWrappedBalance));
         }
     }
 
@@ -304,6 +320,10 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
     function totalReleasedVotable() external view returns (uint256) {
         return IERC20(address(mainToken)).totalSupply() - controlledWrappedBalance;
+    }
+
+    function getPastControlledBalance(uint256 blockNumber) external view returns (uint256) {
+        return _controlledBalanceCheckpoints.upperLookupRecent(uint48(blockNumber));
     }
 
     function mainTokenObligations() external view returns (uint256) {

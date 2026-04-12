@@ -135,6 +135,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             dacCell,
             address(wrappedMainToken),
             governanceOracle,
+            assetController,
             params,
             strategyConfig,
             _isHighQuorum(params.typ),

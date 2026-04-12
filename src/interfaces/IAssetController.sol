@@ -59,6 +59,7 @@ interface IAssetController {
     function agentDistributorAllowance(address account) external view returns (uint256);
 
     function totalReleasedVotable() external view returns (uint256);
+    function getPastControlledBalance(uint256 blockNumber) external view returns (uint256);
     function mainTokenObligations() external view returns (uint256);
     function treasuryHolder() external view returns (address);
     function supportsCapability(AssetCapability capability) external view returns (bool);

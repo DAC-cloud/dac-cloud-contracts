@@ -11,6 +11,7 @@ import {ProposalParams} from "../../interfaces/Structs.sol";
 import {GovernanceStrategyConfig, OracleSnapshot, ProposalPhase} from "../../interfaces/GovernanceStructs.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
+import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 
@@ -19,6 +20,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     address public dacCell;
     address public wrappedToken;
     address public governanceOracle;
+    address public assetController;
 
     ProposalParams public proposal;
     GovernanceStrategyConfig private strategy;
@@ -61,6 +63,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         address _dacCell,
         address _wrappedToken,
         address _governanceOracle,
+        address _assetController,
         ProposalParams memory _proposal,
         GovernanceStrategyConfig memory _strategy,
         bool _highQuorum,
@@ -69,6 +72,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(block.number > 0, DACErrorsLib.NotAllowed());
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
         require(_wrappedToken != address(0), DACErrorsLib.NotAllowed());
+        require(_assetController != address(0), DACErrorsLib.NotAllowed());
         // Oracle is only required when oracle-primary mode is enabled
         require(!_strategy.oraclePrimaryEnabled || _governanceOracle != address(0), DACErrorsLib.NotAllowed());
         require(_strategy.duration > 0, DACErrorsLib.InvalidVotingConfig());
@@ -81,6 +85,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         dacCell = _dacCell;
         wrappedToken = _wrappedToken;
         governanceOracle = _governanceOracle;
+        assetController = _assetController;
         proposal = _proposal;
         strategy = _strategy;
         highQuorum = _highQuorum;
@@ -357,10 +362,13 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         oracleMerkleRoot = snapshot.merkleRoot;
         totalUnderlyingVotingPower = snapshot.totalUnderlyingVotingPower;
 
+        uint256 wrappedVotable = IVotes(wrappedToken).getPastTotalSupply(primarySnapshotBlock)
+            - IAssetController(assetController).getPastControlledBalance(primarySnapshotBlock);
+
         _activateVotingPhase(
             ProposalPhase.PrimaryVoting,
             primarySnapshotBlock,
-            totalUnderlyingVotingPower + IVotes(wrappedToken).getPastTotalSupply(primarySnapshotBlock),
+            totalUnderlyingVotingPower + wrappedVotable,
             strategy.duration
         );
     }
@@ -368,10 +376,13 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     function _activateFallbackInternal() internal {
         fallbackSnapshotBlock = block.number - 1;
 
+        uint256 wrappedVotable = IVotes(wrappedToken).getPastTotalSupply(fallbackSnapshotBlock)
+            - IAssetController(assetController).getPastControlledBalance(fallbackSnapshotBlock);
+
         _activateVotingPhase(
             ProposalPhase.FallbackVoting,
             fallbackSnapshotBlock,
-            IVotes(wrappedToken).getPastTotalSupply(fallbackSnapshotBlock),
+            wrappedVotable,
             strategy.fallbackDuration
         );
     }
