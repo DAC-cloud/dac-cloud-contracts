@@ -8,7 +8,14 @@ library DACEventsLib {
 
     // DAC Factory Events
 
-    event DACDeployed(address indexed dac, address mainToken, address agentToken, bool init);
+    event DACDeployed(
+        address indexed dac, 
+        bytes32 indexed salt,
+        address mainToken, 
+        address agentToken, 
+        bool init
+    );
+
     event ExistingTokenDACDeployed(
         address indexed dac,
         address indexed underlyingToken,

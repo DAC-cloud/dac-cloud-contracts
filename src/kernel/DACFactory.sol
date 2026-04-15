@@ -111,7 +111,13 @@ contract DACFactory is IDACFactory {
             sleepingCells[deferInitCell] = deferInitCalldata;
         }
 
-        emit DACEventsLib.DACDeployed(dacAddr, mainAddr, agentAddr, (deferBirthRole == address(0)));
+        emit DACEventsLib.DACDeployed(
+            dacAddr, 
+            salt, 
+            mainAddr, 
+            agentAddr, 
+            (deferBirthRole == address(0))
+        );
     }
 
     function deployExistingTokenDAC(
@@ -143,7 +149,14 @@ contract DACFactory is IDACFactory {
         _initializeExistingDAC(dac, config, wrappedMainTokenAddr, agentTokenAddr, config.governanceOracle);
         _seedExistingDACTreasury(config, wrappedMainTokenAddr, dacAddr);
 
-        emit DACEventsLib.DACDeployed(dacAddr, wrappedMainTokenAddr, agentTokenAddr, true);
+        emit DACEventsLib.DACDeployed(
+            dacAddr,
+            salt,
+            wrappedMainTokenAddr, 
+            agentTokenAddr, 
+            true
+        );
+
         emit DACEventsLib.ExistingTokenDACDeployed(
             dacAddr,
             config.underlyingToken,
