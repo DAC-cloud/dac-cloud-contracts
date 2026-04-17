@@ -246,7 +246,6 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
 
         DACDealConfig memory dacDealConfig = DACDealConfig({
             managedEquity: config.managedEquity,
-            capitalCallId: 0,
             config: abi.encode(protocol.dacFactory, address(0), salt, childDACConfig)
         });
 

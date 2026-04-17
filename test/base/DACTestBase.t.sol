@@ -293,7 +293,6 @@ abstract contract DACTestBase is Test {
 
         DACDealConfig memory dacDealConfig = DACDealConfig({
             managedEquity: 100_000,
-            capitalCallId: 0,
             config: abi.encode(address(dacFactory), address(0), salt, childDACConfig)
         });
 

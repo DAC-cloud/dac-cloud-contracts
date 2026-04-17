@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 struct DACDealConfig {
     uint256 managedEquity;          // only for DAC based Deals (investment into child DAC LP)
-    uint256 capitalCallId;          // only for DAC based Deals
     bytes config;
 }
 

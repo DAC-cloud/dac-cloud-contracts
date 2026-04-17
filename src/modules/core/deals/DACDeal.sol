@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall} from "../../../interfaces/Structs.sol";
+import {ProposalParams, DealParams, VotingConfig, DACConfig, CapitalCall, Tranche} from "../../../interfaces/Structs.sol";
 import {IVotes} from "../../../lib/IVotes.sol";
 import {IVoting} from "../../../interfaces/IVoting.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
@@ -33,6 +33,7 @@ contract DACDeal is Deal {
     // Events
     event ChildVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
     event ChildVoteCasted(uint256 indexed childProposalId, bool support);
+    event RootCapitalCallLinked(bytes32 indexed callHash, uint256 capitalCallId);
 
     function initialize(
         uint256 _id,
@@ -104,7 +105,6 @@ contract DACDeal is Deal {
             _registerRelatedContract(dacCellDNA.dacMainToken, bytes32("CHILD_MAIN_TOKEN"), false, false);
             _registerRelatedContract(dacCellDNA.dacAgentToken, bytes32("CHILD_AGENT_TOKEN"), false, false);
 
-            _rootCapitalCallId = dacDeal.capitalCallId;
             _allocation = dacDeal.managedEquity;
         }
     }
@@ -158,6 +158,27 @@ contract DACDeal is Deal {
 
     function claimDealRewardPool(uint256 evaluatorId) external onlyStakedAgent nonReentrant {
         IDealCell(dealCell).claimMainToken(evaluatorId);
+    }
+
+    function setRootCapitalCallID(uint256 capitalCallId) external onlyStakedAgent {
+        require(!IDealCell(dealCell).isApproved(), DACErrorsLib.DealAlreadyApproved());
+
+        Tranche memory tranche = IDealCell(dealCell).fundingTranche(0);
+
+        CapitalCall memory call = CapitalCall({
+            treasuryToken: tranche.token,
+            nonce: capitalCallId,
+            tokenRecipient: address(this),
+            tokenAmount: _allocation,
+            cashAmount: tranche.amount
+        });
+
+        bytes32 callHash = keccak256(abi.encode(call));
+        IDACCell(managedEntity).getCapitalCall(callHash);
+
+        _rootCapitalCallId = capitalCallId;
+
+        emit RootCapitalCallLinked(callHash, capitalCallId);
     }
 
     function _beforeClose() internal override {

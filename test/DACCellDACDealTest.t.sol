@@ -239,7 +239,6 @@ contract DACCellDealTest is Test {
 
         DACDealConfig memory dacDealConfig = DACDealConfig({
             managedEquity: 100_000,
-            capitalCallId: 0,
             config: abi.encode(address(dacFactory), accoucher, salt, childDACConfig)
         });
 

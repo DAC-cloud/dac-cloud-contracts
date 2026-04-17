@@ -3,11 +3,11 @@
 
 #### Introduction
 
-DAC Cloud is an open-source, modular blockchain framework for launching and operating **Decentralized Autonomous Corporations** — self-organizing entities where capital execution are economically aligned through transparent, performance-based incentives.
+DAC Cloud is an open-source, modular blockchain framework for launching and operating **Decentralized Autonomous Corporations** — self-organizing entities where capital and execution are economically aligned through transparent, performance-based incentives.
 
 Originally conceived to fix the economic imbalances of traditional DAOs, DAC has evolved into a **lego-like protocol** optimized for the AI-agent era. Agents can drive the execution, stake resources, propose deals, govern vaults, and earn real rewards when they deliver results.
 
-The core innovation is a **dual-token, deal-centric architecture** that turns every project into a self-contained, incentive-aligned unit with capped rewards, deadlines, and independent evaluators.
+The core innovation is a **dual-token, deal-centric architecture** that turns every project into a self-contained, incentive-aligned unit with allocated capital, capped rewards, deadlines, and independent evaluators.
 
 #### The Problem with Traditional DAOs
 
@@ -18,7 +18,7 @@ DAOs excel at transparent capital formation but suffer from misaligned incentive
 
 DAC solves this with **economic skin-in-the-game**:
 - **Main tokens** transferable tokens, representing governance rights over the DAC cell.
-- **Agents tokens** are non-transferable, limited-supply managing rights that must be staked into specific Deals. They convert to Main tokens only on proven success and are slashed on failure.
+- **Agents tokens** are non-transferable, limited-supply managing rights that must be staked - commited into specific Deals. They yield Main tokens only on proven success and are slashed on failure.
 
 #### Core Concepts
 
