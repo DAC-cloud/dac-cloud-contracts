@@ -22,6 +22,7 @@ FORGE_ARGS="--rpc-url $RPC --broadcast --skip-simulation --slow"
 # Defaults — override via env if needed
 export FOUNDER_PRIVATE_KEY="${FOUNDER_PRIVATE_KEY:-$PRIVATE_KEY}"
 export AGENT_PRIVATE_KEY="${AGENT_PRIVATE_KEY:-$PRIVATE_KEY}"
+export PERMIT2_ADDRESS="0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
 step() {
     echo ""
@@ -49,15 +50,13 @@ run_script() {
     tick
 }
 
-# ─── 0. Deploy mock Permit2 ───────────────────────────────────────────
+# ─── 0. Deploy Permit2 ───────────────────────────────────────────
 
-step "Deploying mock Permit2"
-PERMIT2_DEPLOY=$(forge create \
-    script/mocks/ScriptMockPermit2.sol:ScriptMockPermit2 \
-    --rpc-url "$RPC" \
-    --private-key "$PRIVATE_KEY" \
-    --broadcast 2>&1)
-export PERMIT2_ADDRESS=$(echo "$PERMIT2_DEPLOY" | grep "Deployed to:" | awk '{print $3}')
+step "Deploying Permit2"
+
+PERMIT2_BYTECODE=$(cat script/bytecode/permit2-runtime.hex)
+cast rpc anvil_setCode "$PERMIT2_ADDRESS" "$PERMIT2_BYTECODE" --rpc-url "$RPC"
+
 echo "Permit2 deployed at: $PERMIT2_ADDRESS"
 
 # ─── 1. Deploy protocol ──────────────────────────────────────────────
