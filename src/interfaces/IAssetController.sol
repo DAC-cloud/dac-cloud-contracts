@@ -50,6 +50,7 @@ interface IAssetController {
     function registerControlledAddress(address controlled) external;
     function onMainMove(address from, address to, uint256 amount) external;
     function onMainDelegate(address from, address to) external view;
+    function isControlledAddress(address addr) external view returns (bool);
 
     function validateBoundAgentRecipient(address recipient) external view;
     function authorizeAgentDistributor(address distributor, uint256 allowance) external;

@@ -318,6 +318,10 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         require(!controlledAddresses[to], DACErrorsLib.NoVotingPower());
     }
 
+    function isControlledAddress(address addr) external view returns (bool) {
+        return controlledAddresses[addr];
+    }
+
     function totalReleasedVotable() external view returns (uint256) {
         return IERC20(address(mainToken)).totalSupply() - controlledWrappedBalance;
     }

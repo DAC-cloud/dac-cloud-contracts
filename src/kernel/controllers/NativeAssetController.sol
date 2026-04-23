@@ -310,6 +310,10 @@ contract NativeAssetController is IAssetController, Initializable {
         require(!controlledAddresses[to], DACErrorsLib.NoVotingPower());
     }
 
+    function isControlledAddress(address addr) external view returns (bool) {
+        return controlledAddresses[addr];
+    }
+
     function totalReleasedVotable() external view returns (uint256) {
         return (mainToken.totalSupply() - unreleasedMainTokens)
             - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell])

@@ -71,6 +71,9 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
 
     function _autoDelegate(address recipient) internal {
         if (delegates(recipient) == address(0) && balanceOf(recipient) > 0) {
+            if (controller != address(0) && IAssetController(controller).isControlledAddress(recipient)) {
+                return;
+            }
             _delegate(recipient, recipient);
         }
     }
