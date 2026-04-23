@@ -8,6 +8,7 @@ import {StakedAgent} from "../src/kernel/tokens/StakedAgent.sol";
 import {UUPSProxy} from "../src/kernel/proxies/UUPSProxy.sol";
 import {DealCellGovernanceLib, IDealCellGovernanceAdapter} from "../src/kernel/libraries/DealCellGovernanceLib.sol";
 import {IDeal} from "../src/interfaces/IDeal.sol";
+import {IDealCell} from "../src/interfaces/IDealCell.sol";
 import {ProposalParams, VotingConfig, DealParams, Tranche, LegalWrapper} from "../src/interfaces/Structs.sol";
 import {TreasurySpendAllowance} from "../src/modules/core/interfaces/Structs.sol";
 import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
@@ -283,6 +284,7 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
             dealDeadlineValue,
             stakeTokenContract,
             IDeal(address(dealContract)),
+            IDealCell(address(this)),
             fundingTokensList,
             returnedCapital
         );

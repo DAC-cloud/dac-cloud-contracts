@@ -297,6 +297,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             _dealDeadline,
             token,
             deal,
+            this,
             _fundingTokens,
             returnedCapital
         );

@@ -460,6 +460,11 @@ library DACCellGovernanceLib {
             );
         }
 
+        require(
+            !IDealCell(dealCell).isClosed(), 
+            DACErrorsLib.NotAllowed()
+        );
+
         address evaluatorAddr = dealState[dealCell].evaluators[evaluatorId];
 
         require(evaluatorAddr != address(0), DACErrorsLib.NotFound());

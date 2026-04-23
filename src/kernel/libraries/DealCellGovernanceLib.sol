@@ -478,11 +478,17 @@ library DealCellGovernanceLib {
         uint256 _dealDeadline,
         StakedAgent token,
         IDeal deal,
+        IDealCell self,
         address[] storage _fundingTokens,
         mapping(address => uint256) storage returnedCapital
     ) public {
         if (msg.sender == IDACCellAdapter(dacCell).getDealManager()) {
-            require(block.timestamp > _dealDeadline, DACErrorsLib.DeadlineNotPassed());
+            if (block.timestamp < _dealDeadline) {
+                require(
+                    self.isApproved() && self.isClosed() && token.totalSupply() == 0, 
+                    DACErrorsLib.DeadlineNotPassed()
+                );
+            }
         }
         else {
             require(token.balanceOf(msg.sender) != 0, DACErrorsLib.NotStakedAgent());
