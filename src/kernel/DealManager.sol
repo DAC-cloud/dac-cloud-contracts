@@ -260,7 +260,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     }
 
-    function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder {
+    function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder nonReentrant {
         DACCellGovernanceLib.evaluateDeal(
             dacCell,
             id,

@@ -9,6 +9,7 @@ import {MilestoneBasedEvaluator} from "../../src/modules/core/evaluators/Milesto
 import {MilestoneEvaluatorFactory} from "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {IDeal} from "../../src/interfaces/IDeal.sol";
 import {IDealCell} from "../../src/interfaces/IDealCell.sol";
+import {IDACCell} from "../../src/interfaces/IDACCell.sol";
 import {MathLib} from "../../src/kernel/libraries/MathLib.sol";
 import {Milestone} from "../../src/modules/core/interfaces/Structs.sol";
 import {IPriceOracle} from "../../src/modules/core/interfaces/IPriceOracle.sol";
@@ -98,6 +99,11 @@ contract MilestoneBasedEvaluatorTest is Test {
         dai = new MockUSDC();
         mockDealCell = new MockDealCell(block.timestamp);
         oracle = new MockOracle();
+        vm.mockCall(
+            DAC,
+            abi.encodeWithSelector(IDACCell.getDealManager.selector),
+            abi.encode(address(this))
+        );
     }
 
     function deployEvaluator(MilestoneBasedEvaluator.Config memory cfg) internal {

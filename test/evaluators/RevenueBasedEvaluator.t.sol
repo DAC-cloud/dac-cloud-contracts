@@ -8,6 +8,7 @@ import {RevenueBasedEvaluator} from "../../src/modules/core/evaluators/RevenueBa
 import {RevenueEvaluatorFactory} from "../../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 import {IDeal} from "../../src/interfaces/IDeal.sol";
 import {IDealCell} from "../../src/interfaces/IDealCell.sol";
+import {IDACCell} from "../../src/interfaces/IDACCell.sol";
 import {MathLib} from "../../src/kernel/libraries/MathLib.sol";
 import {RevenueSchedule} from "../../src/modules/core/interfaces/Structs.sol";
 
@@ -77,6 +78,11 @@ contract RevenueBasedEvaluatorTest is Test {
 
     function setUp() public {
         mockDealCell = new MockDealCell(block.timestamp);
+        vm.mockCall(
+            DAC,
+            abi.encodeWithSelector(IDACCell.getDealManager.selector),
+            abi.encode(address(this))
+        );
     }
 
     /*//////////////////////////////////////////////////////////////

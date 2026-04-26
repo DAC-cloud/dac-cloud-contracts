@@ -4,9 +4,11 @@ pragma solidity ^0.8.20;
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IEvaluator} from "../../../interfaces/IEvaluator.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
+import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {EvaluationResult} from "../../../interfaces/Structs.sol";
 import {MathLib} from "../../../kernel/libraries/MathLib.sol";
 import {RevenueSchedule} from "../interfaces/Structs.sol";
+import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 
 contract RevenueBasedEvaluator is IEvaluator, Initializable {
 
@@ -77,6 +79,9 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
 
     function evaluateDeal(uint256, address, address, address) external override returns (EvaluationResult[] memory) {
         require(initialized, NotInitialized());
+        // Mutates `lastChecked`, `unlockedRewards`, `totalEvaluatedCycles`, `missedCycles`, `returnsSnapshot`.
+        // Must only be entered via the kernel so kernel observes returned actions.
+        require(msg.sender == IDACCell(dac).getDealManager(), DACErrorsLib.NotAuthorized());
 
         uint256 current = block.timestamp;
 

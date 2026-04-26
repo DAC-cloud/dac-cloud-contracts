@@ -5,10 +5,12 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IEvaluator} from "../../../interfaces/IEvaluator.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
+import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {EvaluationResult} from "../../../interfaces/Structs.sol";
 import {MathLib} from "../../../kernel/libraries/MathLib.sol";
 import {Milestone} from "../interfaces/Structs.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
+import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 
 contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
@@ -107,6 +109,9 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
     function evaluateDeal(uint256, address, address, address) external override returns (EvaluationResult[] memory) {
         require(initialized, NotInitialized());
+        // Mutates `evaluated`, `unlockedRewards`, milestone timestamps/extensions.
+        // Must only be entered via the kernel so kernel observes returned actions.
+        require(msg.sender == IDACCell(dac).getDealManager(), DACErrorsLib.NotAuthorized());
 
         EvaluationResult[] memory results = new EvaluationResult[](config.milestones.length * 3 + 1);
         uint256 resultIndex = 0;
