@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ProposalParams, VotingConfig, CapitalCall, LegalWrapper, ExistingDACConfig} from "../interfaces/Structs.sol";
 import {AgentTokenMintAction, DealCreationConfig, GovernanceStrategyConfig} from "../interfaces/GovernanceStructs.sol";
 import {IAssetController} from "../interfaces/IAssetController.sol";
@@ -30,6 +31,7 @@ import {DACErrorsLib} from "../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
+    using SafeERC20 for IERC20;
 
     // DACCell has no upgrade or pause capabilities by design.
     
@@ -263,7 +265,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     function recoverTreasury(address token) external nonReentrant onlyHolderOrManager {
         uint256 recovered = IERC20(token).balanceOf(address(this));
         if (recovered > 0) {
-            require(IERC20(token).transfer(assetController, recovered), DACErrorsLib.TransferFailed());
+            IERC20(token).safeTransfer(assetController, recovered);
             IAssetController(assetController).recordTreasuryDeposit(token, recovered);
             emit DACEventsLib.TreasuryDeposit(token, recovered, msg.sender);
         }
@@ -458,7 +460,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         uint256 recovered = IERC20(token).balanceOf(address(this));
         require(recovered > 0, DACErrorsLib.NotEnoughBalance());
 
-        require(IERC20(token).transfer(assetController, recovered), DACErrorsLib.TransferFailed());
+        IERC20(token).safeTransfer(assetController, recovered);
         IAssetController(assetController).recordTreasuryDeposit(token, recovered);
 
         emit DACEventsLib.TreasuryDeposit(token, recovered, msg.sender);

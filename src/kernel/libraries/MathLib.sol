@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 /**
  * @title MathLib
- * @notice Self-contained 18-decimal fixed-point math library for all DAC percentage operations.
+ * @notice 18-decimal fixed-point math for all DAC percentage operations.
  *         All functions expect SCALED percentages (100% = 100 * 1e18).
- *         No external dependencies. Assembly mulDiv for maximum gas efficiency.
+ *         mulDiv delegates to OpenZeppelin Math.mulDiv (full 512-bit precision).
  */
 library MathLib {
     uint256 public constant SCALE = 1e18;
@@ -15,29 +17,10 @@ library MathLib {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev x * y / denominator with full precision and overflow protection
+     * @dev x * y / denominator with full 512-bit precision and overflow protection.
      */
-    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
-        assembly {
-            if iszero(denominator) { 
-                // Division by zero
-                revert(0, 0) 
-            }
-
-            let prod0 := mul(x, y)
-            let prod1 := sub(sub(mulmod(x, y, not(0)), prod0), lt(mulmod(x, y, not(0)), prod0))
-
-            if iszero(gt(denominator, prod1)) { 
-                // Overflow
-                revert(0, 0) 
-            }
-
-            let remainder := mulmod(x, y, denominator)
-            prod1 := sub(prod1, gt(remainder, prod0))
-            prod0 := sub(prod0, remainder)
-
-            result := div(prod0, denominator)
-        }
+    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256) {
+        return Math.mulDiv(x, y, denominator);
     }
 
     /// @dev Safe signed fixed-point multiply-divide (handles negative coeffs)

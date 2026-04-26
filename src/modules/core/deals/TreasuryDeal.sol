@@ -173,7 +173,7 @@ contract TreasuryDeal is Deal {
                 (address, address)
             );
 
-            treasury.rewokeAgent(agent, token, counterparty);
+            treasury.revokeAgent(agent, token, counterparty);
         }
 
         else if (typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS) {

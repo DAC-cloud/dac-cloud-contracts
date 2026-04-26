@@ -319,17 +319,9 @@ library DealCellGovernanceLib {
             require(tranche.amount > 0, DACErrorsLib.TrancheNotExists());
             require(!tranche.settled, DACErrorsLib.TrancheAlreadySettled());
         }
-        
+
         if (tranche.amount > 0) {
-            require(
-                IERC20(
-                    tranche.token
-                ).transfer(
-                    address(deal), 
-                    tranche.amount
-                ), 
-                DACErrorsLib.TransferFailed()
-            );
+            IERC20(tranche.token).safeTransfer(address(deal), tranche.amount);
 
             investedCapital[tranche.token] += tranche.amount;
 
@@ -463,10 +455,7 @@ library DealCellGovernanceLib {
         address dacCell,
         mapping(address => uint256) storage returnedCapital
     ) public {
-        require(
-            IERC20(_token).transferFrom(deal, address(this), amount), 
-            DACErrorsLib.TransferFailed()
-        );
+        IERC20(_token).safeTransferFrom(deal, address(this), amount);
 
         transferCapital(id, deal, _token, amount, dacCell, returnedCapital);
     }
@@ -505,10 +494,7 @@ library DealCellGovernanceLib {
 
             uint256 dealAllowance = IERC20(_fundingToken).allowance(address(deal), address(this));
             if (dealAllowance > 0) {
-                require(
-                    IERC20(_fundingToken).transferFrom(address(deal), address(this), dealAllowance),
-                    DACErrorsLib.TransferFailed()
-                );
+                IERC20(_fundingToken).safeTransferFrom(address(deal), address(this), dealAllowance);
             }
 
             uint256 balance = IERC20(_fundingToken).balanceOf(address(this));

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
@@ -11,6 +12,8 @@ import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
 contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable {
+    using SafeERC20 for IERC20;
+
     IERC20 public underlying;
     address public admin;
     address public controller;
@@ -43,14 +46,18 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
     function wrapTo(address recipient, uint256 amount) public returns (uint256 wrappedAmount) {
         require(recipient != address(0), DACErrorsLib.NotAllowed());
         require(amount > 0, DACErrorsLib.NotAllowed());
-        require(underlying.transferFrom(msg.sender, address(this), amount), DACErrorsLib.TransferFailed());
 
-        _mint(recipient, amount);
+        // Balance-delta accounting so fee-on-transfer underlyings don't desync
+        // wrapped supply from real backing. Wrapped tokens stay 1:1 backed.
+        uint256 balanceBefore = underlying.balanceOf(address(this));
+        underlying.safeTransferFrom(msg.sender, address(this), amount);
+        wrappedAmount = underlying.balanceOf(address(this)) - balanceBefore;
+        require(wrappedAmount > 0, DACErrorsLib.TransferFailed());
+
+        _mint(recipient, wrappedAmount);
         _autoDelegate(recipient);
 
-        emit DACEventsLib.Wrapped(msg.sender, recipient, amount);
-
-        return amount;
+        emit DACEventsLib.Wrapped(msg.sender, recipient, wrappedAmount);
     }
 
     function unwrap(uint256 amount) external returns (uint256 underlyingAmount) {
@@ -62,7 +69,7 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
         require(amount > 0, DACErrorsLib.NotAllowed());
 
         _burn(msg.sender, amount);
-        require(underlying.transfer(recipient, amount), DACErrorsLib.TransferFailed());
+        underlying.safeTransfer(recipient, amount);
 
         emit DACEventsLib.Unwrapped(msg.sender, recipient, amount);
 

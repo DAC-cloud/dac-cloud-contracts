@@ -158,7 +158,7 @@ contract Permit2TreasuryTest is Test {
         treasury.approveSpendAllowance(agent, address(token), destination, allowance);
 
         vm.expectRevert(Permit2Treasury.NotAuthorized.selector);
-        treasury.rewokeAgent(agent, address(token), destination);
+        treasury.revokeAgent(agent, address(token), destination);
 
         vm.expectRevert(Permit2Treasury.NotAuthorized.selector);
         treasury.approveReceive(agent, source, address(token), 100);
@@ -207,7 +207,7 @@ contract Permit2TreasuryTest is Test {
         assertEq(treasury.approvedAgents(allowanceHash), 600);
 
         vm.prank(treasuryDeal);
-        treasury.rewokeAgent(agent, address(token), source);
+        treasury.revokeAgent(agent, address(token), source);
 
         assertEq(treasury.approvedAgents(allowanceHash), 0);
     }
@@ -237,7 +237,7 @@ contract Permit2TreasuryTest is Test {
         assertEq(duration, allowance.duration);
 
         vm.prank(treasuryDeal);
-        treasury.rewokeAgent(agent, address(token), destination);
+        treasury.revokeAgent(agent, address(token), destination);
 
         (totalAmount, singleTxAmount, clockLimit, duration) = treasury.agentAllowance(allowanceHash);
         assertEq(totalAmount, 0);

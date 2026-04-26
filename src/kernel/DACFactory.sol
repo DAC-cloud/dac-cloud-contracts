@@ -187,6 +187,8 @@ contract DACFactory is IDACFactory {
         bytes32 deferInitCalldata = keccak256(abi.encode(config, mainTokenAddr, agentTokenAddr));
         require(sleepingCells[deferInitCell] == deferInitCalldata, DNAMismatch());
 
+        delete sleepingCells[deferInitCell];
+
         _initializeDAC(DACCell(dacCell), config, mainTokenAddr, agentTokenAddr);
     }
 
@@ -299,8 +301,9 @@ contract DACFactory is IDACFactory {
     ) internal {
         IERC20(config.underlyingToken).safeTransferFrom(msg.sender, address(this), config.treasurySeedAmount);
         IERC20(config.underlyingToken).forceApprove(wrappedMainTokenAddr, config.treasurySeedAmount);
-        WrappedMainToken(wrappedMainTokenAddr).wrapTo(address(this), config.treasurySeedAmount);
-        WrappedMainToken(wrappedMainTokenAddr).transfer(DACCell(dacAddr).getAssetController(), config.treasurySeedAmount);
-        DACCell(dacAddr).recordBootstrapTreasuryDeposit(wrappedMainTokenAddr, config.treasurySeedAmount, msg.sender);
+        // Use the actual wrapped amount: fee-on-transfer underlyings may yield less than requested.
+        uint256 wrappedAmount = WrappedMainToken(wrappedMainTokenAddr).wrapTo(address(this), config.treasurySeedAmount);
+        WrappedMainToken(wrappedMainTokenAddr).transfer(DACCell(dacAddr).getAssetController(), wrappedAmount);
+        DACCell(dacAddr).recordBootstrapTreasuryDeposit(wrappedMainTokenAddr, wrappedAmount, msg.sender);
     }
 }

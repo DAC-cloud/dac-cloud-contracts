@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ProposalParams, VotingConfig, DealParams, EvaluationResult, Tranche} from "../../interfaces/Structs.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
 import {IEvaluator} from "../../interfaces/IEvaluator.sol";
@@ -31,6 +32,7 @@ interface IDACGovernanceAdapter {
 }
 
 library DACCellGovernanceLib {
+    using SafeERC20 for IERC20;
 
     function _deployEvaluator(
         address dacCell,
@@ -210,9 +212,9 @@ library DACCellGovernanceLib {
         Tranche memory fundingTranche = IDealCell(dealCell).fundingTranche(trancheId);
 
         if (fundingTranche.amount > 0) {
-            require(IERC20(fundingTranche.token).transfer(dealCell, fundingTranche.amount), DACErrorsLib.TransferFailed());
+            IERC20(fundingTranche.token).safeTransfer(dealCell, fundingTranche.amount);
         }
-        
+
         if (trancheId == 0) {
             dealState[dealCell].active = true;
         }
@@ -247,10 +249,7 @@ library DACCellGovernanceLib {
         require(treasuryBalances[fundingTranche.token] >= fundingTranche.amount, DACErrorsLib.InsufficientTreasury());
 
         if (fundingTranche.amount > 0) {
-            require(
-                IERC20(fundingTranche.token).transfer(address(dealManager), fundingTranche.amount), 
-                DACErrorsLib.TransferFailed()
-            );
+            IERC20(fundingTranche.token).safeTransfer(address(dealManager), fundingTranche.amount);
             treasuryBalances[fundingTranche.token] -= fundingTranche.amount;
         }
         else {
@@ -503,17 +502,19 @@ library DACCellGovernanceLib {
 
         (uint256 nonce, address evalModule, bytes memory evaluatorConfig) = abi.decode(evaluatorHandle, (uint256, address, bytes));
 
-        require(
-            evaluatorWhitelist[keccak256(
+        // Scoped to free the stack slot before the rest of the function.
+        {
+            bytes32 propHash = keccak256(
                 abi.encode(
                     dealCell,
                     keccak256(evaluatorConfig),
                     evalModule,
                     nonce
                 )
-            )],
-            DACErrorsLib.NotAllowed()
-        );
+            );
+            require(evaluatorWhitelist[propHash], DACErrorsLib.NotAllowed());
+            delete evaluatorWhitelist[propHash];
+        }
 
         (bytes4 evaluatorSelector, bytes memory evaluatorParams) = abi.decode(
             evaluatorConfig,

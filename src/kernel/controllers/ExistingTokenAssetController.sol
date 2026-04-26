@@ -5,6 +5,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {CapitalCall} from "../../interfaces/Structs.sol";
@@ -18,6 +19,7 @@ import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
 contract ExistingTokenAssetController is IAssetController, Initializable {
     using Checkpoints for Checkpoints.Trace208;
+    using SafeERC20 for IERC20;
 
     struct DividendPayoutState {
         address token;
@@ -78,7 +80,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     }
 
     function depositFrom(address from, address token, uint256 amount) external onlyDACCell {
-        require(IERC20(token).transferFrom(from, address(this), amount), DACErrorsLib.TransferFailed());
+        IERC20(token).safeTransferFrom(from, address(this), amount);
         treasuryBalances[token] += amount;
     }
 
@@ -135,15 +137,12 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         require(storedCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
         require(_freeBalance(address(mainToken)) >= storedCall.tokenAmount, DACErrorsLib.InsufficientTreasury());
 
-        require(
-            IERC20(storedCall.treasuryToken).transferFrom(storedCall.tokenRecipient, address(this), storedCall.cashAmount),
-            DACErrorsLib.TransferFailed()
-        );
+        IERC20(storedCall.treasuryToken).safeTransferFrom(storedCall.tokenRecipient, address(this), storedCall.cashAmount);
 
         treasuryBalances[storedCall.treasuryToken] += storedCall.cashAmount;
         treasuryBalances[address(mainToken)] -= storedCall.tokenAmount;
 
-        require(IERC20(address(mainToken)).transfer(storedCall.tokenRecipient, storedCall.tokenAmount), DACErrorsLib.TransferFailed());
+        IERC20(address(mainToken)).safeTransfer(storedCall.tokenRecipient, storedCall.tokenAmount);
         capitalCalls[callHash].fulfilled = true;
     }
 
@@ -189,7 +188,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         committedBalances[token] = committedBalances[token] >= amount ? committedBalances[token] - amount : 0;
         treasuryBalances[token] = treasuryBalances[token] >= amount ? treasuryBalances[token] - amount : 0;
 
-        require(IERC20(token).transfer(receiver, amount), DACErrorsLib.TransferFailed());
+        IERC20(token).safeTransfer(receiver, amount);
     }
 
     function approveFunding(uint256 dealId, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
@@ -208,7 +207,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
 
         if (fundingAmount > 0) {
             treasuryBalances[fundingToken] -= fundingAmount;
-            require(IERC20(fundingToken).transfer(dealManager, fundingAmount), DACErrorsLib.TransferFailed());
+            IERC20(fundingToken).safeTransfer(dealManager, fundingAmount);
         } else {
             require(trancheId == 0, DACErrorsLib.InvalidTranche());
         }
@@ -225,7 +224,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         treasuryBalances[address(mainToken)] = treasuryBalances[address(mainToken)] >= amount ? treasuryBalances[address(mainToken)] - amount : 0;
         _mainTokenObligations = _mainTokenObligations >= amount ? _mainTokenObligations - amount : 0;
 
-        require(IERC20(address(mainToken)).transfer(to, amount), DACErrorsLib.TransferFailed());
+        IERC20(address(mainToken)).safeTransfer(to, amount);
     }
 
     function releaseUnusedMintRewards(uint256 amount) external onlyDealManager {
@@ -358,7 +357,11 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
     }
 
     function _freeBalance(address token) internal view returns (uint256) {
-        return treasuryBalances[token] - committedBalances[token];
+        // Floor at 0: tolerate accounting drift (e.g. fee-on-transfer tokens) since
+        // contracts are non-upgradeable and a hard underflow would brick the DAC.
+        return treasuryBalances[token] >= committedBalances[token]
+            ? treasuryBalances[token] - committedBalances[token]
+            : 0;
     }
 
     function _validateBoundAgentRecipient(address recipient) internal view {

@@ -125,7 +125,7 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
     }
 
     // Called by TreasuryDeal after staked-agents quorum approves a spend allowance towards agent
-    function rewokeAgent(
+    function revokeAgent(
         address agent,
         address token,
         address counterparty
