@@ -4,15 +4,21 @@ pragma solidity ^0.8.20;
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {OracleSnapshot} from "../../interfaces/GovernanceStructs.sol";
-import {IGovernanceOracle} from "../../interfaces/IGovernanceOracle.sol";
+import {IBasicGovernanceOracle} from "../../interfaces/IBasicGovernanceOracle.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
-contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgradeable {
+contract BasicGovernanceOracle is IBasicGovernanceOracle, Initializable, AccessControlUpgradeable {
     bytes32 public constant PUBLISHER_ROLE = keccak256("PUBLISHER_ROLE");
 
-    mapping(uint256 => OracleSnapshot) private snapshots;
-    bool private active;
+    // Snapshots namespaced per DAC so a single instance can serve many DACs
+    // without proposalId collisions.
+    mapping(address => mapping(uint256 => OracleSnapshot)) private snapshots;
+
+    // Per-DAC kill-switch. Default false = active. Once flipped, that DAC
+    // falls back to on-chain voting; flipping a single DAC must not affect
+    // others sharing this oracle.
+    mapping(address => bool) private deactivated;
 
     constructor() {
         _disableInitializers();
@@ -24,7 +30,6 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         __AccessControl_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        active = true;
 
         if (initialPublisher != address(0)) {
             _grantRole(PUBLISHER_ROLE, initialPublisher);
@@ -48,34 +53,37 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         return hasRole(PUBLISHER_ROLE, publisher);
     }
 
-    function isActive() external view returns (bool) {
-        return active;
+    function isActive(address dac) external view returns (bool) {
+        return !deactivated[dac];
     }
 
-    function deactivate() external {
+    function deactivate(address dac) external {
         require(
             hasRole(DEFAULT_ADMIN_ROLE, msg.sender) || hasRole(PUBLISHER_ROLE, msg.sender),
             DACErrorsLib.NotAuthorized()
         );
-        require(active, DACErrorsLib.NotAllowed());
+        require(dac != address(0), DACErrorsLib.NotAllowed());
+        require(!deactivated[dac], DACErrorsLib.NotAllowed());
 
-        active = false;
-        emit DACEventsLib.GovernanceOracleDeactivated(address(this), msg.sender);
+        deactivated[dac] = true;
+        emit DACEventsLib.GovernanceOracleDeactivated(address(this), dac, msg.sender);
     }
 
     function publishSnapshot(
+        address dac,
         uint256 proposalId,
         uint256 snapshotBlock,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     ) external onlyRole(PUBLISHER_ROLE) {
-        require(active, DACErrorsLib.NotAllowed());
+        require(dac != address(0), DACErrorsLib.NotAllowed());
+        require(!deactivated[dac], DACErrorsLib.NotAllowed());
         require(proposalId > 0, DACErrorsLib.NotAllowed());
         require(snapshotBlock > 0, DACErrorsLib.NotAllowed());
         require(merkleRoot != bytes32(0), DACErrorsLib.InvalidMerkleProof());
-        require(snapshots[proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
+        require(snapshots[dac][proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
 
-        snapshots[proposalId] = OracleSnapshot({
+        snapshots[dac][proposalId] = OracleSnapshot({
             snapshotBlock: snapshotBlock,
             merkleRoot: merkleRoot,
             totalUnderlyingVotingPower: totalUnderlyingVotingPower,
@@ -83,6 +91,7 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         });
 
         emit DACEventsLib.OracleSnapshotPublished(
+            dac,
             proposalId,
             snapshotBlock,
             merkleRoot,
@@ -90,7 +99,11 @@ contract GovernanceOracle is IGovernanceOracle, Initializable, AccessControlUpgr
         );
     }
 
-    function getSnapshot(uint256 proposalId) external view returns (OracleSnapshot memory snapshot) {
-        snapshot = snapshots[proposalId];
+    function getSnapshot(address dac, uint256 proposalId)
+        external
+        view
+        returns (OracleSnapshot memory snapshot)
+    {
+        snapshot = snapshots[dac][proposalId];
     }
 }

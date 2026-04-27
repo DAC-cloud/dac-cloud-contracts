@@ -3,20 +3,13 @@ pragma solidity ^0.8.20;
 
 import {OracleSnapshot} from "./GovernanceStructs.sol";
 
+// Read-only consumer surface. Snapshots are namespaced per DAC so a single
+// oracle instance can serve many DACs without proposalId collisions.
 interface IGovernanceOracle {
-    function initialize(address admin, address initialPublisher) external;
+    function isActive(address dac) external view returns (bool);
 
-    function setPublisher(address publisher, bool allowed) external;
-    function isPublisher(address publisher) external view returns (bool);
-    function isActive() external view returns (bool);
-    function deactivate() external;
-
-    function publishSnapshot(
-        uint256 proposalId,
-        uint256 snapshotBlock,
-        bytes32 merkleRoot,
-        uint256 totalUnderlyingVotingPower
-    ) external;
-
-    function getSnapshot(uint256 proposalId) external view returns (OracleSnapshot memory snapshot);
+    function getSnapshot(address dac, uint256 proposalId)
+        external
+        view
+        returns (OracleSnapshot memory snapshot);
 }

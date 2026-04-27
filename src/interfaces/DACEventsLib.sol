@@ -154,13 +154,14 @@ library DACEventsLib {
         uint256 blockingQuorum
     );
     event OracleSnapshotPublished(
+        address indexed dac,
         uint256 indexed id,
         uint256 snapshotBlock,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     );
     event GovernanceOraclePublisherUpdated(address indexed oracle, address indexed publisher, bool allowed);
-    event GovernanceOracleDeactivated(address indexed oracle, address indexed caller);
+    event GovernanceOracleDeactivated(address indexed oracle, address indexed dac, address caller);
     event MerkleVoted(uint256 indexed id, address indexed voter, bool support, uint256 weight, uint256 index);
 
     // Events emited by abstract Deal contract

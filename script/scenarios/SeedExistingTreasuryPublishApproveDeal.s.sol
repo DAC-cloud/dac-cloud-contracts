@@ -19,6 +19,7 @@ contract SeedExistingTreasuryPublishApproveDeal is ExistingTreasuryFlowBase {
         vm.startBroadcast(founderKey());
         _publishDACOracleSnapshot(
             seed.governanceOracle,
+            seed.dac,
             seed.dacProposalId,
             seed.approveDealSnapshotBlock,
             seed.approveDealMerkleRoot,

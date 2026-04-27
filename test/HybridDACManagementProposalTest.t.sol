@@ -6,7 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 import {ProposalParams} from "../src/interfaces/Structs.sol";
 import {GovernanceStrategyConfig, ProposalPhase} from "../src/interfaces/GovernanceStructs.sol";
-import {GovernanceOracle} from "../src/kernel/governance/GovernanceOracle.sol";
+import {BasicGovernanceOracle} from "../src/kernel/governance/BasicGovernanceOracle.sol";
 import {WrappedMainToken} from "../src/kernel/tokens/WrappedMainToken.sol";
 import {HybridDACManagementProposal} from "../src/kernel/governance/HybridDACManagementProposal.sol";
 import {UUPSProxy} from "../src/kernel/proxies/UUPSProxy.sol";
@@ -22,7 +22,7 @@ contract MockHybridUnderlyingToken is ERC20 {
 contract HybridDACManagementProposalTest is Test {
     MockHybridUnderlyingToken internal underlying;
     WrappedMainToken internal wrapped;
-    GovernanceOracle internal oracle;
+    BasicGovernanceOracle internal oracle;
     HybridDACManagementProposal internal proposal;
 
     address internal publisher = makeAddr("publisher");
@@ -47,11 +47,11 @@ contract HybridDACManagementProposalTest is Test {
                 )
             )
         );
-        oracle = GovernanceOracle(
+        oracle = BasicGovernanceOracle(
             address(
                 new UUPSProxy(
-                    address(new GovernanceOracle()),
-                    abi.encodeWithSelector(GovernanceOracle.initialize.selector, address(this), publisher)
+                    address(new BasicGovernanceOracle()),
+                    abi.encodeWithSelector(BasicGovernanceOracle.initialize.selector, address(this), publisher)
                 )
             )
         );
@@ -103,7 +103,7 @@ contract HybridDACManagementProposalTest is Test {
         bytes32 root = keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18)));
 
         vm.prank(publisher);
-        oracle.publishSnapshot(1, 10, root, 200e18);
+        oracle.publishSnapshot(address(this), 1, 10, root, 200e18);
 
         proposal.activatePrimaryVoting();
 
@@ -258,10 +258,10 @@ contract HybridDACManagementProposalTest is Test {
 
     function test_oraclePublisherAccessControl() external {
         vm.expectRevert();
-        oracle.publishSnapshot(999, 1, keccak256("root"), 1);
+        oracle.publishSnapshot(address(this), 999, 1, keccak256("root"), 1);
 
         vm.prank(publisher);
-        oracle.publishSnapshot(999, 1, keccak256("root"), 1);
+        oracle.publishSnapshot(address(this), 999, 1, keccak256("root"), 1);
     }
 
     function test_oraclePublisherUpdate_emitsEvent() external {
@@ -302,7 +302,7 @@ contract HybridDACManagementProposalTest is Test {
         );
 
         vm.prank(publisher);
-        oracle.publishSnapshot(3, 30, keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18))), 200e18);
+        oracle.publishSnapshot(address(this), 3, 30, keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18))), 200e18);
 
         proposal.activatePrimaryVoting();
 
@@ -311,7 +311,7 @@ contract HybridDACManagementProposalTest is Test {
         assertEq(proposal.yesVotes(), 100e18);
 
         vm.prank(publisher);
-        oracle.deactivate();
+        oracle.deactivate(address(this));
 
         proposal.triggerEmergencyFallback();
 

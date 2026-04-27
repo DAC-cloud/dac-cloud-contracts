@@ -7,7 +7,7 @@ import {ProposalParams} from "../../src/interfaces/Structs.sol";
 import {DACCell} from "../../src/kernel/DACCell.sol";
 import {Deal} from "../../src/kernel/Deal.sol";
 import {DACManagementProposalType} from "../../src/kernel/governance/DACManagementProposals.sol";
-import {IGovernanceOracle} from "../../src/interfaces/IGovernanceOracle.sol";
+import {IBasicGovernanceOracle} from "../../src/interfaces/IBasicGovernanceOracle.sol";
 import {HybridDACManagementProposal} from "../../src/kernel/governance/HybridDACManagementProposal.sol";
 
 abstract contract ScenarioGovernanceBase is ManifestIO {
@@ -30,13 +30,14 @@ abstract contract ScenarioGovernanceBase is ManifestIO {
 
     function _publishDACOracleSnapshot(
         address governanceOracle,
+        address dac,
         uint256 proposalId,
         uint256 snapshotBlock,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     ) internal {
-        IGovernanceOracle(governanceOracle).publishSnapshot(
-            proposalId, snapshotBlock, merkleRoot, totalUnderlyingVotingPower
+        IBasicGovernanceOracle(governanceOracle).publishSnapshot(
+            dac, proposalId, snapshotBlock, merkleRoot, totalUnderlyingVotingPower
         );
     }
 

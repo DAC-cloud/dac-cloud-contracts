@@ -169,7 +169,7 @@ contract DACFactory is IDACFactory {
         );
     }
 
-    /// @notice Standalone helper to deploy a reference GovernanceOracle.
+    /// @notice Standalone helper to deploy a reference BasicGovernanceOracle.
     /// @dev Unrestricted; the caller provides their own admin and initial publisher.
     function deployGovernanceOracle(address admin, address initialPublisher) external returns (address oracle) {
         oracle = GovernanceOracleFactory(governanceOracleFactory).deployGovernanceOracle(admin, initialPublisher);

@@ -19,6 +19,7 @@ contract SeedExistingTreasuryPublishAgentMint is ExistingTreasuryFlowBase {
         vm.startBroadcast(founderKey());
         _publishDACOracleSnapshot(
             seed.governanceOracle,
+            seed.dac,
             seed.mintAgentProposalId,
             seed.mintAgentSnapshotBlock,
             seed.mintAgentMerkleRoot,

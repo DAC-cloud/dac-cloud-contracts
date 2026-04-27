@@ -100,7 +100,7 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
         if (amount == 0) revert ZeroUnderlyingVotingPower();
         bytes32 merkleRoot = _singleLeafRoot(0, seed.founder, amount);
 
-        _publishDACOracleSnapshot(seed.governanceOracle, proposalId, snapshotBlock, merkleRoot, amount);
+        _publishDACOracleSnapshot(seed.governanceOracle, seed.dac, proposalId, snapshotBlock, merkleRoot, amount);
         _activatePrimaryDACProposal(seed.dac, proposalId);
         _voteDACProposal(seed.dac, proposalId, true);
 

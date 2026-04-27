@@ -126,9 +126,9 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(phase == ProposalPhase.AwaitingOracleSnapshot, DACErrorsLib.NotAllowed());
         require(strategy.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
         require(block.timestamp <= oracleSnapshotDeadline, DACErrorsLib.NotAllowed());
-        require(IGovernanceOracle(governanceOracle).isActive(), DACErrorsLib.NotAllowed());
+        require(IGovernanceOracle(governanceOracle).isActive(dacCell), DACErrorsLib.NotAllowed());
 
-        OracleSnapshot memory snapshot = IGovernanceOracle(governanceOracle).getSnapshot(id);
+        OracleSnapshot memory snapshot = IGovernanceOracle(governanceOracle).getSnapshot(dacCell, id);
         require(snapshot.merkleRoot != bytes32(0), DACErrorsLib.NotFound());
         require(snapshot.snapshotBlock == primarySnapshotBlock, DACErrorsLib.NotAllowed());
 
@@ -138,7 +138,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     function beginFallbackWarmup() external {
         require(phase == ProposalPhase.AwaitingOracleSnapshot, DACErrorsLib.NotAllowed());
         require(
-            block.timestamp > oracleSnapshotDeadline || !IGovernanceOracle(governanceOracle).isActive(),
+            block.timestamp > oracleSnapshotDeadline || !IGovernanceOracle(governanceOracle).isActive(dacCell),
             DACErrorsLib.NotAllowed()
         );
 
@@ -165,7 +165,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         );
         require(strategy.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
         require(!proposalResolved, DACErrorsLib.NotAllowed());
-        require(!IGovernanceOracle(governanceOracle).isActive(), DACErrorsLib.NotAllowed());
+        require(!IGovernanceOracle(governanceOracle).isActive(dacCell), DACErrorsLib.NotAllowed());
 
         yesVotes = 0;
         noVotes = 0;
@@ -353,9 +353,9 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     function _tryActivatePrimary() internal {
         if (!strategy.oraclePrimaryEnabled) return;
         if (block.timestamp > oracleSnapshotDeadline) return;
-        if (!IGovernanceOracle(governanceOracle).isActive()) return;
+        if (!IGovernanceOracle(governanceOracle).isActive(dacCell)) return;
 
-        OracleSnapshot memory snapshot = IGovernanceOracle(governanceOracle).getSnapshot(id);
+        OracleSnapshot memory snapshot = IGovernanceOracle(governanceOracle).getSnapshot(dacCell, id);
         if (snapshot.merkleRoot == bytes32(0)) return;
         if (snapshot.snapshotBlock != primarySnapshotBlock) return;
 

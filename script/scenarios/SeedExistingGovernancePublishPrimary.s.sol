@@ -18,6 +18,7 @@ contract SeedExistingGovernancePublishPrimary is ExistingGovernanceFlowBase {
         vm.startBroadcast(broadcasterKey());
         _publishDACOracleSnapshot(
             seed.governanceOracle,
+            seed.dac,
             seed.primaryProposalId,
             seed.primarySnapshotBlock,
             seed.primaryMerkleRoot,
