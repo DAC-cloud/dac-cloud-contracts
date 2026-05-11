@@ -26,11 +26,13 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
         quorum.allowed = (
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
-            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL || 
+            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
             params.typ == CoreDealManagementType.RETURN_PROFITS ||
+            params.typ == CoreDealManagementType.APPROVE_VOTING_VENUE_VERSION ||
+            params.typ == CoreDealManagementType.EXTERNAL_VOTE_SIGN ||
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
-            params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND || 
+            params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND ||
             params.typ == CoreDealManagementType.ASSIGN_CLAIMER ||
             params.typ == CoreDealManagementType.REVOKE_AGENT ||
             params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC ||
@@ -39,13 +41,16 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
 
         quorum.high = (
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
+            params.typ == CoreDealManagementType.APPROVE_VOTING_VENUE_VERSION ||
             params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND
         );
 
         quorum.veto = quorum.high;
 
         quorum.blocking = (
-            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL || 
+            params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
+            params.typ == CoreDealManagementType.APPROVE_VOTING_VENUE_VERSION ||
+            params.typ == CoreDealManagementType.EXTERNAL_VOTE_SIGN ||
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND ||
             params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS

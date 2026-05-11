@@ -1,6 +1,6 @@
 # DAC Cloud Architecture
 
-Updated: April 7, 2026
+Updated: May 11, 2026
 
 For the contract-by-contract inventory, see [contracts.md](contracts.md). For build, test, deployment, and scenario scripts, see [development.md](development.md).
 
@@ -60,7 +60,7 @@ This is the simplest launch path for a new tokenized organization.
 Existing-token DACs attach governance and deal logic to an already circulating token:
 
 - deploy a `WrappedMainToken`
-- deploy a `GovernanceOracle`
+- deploy or attach to a `BasicGovernanceOracle`
 - use `HybridGovernanceSchema`
 - use `ExistingTokenAssetController`
 - seed the DAC treasury by wrapping a nonzero donation of the underlying token during DAC creation
@@ -295,19 +295,20 @@ Wrapped-only bootstrap mode is not a separate governance family. It is a configu
 
 ### 5.4 Governance Oracle
 
-`GovernanceOracle` is the publisher for proposal-specific Merkle snapshots in hybrid mode.
+`BasicGovernanceOracle` is the reference publisher for proposal-specific Merkle snapshots in hybrid mode. A single oracle instance can serve any number of DACs — all snapshots and active state are namespaced per DAC.
 
 Important properties:
 
-- oracle snapshots are proposal-specific
+- oracle snapshots are namespaced by `(dac, proposalId)` so a single deployment can support an arbitrary number of DACs without proposal-id collisions
 - each snapshot includes:
   - `snapshotBlock`
   - `merkleRoot`
   - `totalUnderlyingVotingPower`
   - `publishedAt`
-- the oracle can be deactivated by authorized actors
-- deactivation forces active hybrid proposals into the fallback path
+- per-DAC active state — deactivating one DAC's slot has no effect on any other DAC sharing the oracle
+- deactivation forces that DAC's active hybrid proposals into the fallback path
 - DAC governance can replace the oracle instance with a new one
+- consumer surface is the read-only `IGovernanceOracle` (`isActive(dac)`, `getSnapshot(dac, id)`); operator surface is the extended `IBasicGovernanceOracle` (publish, admin, deactivate). This split lets future implementations (optimistic/staked publishers, ZK-proven snapshots, multi-publisher aggregators) swap in transparently for consumers.
 
 ### 5.5 Qualification
 
@@ -490,7 +491,24 @@ Module deals can emit standardized `DealRelatedContract` events so indexers can 
 
 without module-specific storage reads.
 
-### 10.1 Cross-Module Evaluator Deployment
+### 10.1 DACDeal External Voting
+
+`DACDeal` holds a child DAC's `MainToken` balance after capital calls fulfill — that balance is delegated to the deal itself, giving the deal voting power inside the child DAC. Two paths exist for using that voting power:
+
+**On-chain child DAC governance.** `CREATE_DAC_PROPOSAL` and `VOTE_DAC_PROPOSAL` let staked-pigs propose and vote on the child DAC's own management proposals. This path is direct and synchronous.
+
+**External venue voting via ERC-1271.** Some governance models call for off-chain voting on snapshot.org or similar EIP-712 attestation venues — for example shareholder-judged evaluators that aggregate votes off-chain. `DACDeal` implements `isValidSignature(bytes32, bytes)` (ERC-1271) so the deal's voting power can participate in these venues without delegating tokens to any external address.
+
+Two staked-pig proposals govern this surface:
+
+- `APPROVE_VOTING_VENUE_VERSION` — manages an allowlist of `(venueId, version)` pairs that may be used in vote-signing proposals. Sensitive (high quorum + blocking allowed) because the version determines which EIP-712 domain separator gets reconstructed during hash validation.
+- `EXTERNAL_VOTE_SIGN` — approves a specific external vote. Carries the full structured payload (e.g. for snapshot: `version`, `from`, `space`, `timestamp`, `proposal`, `choice`, `reason`, `app`, `metadata`, `expiry`). On execution, the deal reconstructs the EIP-712 final hash from the structured fields using the venue's bound domain separator, stores the approval, and emits `ExternalVoteApproved` with the reconstructed hash.
+
+**Why structured payloads, never raw hashes.** `DACDeal` holds tokens that implement EIP-2612 permit (the child `MainToken` inherits OZ `ERC20PermitUpgradeable`). OZ's permit path falls through to ERC-1271 for contract owners. If the deal stored raw approved hashes, an attacker could craft a payload that hashes to a permit-shaped digest, get it approved as if it were a snapshot vote, and then call `permit(...)` on the held token to drain the deal. By instead storing the structured payload and reconstructing the hash with the venue's domain separator on every read, the deal can never validate a hash that wasn't produced through its own venue-bound reconstruction. EIP-2612 hashes use the token's domain (with `chainId` and `verifyingContract`); snapshot's domain has only `(name, version)` — they cannot collide.
+
+**Fork extensibility.** New venues (Safe Messages, Tally, custom optimistic governors, etc.) can be added by overriding two virtual hooks: `_executeExternalVoteSignExtension(venueId, payload)` for the approval path, and `_isValidSignatureExtension(hash)` for the lookup path. The `EXTERNAL_VOTE_SIGN` envelope (`bytes32 venueId, bytes payload`) stays venue-agnostic so the dispatch layer never needs to change.
+
+### 10.2 Cross-Module Evaluator Deployment
 
 Deals can specify a separate `evaluatorModuleFactory` in `DealParams`, distinct from the deal's own `moduleFactory`. This lets the kernel deploy the evaluator independently from the deal's module.
 
@@ -527,7 +545,7 @@ This architecture creates a **trust stratification** between deal risk and rewar
 
 1. deploys `WrappedMainToken`
 2. deploys `AgentToken`
-3. deploys `GovernanceOracle`
+3. deploys `BasicGovernanceOracle` (or accepts a pre-deployed shared instance via configuration)
 4. deploys `DACCell`
 5. initializes:
    - `DealManager`
@@ -550,6 +568,10 @@ Important events and their semantics:
   provide explicit wrapper lifecycle events beyond raw ERC-20 transfers
 - `GovernanceOraclePublisherUpdated(...)`
   surfaces oracle publisher role changes
+- `OracleSnapshotPublished(...)` and `GovernanceOracleDeactivated(...)`
+  both indexed by the DAC address, so per-DAC oracle activity can be filtered cleanly when many DACs share an oracle
+- `VenueVersionApproved(...)` and `ExternalVoteApproved(...)`
+  surface DACDeal external voting approvals (venue version allowlist updates and per-vote ERC-1271 signature approvals)
 - `DealProposalChallenged(...)`
   surfaces the DAC challenge hold on a deal proposal
 - `DealChallengeEnabled(...)`

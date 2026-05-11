@@ -521,11 +521,11 @@ The built-in core module serves as the canonical reference implementation. Study
 |----------|------|---------|
 | `CoreModuleFactory` | `src/modules/core/CoreModuleFactory.sol` | Module factory with two deal kinds and two evaluator kinds |
 | `CoreModuleDeals` | `src/modules/core/CoreModuleDeals.sol` | Deal and evaluator kind selector definitions |
-| `DACDeal` | `src/modules/core/deals/DACDeal.sol` | Deal that deploys/manages a child DAC |
+| `DACDeal` | `src/modules/core/deals/DACDeal.sol` | Deal that deploys/manages a child DAC; reference for ERC-1271 external voting via virtual hooks |
 | `TreasuryDeal` | `src/modules/core/deals/TreasuryDeal.sol` | Deal for treasury management via Permit2 |
 | `CoreDealManagementProposals` | `src/modules/core/governance/CoreDealManagementProposals.sol` | Module-specific proposal type selectors |
 | `CoreManagementProposalFactory` | `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol` | Quorum configuration for core proposal types |
 | `MilestoneBasedEvaluator` | `src/modules/core/evaluators/MilestoneBasedEvaluator.sol` | Evaluator that checks milestone completion |
 | `RevenueBasedEvaluator` | `src/modules/core/evaluators/RevenueBasedEvaluator.sol` | Evaluator that measures revenue targets |
 
-Start with `CoreModuleFactory` to understand the wiring, then look at `DACDeal` for a full deal implementation with custom proposals, lifecycle hooks, and related contract registration.
+Start with `CoreModuleFactory` to understand the wiring, then look at `DACDeal` for a full deal implementation with custom proposals, lifecycle hooks, and related contract registration. `DACDeal` also demonstrates the ERC-1271 external voting pattern for snapshot.org-style off-chain venues, with two virtual hooks (`_executeExternalVoteSignExtension`, `_isValidSignatureExtension`) for forks adding new venues.

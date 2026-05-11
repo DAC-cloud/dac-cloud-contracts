@@ -7,6 +7,8 @@ interface ICoreDealManagementProposals {
     function createDACManagementProposal() external pure returns (bytes4);
     function voteDACManagementProposal() external pure returns (bytes4);
     function returnProfits() external pure returns (bytes4);
+    function approveVotingVenueVersion() external pure returns (bytes4);
+    function externalVoteSign() external pure returns (bytes4);
 
     // Treasury deal
     function directSpend() external pure returns (bytes4);
@@ -19,10 +21,12 @@ interface ICoreDealManagementProposals {
 }
 
 library CoreDealManagementType {
-    bytes4 public constant REINVEST_PROFITS      = ICoreDealManagementProposals.reinvestProfits.selector;               // High quorum
-    bytes4 public constant CREATE_DAC_PROPOSAL   = ICoreDealManagementProposals.createDACManagementProposal.selector;   // Default quorum
-    bytes4 public constant VOTE_DAC_PROPOSAL     = ICoreDealManagementProposals.voteDACManagementProposal.selector;     // Default quorum, blocking allowed
-    bytes4 public constant RETURN_PROFITS        = ICoreDealManagementProposals.returnProfits.selector;                 // Default quorum
+    bytes4 public constant REINVEST_PROFITS              = ICoreDealManagementProposals.reinvestProfits.selector;               // High quorum
+    bytes4 public constant CREATE_DAC_PROPOSAL           = ICoreDealManagementProposals.createDACManagementProposal.selector;   // Default quorum
+    bytes4 public constant VOTE_DAC_PROPOSAL             = ICoreDealManagementProposals.voteDACManagementProposal.selector;     // Default quorum, blocking allowed
+    bytes4 public constant RETURN_PROFITS                = ICoreDealManagementProposals.returnProfits.selector;                 // Default quorum
+    bytes4 public constant APPROVE_VOTING_VENUE_VERSION  = ICoreDealManagementProposals.approveVotingVenueVersion.selector;     // High quorum, blocking allowed
+    bytes4 public constant EXTERNAL_VOTE_SIGN            = ICoreDealManagementProposals.externalVoteSign.selector;              // Default quorum, blocking allowed
 
     bytes4 public constant APPROVE_DIRECT_SPEND  = ICoreDealManagementProposals.directSpend.selector;                   // High quorum
     bytes4 public constant APPROVE_PERMIT2_SPEND = ICoreDealManagementProposals.approvePermit2Spend.selector;           // Default quorum, blocking allowed

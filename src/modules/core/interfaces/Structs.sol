@@ -6,6 +6,23 @@ struct DACDealConfig {
     bytes config;
 }
 
+// EIP-712 payload for snapshot.org Vote messages (single-choice variant).
+// Fields mirror snapshot.js Vote type 1:1 — strings are taken verbatim from
+// the proposer; no on-chain stringification. `from` must equal the lowercase
+// hex of the DACDeal address (else snapshot's call routes elsewhere).
+struct SnapshotV1Payload {
+    string version;     // snapshot.js domain version, e.g. "0.1.4"; must be approved
+    string from;        // DACDeal address as string; matched verbatim
+    string space;
+    uint64 timestamp;
+    string proposal;
+    uint32 choice;
+    string reason;
+    string app;
+    string metadata;
+    uint64 expiry;      // approval auto-invalidates after this unix ts
+}
+
 struct TreasurySpendAllowance {
     uint160 totalAmount;
     uint160 singleTxAmount;

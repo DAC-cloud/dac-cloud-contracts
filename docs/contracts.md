@@ -1,6 +1,6 @@
 # DAC Cloud Contract Inventory
 
-Updated: April 7, 2026
+Updated: May 11, 2026
 
 For the architectural overview, see [architecture.md](architecture.md). For scripts and manifests, see [development.md](development.md).
 
@@ -11,7 +11,7 @@ flowchart TB
     Factory["DACFactory"] --> Cell["DACCell"]
     Factory --> Main["MainToken / WrappedMainToken"]
     Factory --> Agent["AgentToken"]
-    Factory --> Oracle["GovernanceOracle (existing-token mode)"]
+    Factory --> Oracle["BasicGovernanceOracle (existing-token mode, multi-DAC)"]
 
     Cell --> Schema["GovernanceSchema"]
     Cell --> Assets["AssetController"]
@@ -160,16 +160,17 @@ Handles:
 - fallback durations and execution-validity configuration
 - capability-aware proposal support via the asset controller
 
-### `src/kernel/governance/GovernanceOracle.sol`
+### `src/kernel/governance/BasicGovernanceOracle.sol`
 
-Oracle publisher for hybrid DAC governance.
+Reference oracle publisher for hybrid DAC governance. A single instance can serve any number of DACs — snapshots and active state are namespaced per DAC.
 
 Features:
 
 - admin-controlled publisher set
-- proposal-specific snapshot publication
-- deactivation path
-- indexer-facing publisher/deactivation events
+- proposal-specific snapshot publication, keyed by `(dac, proposalId)`
+- per-DAC deactivation (one DAC can be turned off without affecting others sharing the oracle)
+- indexer-facing publisher/deactivation events with the DAC address indexed
+- separates the consumer-facing `IGovernanceOracle` (read-only) from the operator-facing `IBasicGovernanceOracle` so future implementations (optimistic, ZK, multi-publisher) can drop in without consumer changes
 
 ### `src/kernel/governance/Proposal.sol`
 
@@ -417,6 +418,8 @@ Core-module proposal selector registry for:
 
 - treasury operations
 - child-DAC operations
+- external voting venue management (`APPROVE_VOTING_VENUE_VERSION`)
+- external vote signature approvals (`EXTERNAL_VOTE_SIGN`)
 
 ### `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol`
 
@@ -436,6 +439,9 @@ Capabilities:
 - reinvest profits
 - return profits
 - emit `DealRelatedContract` for child DAC and child token discovery
+- approve external voting venue versions per staked-pig governance
+- approve EIP-712 external vote payloads and serve them as ERC-1271 signatures (snapshot.org single-choice as the shipped venue)
+- expose virtual hooks (`_executeExternalVoteSignExtension`, `_isValidSignatureExtension`) so forks can add new venues without modifying core paths
 
 ### `src/modules/core/deals/TreasuryDeal.sol`
 
@@ -540,6 +546,7 @@ Key governance/accounting structs and enums:
 - `src/interfaces/IExecutableProposal.sol`
 - `src/interfaces/IDealChallengeableProposal.sol`
 - `src/interfaces/IGovernanceOracle.sol`
+- `src/interfaces/IBasicGovernanceOracle.sol`
 - `src/interfaces/IGovernanceSchema.sol`
 - `src/interfaces/IAssetController.sol`
 - `src/interfaces/IModuleFactory.sol`

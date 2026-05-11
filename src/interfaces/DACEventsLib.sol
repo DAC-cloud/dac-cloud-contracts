@@ -164,6 +164,11 @@ library DACEventsLib {
     event GovernanceOracleDeactivated(address indexed oracle, address indexed dac, address caller);
     event MerkleVoted(uint256 indexed id, address indexed voter, bool support, uint256 weight, uint256 index);
 
+    // Events emitted by core module DACDeal external vote-sign surface
+
+    event VenueVersionApproved(bytes32 indexed venueId, string version, bool allowed);
+    event ExternalVoteApproved(bytes32 indexed venueId, bytes32 indexed finalHash, uint64 expiry);
+
     // Events emited by abstract Deal contract
     
     event MessageReceived(bytes4 messageKind, bytes message);

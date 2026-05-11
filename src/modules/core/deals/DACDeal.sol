@@ -13,9 +13,10 @@ import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {IDealCellAdapter} from "../../../kernel/interfaces/IDealCellAdapter.sol";
 import {AbstractDealManagementType} from "../../../kernel/governance/AbstractDealManagementProposals.sol";
 import {Deal} from "../../../kernel/Deal.sol";
-import {DACDealConfig} from "../interfaces/Structs.sol";
+import {DACDealConfig, SnapshotV1Payload} from "../interfaces/Structs.sol";
 import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.sol";
 import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../../../interfaces/DACEventsLib.sol";
 
 contract DACDeal is Deal {
     using SafeERC20 for IERC20;
@@ -25,11 +26,34 @@ contract DACDeal is Deal {
         address dacAgentToken;
     }
 
+    // ERC-1271 magic value: bytes4(keccak256("isValidSignature(bytes32,bytes)"))
+    bytes4 internal constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
+    bytes4 internal constant ERC1271_INVALID     = 0xffffffff;
+
+    // Venue discriminator for snapshot.org single-choice Vote (Vote schema with uint32 choice).
+    // Forks adding new venues should pick a distinct constant for routing.
+    bytes32 public constant VENUE_SNAPSHOT_V1 = keccak256("snapshot-v1");
+
+    // EIP-712 type hashes for snapshot. Domain only declares (name, version),
+    // so neither chainId nor verifyingContract enter the separator.
+    bytes32 internal constant SNAPSHOT_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version)");
+    bytes32 internal constant SNAPSHOT_VOTE_TYPEHASH =
+        keccak256("Vote(string from,string space,uint64 timestamp,string proposal,uint32 choice,string reason,string app,string metadata)");
+    bytes32 internal constant SNAPSHOT_NAME_HASH = keccak256(bytes("snapshot"));
+
     uint256 private _allocation;
     uint256 private _rootCapitalCallId;
-    
+
     DACCellDNA public dacCellDNA;
-    
+
+    // Allowlist of (venueId, version) pairs usable in EXTERNAL_VOTE_SIGN.
+    mapping(bytes32 => mapping(string => bool)) public approvedVenueVersions;
+
+    // Snapshot vote approvals keyed by reconstructed EIP-712 final hash.
+    // Stored payload lets isValidSignature recompute and tamper-check on read.
+    mapping(bytes32 => SnapshotV1Payload) internal approvedSnapshotVotes;
+
     // Events
     event ChildVoteCreated(uint256 indexed childProposalId, uint256 proposalId);
     event ChildVoteCasted(uint256 indexed childProposalId, bool support);
@@ -200,7 +224,9 @@ contract DACDeal is Deal {
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.CREATE_DAC_PROPOSAL ||
             params.typ == CoreDealManagementType.VOTE_DAC_PROPOSAL ||
-            params.typ == CoreDealManagementType.RETURN_PROFITS
+            params.typ == CoreDealManagementType.RETURN_PROFITS ||
+            params.typ == CoreDealManagementType.APPROVE_VOTING_VENUE_VERSION ||
+            params.typ == CoreDealManagementType.EXTERNAL_VOTE_SIGN
         );
     }
 
@@ -297,16 +323,100 @@ contract DACDeal is Deal {
         else if (typ == CoreDealManagementType.RETURN_PROFITS) {
             address token = proposal.target();
             (uint256 amount) = abi.decode(proposal.data(), (uint256));
-            
+
             require(token != IDACCell(managedEntity).getMainToken(), DACErrorsLib.NotAllowed());
 
             IERC20(token).forceApprove(dealCell, amount);
             IDealCellAdapter(dealCell).transferCapital(token, amount);
         }
 
+        else if (typ == CoreDealManagementType.APPROVE_VOTING_VENUE_VERSION) {
+            (bytes32 venueId, string memory version, bool allowed) = abi.decode(
+                proposal.data(),
+                (bytes32, string, bool)
+            );
+            require(venueId != bytes32(0), DACErrorsLib.NotAllowed());
+            require(bytes(version).length > 0, DACErrorsLib.NotAllowed());
+
+            approvedVenueVersions[venueId][version] = allowed;
+            emit DACEventsLib.VenueVersionApproved(venueId, version, allowed);
+        }
+
+        else if (typ == CoreDealManagementType.EXTERNAL_VOTE_SIGN) {
+            (bytes32 venueId, bytes memory payload) = abi.decode(proposal.data(), (bytes32, bytes));
+
+            if (venueId == VENUE_SNAPSHOT_V1) {
+                _executeSnapshotV1VoteSign(payload);
+            } else {
+                _executeExternalVoteSignExtension(venueId, payload);
+            }
+        }
+
         else {
             revert DACErrorsLib.UnsupportedProposal();
         }
+    }
+
+    function _executeSnapshotV1VoteSign(bytes memory payload) internal {
+        SnapshotV1Payload memory v = abi.decode(payload, (SnapshotV1Payload));
+
+        require(approvedVenueVersions[VENUE_SNAPSHOT_V1][v.version], DACErrorsLib.NotAllowed());
+        require(v.expiry > block.timestamp, DACErrorsLib.NotAllowed());
+
+        bytes32 finalHash = _computeSnapshotV1FinalHash(v);
+        approvedSnapshotVotes[finalHash] = v;
+
+        emit DACEventsLib.ExternalVoteApproved(VENUE_SNAPSHOT_V1, finalHash, v.expiry);
+    }
+
+    // Reconstructs snapshot.org's EIP-712 final hash from the structured payload.
+    // Pure: every input comes from `v`. Strings used verbatim — proposer-supplied
+    // `from` must equal what snapshot's backend will compute (lowercase hex of
+    // address(this) by snapshot convention) or the hash will mismatch on read.
+    function _computeSnapshotV1FinalHash(SnapshotV1Payload memory v) internal pure returns (bytes32) {
+        bytes32 domainSeparator = keccak256(abi.encode(
+            SNAPSHOT_DOMAIN_TYPEHASH,
+            SNAPSHOT_NAME_HASH,
+            keccak256(bytes(v.version))
+        ));
+        bytes32 structHash = keccak256(abi.encode(
+            SNAPSHOT_VOTE_TYPEHASH,
+            keccak256(bytes(v.from)),
+            keccak256(bytes(v.space)),
+            v.timestamp,
+            keccak256(bytes(v.proposal)),
+            v.choice,
+            keccak256(bytes(v.reason)),
+            keccak256(bytes(v.app)),
+            keccak256(bytes(v.metadata))
+        ));
+        return keccak256(abi.encodePacked(bytes2(0x1901), domainSeparator, structHash));
+    }
+
+    // ERC-1271. Forks add new venues by overriding _isValidSignatureExtension —
+    // returning the magic value only for hashes they themselves approved.
+    function isValidSignature(bytes32 hash, bytes calldata) external view returns (bytes4) {
+        if (_isApprovedSnapshotV1Vote(hash)) return ERC1271_MAGIC_VALUE;
+        return _isValidSignatureExtension(hash);
+    }
+
+    function _isApprovedSnapshotV1Vote(bytes32 hash) internal view returns (bool) {
+        SnapshotV1Payload memory v = approvedSnapshotVotes[hash];
+        if (v.timestamp == 0) return false;
+        if (block.timestamp > v.expiry) return false;
+        // Tamper check: storage entry must hash back to the queried hash.
+        // Defense in depth — closes any future storage-collision class of bugs.
+        if (_computeSnapshotV1FinalHash(v) != hash) return false;
+        return true;
+    }
+
+    // Fork hooks. Override to dispatch additional venues without touching core paths.
+    function _executeExternalVoteSignExtension(bytes32, bytes memory) internal virtual {
+        revert DACErrorsLib.UnsupportedProposal();
+    }
+
+    function _isValidSignatureExtension(bytes32) internal view virtual returns (bytes4) {
+        return ERC1271_INVALID;
     }
 
     function _beforeWithdrawCapital() internal override {
