@@ -11,6 +11,7 @@ contract DACManagementProposal is Proposal {
     function initialize(
         uint256 _id,
         address _dac,
+        address _executor,
         address _token,
         ProposalParams memory params,
         uint256 _votingDuration,
@@ -21,6 +22,7 @@ contract DACManagementProposal is Proposal {
     ) external initializer {
         __Proposal_init(
             params,
+            _executor,
             _token,
             _votingDuration,
             _executionValidityDuration,

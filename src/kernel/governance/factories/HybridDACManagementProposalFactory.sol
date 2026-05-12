@@ -24,10 +24,13 @@ contract HybridDACManagementProposalFactory {
         bool highQuorum,
         bool blockingEnabled
     ) external returns (address proposal) {
+        // The caller (HybridGovernanceSchema) owns the proposal's consume-and-act
+        // lifecycle, so bind it as the proposal's only authorized executor.
         bytes memory initData = abi.encodeWithSelector(
             HybridDACManagementProposal.initialize.selector,
             id,
             dacCell,
+            msg.sender,
             wrappedToken,
             governanceOracle,
             assetControllerAddr,

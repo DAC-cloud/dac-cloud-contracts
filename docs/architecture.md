@@ -23,7 +23,7 @@ DAC Cloud was born from a simple but powerful observation: **modern organization
 
 Traditional corporations are hierarchical, slow to adapt, and misaligned between capital and execution. Classic DAOs are transparent but suffer from speculation, low skin-in-the-game for managers, and governance theater.
 
-The original "DAC engine" idea of 2021-2022 captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** -- agile teams of 5-9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
+The original "DAC engine" idea of 2022 captured the essence perfectly: large organizations should reorganize as **trees of small, autonomous DACs** -- agile teams of 5-9 people (Scrum-sized) operating as independent economic entities that make deals with each other and with the outside world.
 
 From these ideas DAC engine was born originally as a "Scrum-plugin" to enhance brand-aggregators and venture-studios businesses. With the rise of AI agents in 2026, the protocol was reborn as a corporation-as-code framework for EVM.
 

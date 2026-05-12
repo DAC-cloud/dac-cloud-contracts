@@ -23,6 +23,7 @@ contract DealManagementProposal is Proposal, IDealChallengeableProposal {
         bytes memory variables,
         ProposalParams memory params
     ) external initializer {
+        address _executor;
         address _token;
         uint256 _votingDuration;
         uint256 _executionValidityDuration;
@@ -30,9 +31,12 @@ contract DealManagementProposal is Proposal, IDealChallengeableProposal {
         uint256 _votingQuorum;
         uint256 _blockingQuorum;
 
-        (dacEntity, deal, _token, challengeable) = abi.decode(
+        // `_executor` is packed into `addresses` to keep the parameter list
+        // within stack-depth limits (the bytes packing was already used for
+        // the same reason on the rest of the address-shaped inputs).
+        (_executor, dacEntity, deal, _token, challengeable) = abi.decode(
             addresses,
-            (address, address, address, bool)
+            (address, address, address, address, bool)
         );
 
         (_votingDuration, _executionValidityDuration, _totalVotingPower, _votingQuorum, _blockingQuorum) = abi.decode(
@@ -42,6 +46,7 @@ contract DealManagementProposal is Proposal, IDealChallengeableProposal {
 
         __Proposal_init(
             params,
+            _executor,
             _token,
             _votingDuration,
             _executionValidityDuration,

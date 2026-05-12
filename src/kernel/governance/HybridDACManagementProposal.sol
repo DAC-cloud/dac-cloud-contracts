@@ -22,6 +22,12 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     address public governanceOracle;
     address public assetController;
 
+    // Only this address may call `consumeExecution`. Set at init to the schema
+    // that owns this proposal's lifecycle. Without this gate any unrelated
+    // address could mark a passed proposal as executed before the schema's
+    // legitimate consume-and-act flow, permanently DoS-ing the action.
+    address public executor;
+
     ProposalParams public proposal;
     GovernanceStrategyConfig private strategy;
 
@@ -61,6 +67,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     function initialize(
         uint256 _id,
         address _dacCell,
+        address _executor,
         address _wrappedToken,
         address _governanceOracle,
         address _assetController,
@@ -71,6 +78,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     ) external initializer {
         require(block.number > 0, DACErrorsLib.NotAllowed());
         require(_dacCell != address(0), DACErrorsLib.NotAllowed());
+        require(_executor != address(0), DACErrorsLib.NotAllowed());
         require(_wrappedToken != address(0), DACErrorsLib.NotAllowed());
         require(_assetController != address(0), DACErrorsLib.NotAllowed());
         // Oracle is only required when oracle-primary mode is enabled
@@ -83,6 +91,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
 
         id = _id;
         dacCell = _dacCell;
+        executor = _executor;
         wrappedToken = _wrappedToken;
         governanceOracle = _governanceOracle;
         assetController = _assetController;
@@ -239,6 +248,11 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     }
 
     function consumeExecution(bool requiredOutcome) external nonReentrant {
+        // Only the bound executor (the GovernanceSchema that deployed this
+        // proposal) may consume execution. Without this gate any address could
+        // mark the proposal executed and DoS the schema's consume-and-act flow.
+        require(msg.sender == executor, DACErrorsLib.NotAuthorized());
+
         _checkAndEmitResolution();
 
         require(proposalResolved && resolvedOutcome == requiredOutcome, DACErrorsLib.VoteNotPassed());

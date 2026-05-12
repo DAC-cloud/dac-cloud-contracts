@@ -122,10 +122,15 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             }
         }
 
+        // The caller is the Deal contract (the lib that runs `createStakedAgentProposal`
+        // is delegate-called from the Deal). The Deal is the only address that
+        // legitimately drives `consumeExecution` via `executeStakedAgentProposal`,
+        // so bind it as the proposal's executor. Packed into `addresses` to stay
+        // within stack-depth limits inside `DealManagementProposal.initialize`.
         bytes memory initData = abi.encodeWithSelector(
             DealManagementProposal.initialize.selector,
             id,
-            abi.encode(dac, deal, token, challengeable),
+            abi.encode(msg.sender, dac, deal, token, challengeable),
             abi.encode(votingConfig.duration, votingConfig.executionValidityDuration, totalSupply, quorum, blockingQuorum),
             params
         );

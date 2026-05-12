@@ -63,14 +63,9 @@ contract TreasuryDeal is Deal {
         }
 
         if (IDealCell(dealCell).fundingTranche(trancheId).amount > 0) {
-            require(
-                IERC20(
-                    IDealCell(dealCell).fundingTranche(trancheId).token
-                ).transfer(
-                    managedEntity, 
-                    IDealCell(dealCell).fundingTranche(trancheId).amount
-                ),
-                DACErrorsLib.TransferFailed()
+            IERC20(IDealCell(dealCell).fundingTranche(trancheId).token).safeTransfer(
+                managedEntity,
+                IDealCell(dealCell).fundingTranche(trancheId).amount
             );
         }
     }
@@ -230,10 +225,7 @@ contract TreasuryDeal is Deal {
         // to treasury (where this balance can be managed by chickens)
 
         uint256 balance = IERC20(token).balanceOf(address(this));
-        require(
-            IERC20(token).transfer(managedEntity, balance),
-            DACErrorsLib.TransferFailed()
-        );
+        IERC20(token).safeTransfer(managedEntity, balance);
 
         emit ProfitsRecovered(token, balance);
 

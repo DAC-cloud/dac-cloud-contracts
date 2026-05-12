@@ -83,6 +83,7 @@ contract HybridDACManagementProposalTest is Test {
         proposal.initialize(
             1,
             address(this),
+            address(this),
             address(wrapped),
             address(oracle),
             mockAssetController,
@@ -130,6 +131,7 @@ contract HybridDACManagementProposalTest is Test {
         proposal.initialize(
             2,
             address(this),
+            address(this),
             address(wrapped),
             address(oracle),
             mockAssetController,
@@ -175,6 +177,7 @@ contract HybridDACManagementProposalTest is Test {
         proposal.initialize(
             21,
             address(this),
+            address(this),
             address(wrapped),
             address(oracle),
             mockAssetController,
@@ -214,6 +217,7 @@ contract HybridDACManagementProposalTest is Test {
         proposal.initialize(
             22,
             address(this),
+            address(this),
             address(wrapped),
             address(oracle),
             mockAssetController,
@@ -237,6 +241,7 @@ contract HybridDACManagementProposalTest is Test {
 
         proposal.initialize(
             23,
+            address(this),
             address(this),
             address(wrapped),
             address(oracle),
@@ -286,6 +291,7 @@ contract HybridDACManagementProposalTest is Test {
 
         proposal.initialize(
             3,
+            address(this),
             address(this),
             address(wrapped),
             address(oracle),

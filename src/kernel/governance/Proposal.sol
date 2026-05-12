@@ -14,6 +14,13 @@ import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGuard, Initializable {
     bool private initialized;
 
+    // Only this address is allowed to call `consumeExecution`. For DAC proposals
+    // it is the GovernanceSchema that owns this proposal's lifecycle; for deal
+    // proposals it is the Deal contract. Without this gate, any address could
+    // mark a passed proposal as executed before the legitimate executor ran the
+    // action, permanently DoS-ing the proposal.
+    address public executor;
+
     address public token;
 
     uint256 public endTime;
@@ -40,6 +47,7 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
 
     function __Proposal_init(
         ProposalParams memory _proposal,
+        address _executor,
         address _token,
         uint256 _duration,
         uint256 _executionValidityDuration,
@@ -48,7 +56,10 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
         uint256 _blockingQuorum,
         bool _challengeEnabled
     ) internal onlyInitializing {
+        require(_executor != address(0), DACErrorsLib.NotAllowed());
+
         initialized = true;
+        executor = _executor;
 
         snapshotTime = clock();
 
@@ -116,6 +127,11 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
     }
 
     function consumeExecution(bool requiredOutcome) external virtual nonReentrant {
+        // Only the proposal's bound executor may consume execution. This blocks
+        // a permissionless DoS where any address marks the proposal executed
+        // before the legitimate executor invokes the action.
+        require(msg.sender == executor, DACErrorsLib.NotAuthorized());
+
         _checkAndEmitResolution();
 
         require(proposalResolved && resolvedOutcome == requiredOutcome, DACErrorsLib.VoteNotPassed());

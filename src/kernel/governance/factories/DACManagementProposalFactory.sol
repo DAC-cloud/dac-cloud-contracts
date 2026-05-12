@@ -58,12 +58,15 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             blockingQuorum = MathLib.mul(totalVotingSupply, votingConfig.blockingPercent);
         }
 
+        // The caller (the GovernanceSchema) owns the proposal's consume-and-act
+        // lifecycle, so bind it as the proposal's only authorized executor.
         bytes memory initData = abi.encodeWithSelector(
             DACManagementProposal.initialize.selector,
-            id, 
-            dac, 
-            token, 
-            proposalParams, 
+            id,
+            dac,
+            msg.sender,
+            token,
+            proposalParams,
             votingConfig.duration,
             votingConfig.executionValidityDuration,
             totalVotingSupply,
