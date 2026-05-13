@@ -1,21 +1,22 @@
-# DAC Cloud Contracts - Security Audit Report
+# DAC Cloud Contracts — Security Audit Report
 
-**Audit Date:** April 14, 2026
-**Auditor:** Claude Opus 4.6 (Automated Security Review)
+**Audit Date:** May 12, 2026
+**Auditor:** Claude Opus 4.7 (1M-context, automated security review)
 **Repository:** dac-cloud-contracts
-**Commit:** `dbbd67b` (branch: `develop`)
+**Commit reviewed:** `be026d9` (branch: `develop`)
 **Solidity Version:** ^0.8.20
 **Framework:** Foundry
+**Source size:** 10,250 LoC across 88 Solidity files (`src/`)
+**Test suite at audit time:** 188 / 188 passing
+**Build status:** clean (`forge build` succeeds; one unused-import lint note in a test file unrelated to scope)
 
 ---
 
 ## 1. Executive Summary
 
-This report presents a comprehensive security audit of the DAC Cloud smart contract protocol. The audit covers all 87 Solidity source files comprising the kernel layer (DACCell, DealManager, DealCell, Deal, AssetControllers, Governance, Tokens) and the core module layer (DACDeal, TreasuryDeal, Permit2Treasury, MilestoneBasedEvaluator, RevenueBasedEvaluator).
+This is an independent re-audit of the DAC Cloud protocol following the May 2026 security-hardening round (commit `be026d9`). The prior audit (commit `6847a64`) identified one HIGH-severity vulnerability — an unauthorized `consumeExecution` permitted any address to mark a passed proposal as executed, permanently DoS-ing the legitimate execution path. That fix landed in `be026d9` and added a structural `executor` gate to every proposal type.
 
-The protocol implements a dual-token governance system for Decentralized Autonomous Companies (DACs) with two operational modes: Native (mint-based) and Existing Token (wrap-based). It features a modular deal management framework with agent staking, on-chain evaluators, and multi-phase hybrid governance.
-
-**Overall Assessment:** The codebase demonstrates strong security fundamentals. No critical or high severity vulnerabilities were identified. The architecture follows sound separation-of-concern patterns, access controls are consistently enforced, and the absence of dangerous low-level primitives (`delegatecall`, `selfdestruct`, `tx.origin`, `unchecked`) eliminates entire vulnerability classes. All 168 test cases pass.
+This audit pass was conducted as a **clean review** — no findings from prior audits were carried forward as accepted truth. The previous two audits both identified missing access-control modifiers on DAC kernel components (proposals, schemas, controllers) as the dominant vulnerability class. Per the client's explicit request, this audit applied maximum scrutiny to that pattern across every external/public function in `src/`.
 
 ### Findings Summary
 
@@ -23,511 +24,740 @@ The protocol implements a dual-token governance system for Decentralized Autonom
 |----------------|-------|
 | Critical       | 0     |
 | High           | 0     |
-| Medium         | 2     |
-| Low            | 5     |
-| Informational  | 6     |
+| Medium         | 0     |
+| Low            | 7     |
+| Informational  | 10    |
+
+**No High- or Medium-severity vulnerabilities were identified.** The H-01 executor-gate fix is correctly applied across the three proposal types (`Proposal`, `HybridDACManagementProposal`, `DealManagementProposal`) and threaded through their factories. The M-01 SafeERC20 fix is also confirmed in place on `TreasuryDeal`.
+
+The Low-severity findings cluster into three themes:
+
+1. **Latent over-broad caller gates** — `DealCell.onAgentTokenStaked` permits `msg.sender == dacCell` despite no DACCell path calling it; this is the *exact* H-01 pattern (gate looks proper but the caller set is wider than the design needs).
+2. **Governance configuration footguns** — `Permit2Treasury.approveSpendAllowance` accepts `duration == 0` and `singleTxAmount == 0`, allowing per-block drains if governance misconfigures.
+3. **Defense-in-depth gaps** — set-once functions (`WrappedMainToken.setController`, `Deal.joinDac`, `MainToken.dacInit`, `AgentToken.dacInit`) lack explicit one-shot guards; they are currently safe via caller-side bookkeeping but are not locally self-protecting.
+
+The codebase otherwise demonstrates disciplined access control. Every controller, schema, kernel, and module entry point traces to an explicit caller check (`onlyDACCell`, `onlyDealManager`, `onlyDealCell`, `onlyDeal`, `onlyAgent`, `onlyStakedAgent`, `onlyLegalWrapper`, `onlyRole`, `onlyAdmin`, `onlyAgentToken`, `onlyWrappedMainToken`, or `initializer`). The dual-mode native/hybrid architecture and ERC-1271 structured-payload defense are correctly implemented.
 
 ---
 
 ## 2. Scope
 
-### 2.1 Contracts in Scope
+### 2.1 Contracts in scope (`src/`)
 
-**Kernel Core (7 contracts)**
-- `DACCell.sol` (684 lines) - Primary DAC governance controller
-- `DACFactory.sol` (293 lines) - DAC deployment with Create2
-- `DealManager.sol` (405 lines) - Deal lifecycle management
-- `DealCell.sol` (575 lines) - Per-deal governance wrapper
-- `Deal.sol` (332 lines) - Abstract deal base with hook system
-- `ModuleFactory.sol` (53 lines) - Abstract module deployer
-- `ModuleRegistry.sol` (46 lines) - Module whitelist
+**Kernel (`src/kernel/`)** — 9 contracts + 4 libraries + adapter interfaces
 
-**Kernel Tokens (4 contracts)**
-- `MainToken.sol` (93 lines) - ERC20Votes governance token
-- `AgentToken.sol` (142 lines) - Soulbound-ish agent token with transfer restrictions
-- `StakedAgent.sol` (63 lines) - Non-transferable staking receipt token
-- `WrappedMainToken.sol` (108 lines) - Wrapped ERC20Votes for existing-token mode
+| Contract | Role |
+|---|---|
+| `DACCell.sol` | DAC kernel; routes proposals; legal-wrapper, capital-call entry points |
+| `DealManager.sol` | Deal lifecycle, evaluator routing, reward minting cap |
+| `DealCell.sol` | Per-deal governance wrapper, staking, evaluator coordination |
+| `Deal.sol` | Abstract module-deployed deal base, hook surface |
+| `DACFactory.sol` | DAC bootstrap (Create2); native + existing-token paths |
+| `ModuleRegistry.sol` | Approved-module whitelist |
+| `ModuleFactory.sol` | Abstract module deployer |
+| `controllers/NativeAssetController.sol` | Mint-backed treasury, capital calls, dividends |
+| `controllers/ExistingTokenAssetController.sol` | Reserve-backed treasury; ERC-208 controlled-supply checkpoints |
 
-**Kernel Controllers (2 contracts)**
-- `NativeAssetController.sol` (378 lines) - Treasury for native DACs
-- `ExistingTokenAssetController.sol` (392 lines) - Treasury for existing-token DACs
+**Governance (`src/kernel/governance/`)** — 7 contracts + 6 factories
 
-**Kernel Governance (6 contracts)**
-- `Proposal.sol` (231 lines) - Abstract voting proposal
-- `DACManagementProposal.sol` (36 lines) - DAC-level proposal
-- `DealManagementProposal.sol` (115 lines) - Deal-level proposal with veto challenge
-- `NativeGovernanceSchema.sol` (266 lines) - Native mode governance
-- `HybridGovernanceSchema.sol` (304 lines) - Hybrid mode governance
-- `HybridDACManagementProposal.sol` (472 lines) - Multi-phase proposal with oracle + fallback
-- `GovernanceOracle.sol` (96 lines) - Off-chain snapshot oracle
+| Contract | Role |
+|---|---|
+| `Proposal.sol` | Abstract single-channel voting proposal |
+| `DACManagementProposal.sol` | DAC-level proposal (native) |
+| `DealManagementProposal.sol` | Deal-level proposal with DAC challenge gate |
+| `HybridDACManagementProposal.sol` | Multi-phase (oracle + fallback) DAC-level proposal |
+| `NativeGovernanceSchema.sol` | Native-mode proposal policy |
+| `HybridGovernanceSchema.sol` | Hybrid-mode proposal policy |
+| `BasicGovernanceOracle.sol` | Multi-DAC reference governance oracle |
 
-**Kernel Libraries (3 libraries)**
-- `DACCellGovernanceLib.sol` (539 lines) - DAC governance logic
-- `DealCellGovernanceLib.sol` (590 lines) - Deal governance logic
-- `MathLib.sol` (101 lines) - Fixed-point percentage arithmetic
+**Tokens (`src/kernel/tokens/`)** — 4 contracts + 2 factory files
 
-**Core Module (5 contracts)**
-- `CoreModuleFactory.sol` (107 lines) - Core module router
-- `DACDeal.sol` (298 lines) - Child-DAC deal type
-- `TreasuryDeal.sol` (242 lines) - Permit2-based treasury deal
-- `Permit2Treasury.sol` (269 lines) - Agent-operated treasury
-- `MilestoneBasedEvaluator.sol` (270 lines) - Milestone evaluator
-- `RevenueBasedEvaluator.sol` (223 lines) - Revenue-cycle evaluator
+| Contract | Role |
+|---|---|
+| `MainToken.sol` | Native `ERC20Votes` governance token (timestamp clock) |
+| `WrappedMainToken.sol` | Wrap of existing token, `ERC20Votes` (block-number clock) |
+| `AgentToken.sol` | Bound-balance agent identity token with distributor flow |
+| `StakedAgent.sol` | Per-deal non-transferable `ERC20Votes` (timestamp clock) |
 
-**Also reviewed:** All 22 factory contracts, 6 interface files, proxy contract, deployment library, and all 26 test files (including 3 fuzz tests).
+**Kernel libraries (`src/kernel/libraries/`)** — 4 libraries
 
-### 2.2 Out of Scope
+| Library | Role |
+|---|---|
+| `DACCellGovernanceLib.sol` | DAC-level deal proposals, mint cap, evaluator dispatch |
+| `DealCellGovernanceLib.sol` | Deal staking, reward allocation, slashing, withdrawals |
+| `MathLib.sol` | Fixed-point percent math (delegates `mulDiv` to OZ) |
+| `DACDeployment.sol` | Create2 address prediction for DACCell |
 
-- Off-chain infrastructure (oracle publishers, frontend, indexers)
-- Third-party dependencies (OpenZeppelin, Uniswap Permit2) - assumed correct
-- Deployment scripts and seed scenarios
+**Core module (`src/modules/core/`)** — 3 deals + 2 evaluators + governance + factories
+
+| Contract | Role |
+|---|---|
+| `CoreModuleFactory.sol` | Core module router |
+| `deals/DACDeal.sol` | Child-DAC deal; on-chain child voting + ERC-1271 external-venue voting |
+| `deals/TreasuryDeal.sol` | Permit2-fronted treasury deal for agent spend/receive |
+| `deals/Permit2Treasury.sol` | Agent-operated treasury contract with on-chain + signature spend flows |
+| `evaluators/MilestoneBasedEvaluator.sol` | Milestone-driven reward/slash evaluator |
+| `evaluators/RevenueBasedEvaluator.sol` | Cycle-based revenue evaluator with auto-close |
+| `governance/CoreDealManagementProposals.sol` | Module proposal types |
+
+**Proxy + factories** — 1 proxy contract + 13 factory contracts (kernel, governance, modules, tokens)
+
+### 2.2 Out of scope
+
+- Off-chain infrastructure (oracle publishers, frontend, indexers, envio)
+- Third-party dependencies (OpenZeppelin contracts, Uniswap Permit2) — assumed correct
+- Foundry scripts under `script/` and `broadcast/`
+- Test contracts under `test/`
 
 ---
 
 ## 3. Methodology
 
-The audit employed the following approach:
+This audit applied the following process:
 
-1. **Manual code review** - Line-by-line review of every contract in `src/`
-2. **Architecture analysis** - Trust boundary mapping, access control verification, state machine validation
-3. **Attack surface enumeration** - Systematic check for OWASP smart contract vulnerabilities
-4. **Invariant analysis** - Verification of accounting invariants (treasury balances, token obligations, reward caps)
-5. **Cross-contract interaction review** - Tracing call chains across kernel-module boundaries
-6. **Test coverage analysis** - Review of existing test suite (168 tests, all passing)
+1. **Manual line-by-line review** of every contract in `src/`, plus the libraries used via `DELEGATECALL`.
+2. **Per-function caller-gate enumeration.** For every `external`/`public` function across the 88 source files, the expected caller was identified from architectural context, then the enforced gate was verified. A per-function table was constructed for the controllers, kernel, tokens, modules, factories, and libraries (≈420 functions in total).
+3. **Trust-boundary mapping.** For every privileged call chain, the audit traced kernel ↔ schema ↔ controller ↔ module hops to confirm each segment enforces its expected caller.
+4. **Targeted hunt for the H-01 pattern.** Every `external` function with a `require(msg.sender == X)` check was re-examined for: (a) over-broad caller sets, (b) implicit-only enforcement via EXTCODESIZE, (c) caller-checks that depend on uninitialized state, (d) functions that *look* internal but are `external` without a gate.
+5. **Vulnerability class checklist:** reentrancy, integer over/underflow, signature replay, oracle manipulation, flash-loan voting, governance griefing, MEV, initialization races, proxy upgrade exposure, dangerous low-level primitives, unbounded iteration, hash collisions, front-running on revocation/approval.
+6. **State machine validation** — proposal lifecycle (`Proposal`, `HybridDACManagementProposal`, `DealManagementProposal`), deal lifecycle (`DealCell`), treasury accounting (controllers), capital-call hash uniqueness.
+7. **Cross-contract invariants** — reward `paid ≤ unlocked ≤ limit ≤ supply headroom`, controlled vs released main-token supply, capital-call hash uniqueness, dividend Merkle leaf uniqueness, qualification-vs-quorum thresholds.
+8. **Regression check** — ran `forge test` (188 / 188 passing) and `forge build` (clean) to confirm the audit baseline is healthy.
 
-### Vulnerability Categories Checked
+### Vulnerability classes considered
 
 | Category | Result |
 |---|---|
-| Reentrancy | ReentrancyGuard used on entry points; callbacks are controlled |
-| Integer overflow/underflow | Solidity 0.8 checked arithmetic; no `unchecked` blocks |
-| Access control bypass | All modifiers verified; role separation is consistent |
-| Front-running | Governance proposals use snapshot-based voting |
-| Oracle manipulation | External oracle dependency noted (see L-03) |
-| Flash loan attacks | Token snapshots use past-block values |
-| Proxy risks | UUPS proxies are non-upgradeable (no upgrade function exposed) |
-| Denial of service | Unbounded iteration noted (see M-02) |
-| Signature malleability | Permit2 signatures delegated to audited Uniswap contract |
-| `tx.origin` abuse | Not used anywhere |
-| `delegatecall` injection | Not used anywhere |
-| `selfdestruct` griefing | Not used anywhere |
-| Unchecked return values | Identified in token transfers (see M-01) |
+| Reentrancy | `nonReentrant` on entry points; callback ladder properly gated |
+| Integer over/underflow | Solidity 0.8 checked arithmetic; floor-at-zero subtraction across controllers |
+| Access-control bypass | None confirmed in current code; one latent over-broad gate flagged (L-01) |
+| Front-running | Snapshot voting; revoke vs spend race noted (I-09) |
+| Oracle manipulation | Evaluator oracle calls lack response validation (carryover from prior L-01); not re-flagged here as the prior recommendation stands |
+| Flash-loan voting | Snapshot-based, ERC20Votes; immune |
+| Proxy upgrade | UUPS-style proxy expose **no** `_authorizeUpgrade` in implementations; effectively non-upgradeable |
+| Denial of service | None high-severity; latent finding documented at L-01 |
+| Signature malleability | Permit2 signatures delegated to Uniswap-audited contract; ERC-1271 path uses structured-payload reconstruction (verified intact) |
+| `tx.origin` / `delegatecall` / `selfdestruct` / `unchecked` | Not used in `src/` |
+| Initialization races | All implementations call `_disableInitializers()`; proxies use `initializer` modifier or mutually-exclusive guard flags |
+| Hash collisions | EIP-712 domain separator for snapshot.org cannot collide with EIP-2612; Permit2Treasury keys are per-instance |
 
 ---
 
-## 4. Architecture Overview
-
-### 4.1 System Design
+## 4. Architecture Recap (for context)
 
 ```
-DACFactory (immutable deployer)
- |
- +-- DACCell (governance hub)
-      |-- MainToken (ERC20Votes, governance weight)
-      |-- AgentToken (bounded-transfer, agent identity)
-      |-- AssetController (treasury, capital calls, dividends)
-      |-- GovernanceSchema (proposal creation, voting config)
-      |-- ModuleRegistry (approved module whitelist)
-      |-- DealManager (deal lifecycle)
-           |-- DealCell[n] (per-deal governance)
-           |    |-- StakedAgent (non-transferable receipt)
-           |    |-- Deal (module-deployed logic)
-           |    |-- Evaluator[n] (performance evaluation)
-           |    +-- Tranche[n] (funding tranches)
-           +-- ...
+DACFactory (immutable)
+ ├─ deployDAC()              → native mode
+ └─ deployExistingTokenDAC() → existing-token mode
+     │
+     ├─ Native:    MainToken (ERC20Votes/timestamp)  + NativeAssetController + NativeGovernanceSchema
+     └─ Existing:  WrappedMainToken (ERC20Votes/block#) + ExistingTokenAssetController + HybridGovernanceSchema (+ BasicGovernanceOracle)
+     │
+     ├─ DACCell                  → routes proposals to schema
+     ├─ AgentToken               → operator identity, distributor flow
+     ├─ ModuleRegistry           → approved modules
+     ├─ DealManager              → deal lifecycle, evaluator dispatch
+     │   └─ DealCell[N]
+     │       ├─ StakedAgent       → non-transferable deal-local voting
+     │       ├─ Deal             → module-deployed logic
+     │       │   ├─ DACDeal      → child-DAC + ERC-1271 external votes
+     │       │   └─ TreasuryDeal → Permit2Treasury (agent spend/receive)
+     │       └─ Evaluator[M]
+     └─ GovernanceSchema         → proposal qualification + execution gate
 ```
 
-### 4.2 Trust Model
+### Key trust properties (verified)
 
-- **No admin keys.** The DACFactory is immutable; once a DAC is deployed, governance is fully on-chain.
-- **Dual-token separation.** Main token holders (LPs / "chickens") vote on capital allocation. Agent token holders ("pigs") propose and execute deals. Neither role can unilaterally override the other.
-- **Module boundary.** The kernel deploys DealCells; modules deploy Deals. Modules cannot control DealCell initialization, preventing rogue modules from manipulating the governance wrapper.
-- **Evaluator isolation.** Evaluators can recommend reward/slash actions but the kernel enforces caps. Even a compromised evaluator + deal pair cannot mint rewards beyond the governance-approved `rewardsLimit`.
-- **Challenge mechanism.** Deal proposals can be challenged by DAC-level veto proposals, creating a two-tier governance check.
-
-### 4.3 Positive Security Patterns Observed
-
-- `_disableInitializers()` in all implementation constructors prevents implementation contract initialization
-- `Initializable` on every proxy-deployed contract prevents re-initialization
-- No use of `selfdestruct`, `delegatecall`, `tx.origin`, or `unchecked` blocks
-- Consistent custom error usage throughout (gas-efficient, descriptive)
-- 88 events providing comprehensive audit trail
-- 27 modifiers enforcing role-based access at every boundary
-- UUPS proxies without upgrade mechanisms - contracts are effectively immutable post-deployment
-- Snapshot-based voting prevents flash-loan vote manipulation
-- Reward minting is double-capped: evaluator `permitMint` + kernel `rewardsPaid <= rewardsUnlocked <= rewardsLimit`
+- **No admin keys.** `DACFactory` is immutable. Once deployed, each DAC is fully on-chain-governed.
+- **Per-DAC oracle namespacing.** `BasicGovernanceOracle` snapshots and active flags are keyed by `(dac, proposalId)`; deactivating one DAC does not affect others sharing the oracle.
+- **Reward double-cap.** Per-deal minting is bounded by `rewardsPaid ≤ rewardsUnlocked ≤ rewardsLimit`, with `rewardsLimit` set only via DAC governance.
+- **Module isolation.** Modules deploy `Deal`; the kernel deploys `DealCell`. A rogue module cannot manipulate the governance wrapper.
+- **Executor binding on every proposal.** `Proposal`, `HybridDACManagementProposal`, and `DealManagementProposal` all store an immutable `executor` set to `msg.sender` at the factory hop; `consumeExecution` requires `msg.sender == executor`. The factories are correctly self-binding (the only caller in legitimate flow is the schema or Deal that owns the proposal's consume-and-act lifecycle).
+- **EIP-2612 permit-collision defense intact.** `DACDeal` stores the *structured* snapshot.org payload and reconstructs the EIP-712 hash on every `isValidSignature` read; the domain separators of EIP-2612 (`name, version, chainId, verifyingContract`) and snapshot v1 (`name, version`) cannot collide.
 
 ---
 
 ## 5. Findings
 
-### MEDIUM SEVERITY
-
-#### M-01: Inconsistent ERC20 Transfer Handling May Block Non-Standard Tokens
-
-**Location:** `NativeAssetController.sol`, `ExistingTokenAssetController.sol`, `DealCellGovernanceLib.sol`
-
-**Description:**
-Token transfers in the AssetController contracts and governance library use bare `require(IERC20(token).transfer(...))` and `require(IERC20(token).transferFrom(...))` patterns instead of SafeERC20's `safeTransfer`/`safeTransferFrom`. Non-standard ERC20 tokens that do not return a boolean value (e.g., USDT, BNB, OMG) will cause these calls to revert at the ABI decoding level.
-
-**Affected code paths (representative samples):**
-
-```solidity
-// NativeAssetController.sol:76
-require(IERC20(token).transferFrom(from, address(this), amount), DACErrorsLib.TransferFailed());
-
-// NativeAssetController.sol:201
-require(IERC20(token).transfer(dealManager, fundingAmount), DACErrorsLib.TransferFailed());
-
-// DealCellGovernanceLib.sol:326-330
-require(IERC20(tranche.token).transfer(address(deal), tranche.amount), DACErrorsLib.TransferFailed());
-```
-
-In contrast, the module-level contracts (`DACDeal.sol`, `TreasuryDeal.sol`, `Permit2Treasury.sol`) correctly use `SafeERC20`:
-
-```solidity
-// Permit2Treasury.sol:99
-IERC20(token).safeTransfer(destination, amount);
-```
-
-**Impact:** A DAC configured with a non-standard ERC20 as its treasury token or deal funding token would be unable to execute capital flows (funding approvals, dividend payouts, capital returns). No funds are at risk since the transactions would revert, but the DAC would be non-functional for those token types.
-
-**Recommendation:** Replace all bare `transfer`/`transferFrom` calls in `NativeAssetController`, `ExistingTokenAssetController`, and `DealCellGovernanceLib` with SafeERC20 wrappers (`safeTransfer`, `safeTransferFrom`). Alternatively, document non-standard tokens as unsupported.
-
----
-
-#### M-02: Unbounded Linear Iteration Over Holders Array
-
-**Location:** `DealCellGovernanceLib.sol` - `stake()`, `addStake()`, `markAsSuccess()`, `markAsFailed()`, `_allocateStakerRewards()`, `whitelistHolders()`
-
-**Description:**
-Multiple functions iterate over the `holders[]` storage array with `O(n)` complexity:
-
-```solidity
-// DealCellGovernanceLib.sol:54-58
-bool newHolder = true;
-for (uint256 i = 0; i < holders.length; i++) {
-    if (holders[i] == staker) {
-        newHolder = false;
-    }
-}
-```
-
-This pattern appears in staking (duplicate check), reward allocation (pro-rata distribution), slashing (per-holder slash), and whitelist toggling (invite all holders). When `agentsLimit` is set to 0 (unlimited), the array can grow without bound.
-
-**Impact:** Gas costs scale linearly with the number of stakers. For deals with many agents:
-- `evaluateDeal` → `markAsSuccess` → `_allocateStakerRewards`: iterates all holders per evaluation
-- `evaluateDeal` → `markAsFailed` → iterates all holders to slash
-- Staking iterates all holders to check for duplicates
-
-A deal with hundreds of agents could face gas costs exceeding block gas limits during evaluation, effectively bricking the deal.
-
-**Recommendation:**
-- Consider using a `mapping(address => bool)` for the duplicate check in `stake()` and `addStake()`
-- Document a practical upper bound for `agentsLimit` (e.g., 50-100 agents)
-- Consider lazy reward distribution (claim-based) instead of push-based allocation if larger agent counts are needed
-
----
-
 ### LOW SEVERITY
 
-#### L-01: Simplified MathLib.mulDiv Incorrect for 512-bit Products
+#### L-01: `DealCell.onAgentTokenStaked` over-broad caller gate (matches H-01 pattern)
 
-**Location:** `MathLib.sol:20-41`
-
-**Description:**
-The assembly `mulDiv` function performs full 512-bit product computation but only divides the lower 256-bit word:
+**Severity:** Low
+**Location:** `src/kernel/DealCell.sol:209-222`
 
 ```solidity
-result := div(prod0, denominator)
-```
+function onAgentTokenStaked(address staker, uint256 amount) external {
+    require(msg.sender == agentTokenAddr || msg.sender == dacCell, DACErrorsLib.NotAuthorized());
 
-For products where `x * y > 2^256` and the adjusted `prod1 > 0`, this discards the high word and returns an incorrect result. The overflow check (`denominator > prod1`) prevents some but not all such cases.
+    require(!approved, DACErrorsLib.DealAlreadyApproved());
+    if (isWhitelistOnly) {
+        require(isWhitelisted[staker], DACErrorsLib.NotWhitelistedAgent());
+    }
 
-**Impact:** Low. All current usage involves SCALE (1e18) operations on token amounts that stay well within 256-bit single-word products. The function correctly reverts for very large inputs via the overflow guard.
-
-**Recommendation:** If larger value ranges may be needed in future modules, replace with OpenZeppelin's `Math.mulDiv` which handles full 512-bit division. For current usage, document the valid input range (e.g., `x * y < 2^256`).
-
----
-
-#### L-02: Stale `sleepingCells` Entry After `startDAC`
-
-**Location:** `DACFactory.sol:165-178`
-
-**Description:**
-When `startDAC` is called to initialize a deferred DAC, the `sleepingCells[deferInitCell]` mapping entry is validated but never deleted:
-
-```solidity
-function startDAC(...) external {
-    bytes32 deferInitCell = keccak256(abi.encode(msg.sender, dacCell));
-    require(sleepingCells[deferInitCell] != bytes32(0), SleepingCellNotFound());
-    bytes32 deferInitCalldata = keccak256(abi.encode(config, mainTokenAddr, agentTokenAddr));
-    require(sleepingCells[deferInitCell] == deferInitCalldata, DNAMismatch());
-    _initializeDAC(DACCell(dacCell), config, mainTokenAddr, agentTokenAddr);
-    // sleepingCells[deferInitCell] not deleted
+    stake(staker, amount);
+    deal.onVoluntaryStake(staker, amount);
 }
 ```
 
-**Impact:** Minimal. The `initializeAfterDeployment` call inside `_initializeDAC` sets `cellStarted = true` on the DACCell, so replay is prevented by the DACCell's own guard. The stale mapping entry wastes ~20k gas worth of storage.
-
-**Recommendation:** Add `delete sleepingCells[deferInitCell]` after successful initialization. Also provides gas refund.
-
----
-
-#### L-03: External Oracle Dependency in Evaluators
-
-**Location:** `MilestoneBasedEvaluator.sol:267-269`, `RevenueBasedEvaluator.sol`
-
 **Description:**
-Both evaluators call `IPriceOracle(oracle).tokenPrice(token)` for valuation calculations. The `IPriceOracle` interface is minimal (single `tokenPrice` function) and the contract assumes the oracle returns a normalized 18-decimal price.
 
-```solidity
-function getOraclePrice(address oracle, address token) internal view returns (uint256) {
-    return IPriceOracle(oracle).tokenPrice(token);
-}
-```
+The caller gate permits either `agentTokenAddr` *or* `dacCell`. The legitimate call path is `AgentToken.stakeToDeal` (or `forceStakeToDeal`) — both of which:
 
-No validation is performed on the oracle response (staleness, zero-price, extreme values).
+1. First transfer agent tokens to the dealCell via `_transfer(staker, dealCell, amount)`.
+2. Then notify the dealCell via `IDealCellAdapter(dealCell).onAgentTokenStaked(staker, amount)`.
 
-**Impact:** A manipulated or malfunctioning oracle could cause evaluators to report incorrect progress, leading to unearned rewards or unjust slashing. The risk is bounded by the evaluator's `rewardShare` cap and the deal's `rewardsLimit`.
+`onAgentTokenStaked` does **bookkeeping only** — it mints staked-agent tokens, appends the staker to `holders[]`, and notifies the Deal. The actual token movement is the caller's responsibility.
+
+A grep across `src/` confirms that **no DACCell path calls `onAgentTokenStaked`.** The `|| msg.sender == dacCell` branch is dead code today.
+
+**Why this matters:**
+
+This is the exact pattern that produced H-01 in the prior audit — a caller gate that *looks* properly modifier-protected but admits more callers than the design needs. If a future code change ever has DACCell invoke `onAgentTokenStaked` (for any reason — refactor, new feature, accidental routing), the bookkeeping would record a stake **without an actual agent-token transfer** to the dealCell. The resulting invariant violations:
+
+- `dealCell.balanceOf(agentToken) < stakedAgent.totalSupply()` — the dealCell holds fewer real agent tokens than it has issued staked-agent claims against.
+- Subsequent `unstake` calls would attempt `agentToken.transfer(agent, agentStake)` and fail (insufficient balance), bricking unstake for legitimate stakers.
+
+**Impact today:** None. The function is unreachable via the dacCell branch in current code.
+**Impact under any future code change:** High — invariant breakage + potential brick.
 
 **Recommendation:**
-- Add sanity checks on oracle responses (non-zero, within reasonable bounds)
-- Consider supporting Chainlink-style oracle interfaces with staleness checking
-- Document oracle requirements and trust assumptions for module developers
+
+Drop the `|| msg.sender == dacCell` branch. The gate should be simply:
+
+```solidity
+require(msg.sender == agentTokenAddr, DACErrorsLib.NotAuthorized());
+```
+
+This is exactly the kind of latent surface the user's audit guidance was directing attention toward: the H-01 fix closed one missing-modifier hole; this is the same class one layer deeper. Cheap to fix, durable improvement.
 
 ---
 
-#### L-04: `_freeBalance` Underflow Reverts on Invariant Violation
+#### L-02: `Permit2Treasury.approveSpendAllowance` does not validate `duration > 0` / `singleTxAmount > 0`
 
-**Location:** `NativeAssetController.sol:339-341`, `ExistingTokenAssetController.sol:356-358`
+**Severity:** Low
+**Location:** `src/modules/core/deals/Permit2Treasury.sol:107-125, 208-227`
 
 **Description:**
+
+`approveSpendAllowance` stores a `TreasurySpendAllowance` struct verbatim from governance proposal data with no validation:
+
 ```solidity
-function _freeBalance(address token) internal view returns (uint256) {
-    return treasuryBalances[token] - committedBalances[token];
+function approveSpendAllowance(
+    address agent,
+    address token,
+    address destination,
+    TreasurySpendAllowance memory allowance
+) external onlyDeal {
+    bytes32 calldataHash = keccak256(abi.encode(agent, token, destination));
+    agentAllowance[calldataHash] = allowance;
+    ...
 }
 ```
 
-If `committedBalances[token]` ever exceeds `treasuryBalances[token]` due to an accounting edge case, this subtraction reverts via Solidity 0.8 underflow protection, blocking all treasury operations that call `_freeBalance` (funding approvals, dividend payouts, minting).
+The runtime enforcement in `executeAgentSpend` is:
 
-**Impact:** Low. The invariant `treasuryBalances >= committedBalances` is maintained by the contract logic. However, a bug in commitment tracking (e.g., double-committing) would make the treasury permanently non-functional for that token rather than gracefully degrading.
+```solidity
+require(agentAllowance[calldataHash].totalAmount >= amount, SpendNotApproved());
+require(agentAllowance[calldataHash].singleTxAmount >= amount, InvalidDealSize());
+require(agentAllowance[calldataHash].clockLimit < clock(), InvalidDealTimeBounds());
 
-**Recommendation:** Consider adding a view function to detect invariant violations for monitoring, or using a `>=` check with a zero floor to preserve partial functionality.
+agentAllowance[calldataHash].totalAmount -= amount;
+agentAllowance[calldataHash].clockLimit = clock() + agentAllowance[calldataHash].duration;
+```
+
+If governance approves an allowance with `duration == 0`, the `clockLimit < clock()` rate-limit check effectively becomes "next call in the next block." On Ethereum L1 that's a 12s rate; on Base/Optimism, ~2s. Combined with a generous `singleTxAmount` and `totalAmount`, this becomes "no meaningful rate limit, drain at chain speed."
+
+If `singleTxAmount == 0`, every spend reverts at the second require — making the allowance useless rather than dangerous, but still a config error.
+
+**Impact:**
+
+A configuration mistake in a governance proposal (forgetting to set `duration`, or passing zero by accident in encoded data) creates an allowance whose runtime cap is effectively just `totalAmount`. The agent can drain the full `totalAmount` over a small number of blocks instead of the intended slow stream.
+
+The damage is bounded by `totalAmount` — governance still sets the total cap. So this is a footgun, not a vulnerability with unbounded loss. But governance approves with the expectation of a rate-limited spend; the expectation is silently violated.
+
+**Recommendation:**
+
+Add structural validation in `approveSpendAllowance`:
+
+```solidity
+require(allowance.duration > 0, InvalidAllowance());
+require(allowance.singleTxAmount > 0, InvalidAllowance());
+require(allowance.singleTxAmount <= allowance.totalAmount, InvalidAllowance());
+```
+
+The `singleTxAmount <= totalAmount` ordering check is also worth adding (a higher `singleTxAmount` than `totalAmount` is incoherent).
 
 ---
 
-#### L-05: No Timelock on Governance Parameter Changes
+#### L-03: `Permit2Treasury.executeAgentSpend` wildcard fallthrough is unintuitive
 
-**Location:** `DACCell.sol:467-601`, `NativeGovernanceSchema.sol:146-165`
+**Severity:** Low
+**Location:** `src/modules/core/deals/Permit2Treasury.sol:208-227`
 
 **Description:**
-Governance configuration changes (voting config, legal wrapper, module additions/removals, governance strategy) take effect immediately upon proposal execution. There is no delay between vote completion and parameter activation.
+
+`executeAgentSpend` first looks up the per-destination allowance `(agent, token, destination)`. If `totalAmount == 0` at that key, it silently falls through to the wildcard allowance `(agent, token, address(0))`:
 
 ```solidity
-function _executeVotingConfigUpdate(uint256 id, IManagementProposal prop) internal {
-    IGovernanceSchema(governanceSchema).setVotingConfig(abi.decode(prop.data(), (VotingConfig)));
-    // Takes effect immediately
+bytes32 calldataHash = keccak256(abi.encode(msg.sender, token, destination));
+
+if (agentAllowance[calldataHash].totalAmount == 0) {
+    // If specific destination allowance not exists,
+    //  switching to wildcard allowance
+    calldataHash = keccak256(abi.encode(msg.sender, token, address(0)));
 }
 ```
 
-**Impact:** A governance attack that lowers quorum requirements could cascade: a malicious quorum reduction is immediately effective, making subsequent malicious proposals easier to pass. The `executionValidityDuration` window provides some protection, but a coordinated attack within a single voting cycle could be effective.
+This means: an explicitly-set per-destination allowance whose `totalAmount` has been drained to 0 (or that was never set) **falls through to the wildcard.** A governance proposer who set up `(agent, token, dest1) → 100 tokens` expecting that to be the cap for `dest1` may not realize the agent, once drained, will continue spending from the wildcard pool.
 
-**Recommendation:** Consider a separate timelock or a two-step process for sensitive parameter changes (quorum reduction, module removal, governance oracle changes). This is a common pattern in DAO governance (e.g., OpenZeppelin TimelockController).
+The wildcard pool's `totalAmount` IS decremented correctly, so the *overall* cap is still enforced. But the *per-destination* cap is not what the proposer might expect.
+
+This is the same logic on `executeReceivePermit2` and `executeReceivePermit2Signature` for `approvedAgents` (lines 165-171, 191-197) — fallthrough to wildcard on `address(0)`.
+
+**Impact:**
+
+Governance UX confusion. The per-destination allowance behaves as a "booster" on top of the wildcard, not as a separate cap. No funds are at risk beyond the wildcard's `totalAmount`.
+
+**Recommendation:**
+
+Either:
+1. **Document** the fallthrough semantics explicitly in NatSpec on `approveSpendAllowance` / `executeAgentSpend` so governance proposers know what they're signing up for.
+2. **Distinguish "never set" from "drained"** via a `bool exists` flag on the struct, so a drained specific allowance does *not* fall through.
+
+Option 1 is the lower-effort path and is sufficient if the design intent matches the current behavior.
+
+---
+
+#### L-04: `WrappedMainToken.setController` is set-once *by convention*, not by guard
+
+**Severity:** Low
+**Location:** `src/kernel/tokens/WrappedMainToken.sol:37-40`
+
+```solidity
+function setController(address _controller) external onlyAdmin {
+    require(_controller != address(0), DACErrorsLib.NotAllowed());
+    controller = _controller;
+}
+```
+
+`admin` is the DACCell, set during init. In current flows, `DACCell.initializeExistingTokenAfterDeployment` (line 202) calls `setController` exactly once. The DACCell has no other public path that calls `setController` later.
+
+Switching the controller would in principle break asset-controller invariants — controlled-balance tracking, votable supply, `_controlledBalanceCheckpoints`. The safety relies entirely on DACCell never being induced to call `setController` again. Currently true, but a defensive `require(controller == address(0))` guard would make the invariant local and explicit, surviving any future refactor of the DACCell wiring.
+
+**Recommendation:**
+
+Add a first-call lock:
+
+```solidity
+function setController(address _controller) external onlyAdmin {
+    require(_controller != address(0), DACErrorsLib.NotAllowed());
+    require(controller == address(0), DACErrorsLib.AlreadyInitialized());
+    controller = _controller;
+}
+```
+
+---
+
+#### L-05: `DealManager._onlyDealCell` relies on implicit EXTCODESIZE rather than explicit existence
+
+**Severity:** Low
+**Location:** `src/kernel/DealManager.sol:384-389`
+
+```solidity
+function _onlyDealCell(address dealCell) internal view {
+    require(
+        IModuleFactory(dealState[dealCell].module).isActive(),
+        DACErrorsLib.InvalidDeal(dealCell)
+    );
+}
+```
+
+This modifier intends "msg.sender is a registered dealCell whose module is currently active." But it does not explicitly check that msg.sender is registered. The implicit check is:
+
+- For unregistered msg.sender, `dealState[msg.sender].module == address(0)`.
+- Solidity's compiler injects an EXTCODESIZE check before the external `.isActive()` call on a contract-type cast, so calling a method on `address(0)` reverts with "address with no code."
+
+This means the modifier *currently* rejects unregistered callers — but only via that implicit compiler-injected check. If a future Solidity version ever loosens that check (unlikely but possible), or if the function were ever ported to a context where the check is skipped (low-level call, assembly), the modifier would silently accept unregistered callers whose dealState happens to have a stale or unrelated module pointer.
+
+**Impact today:** None — Solidity 0.8.20 enforces the EXTCODESIZE check.
+**Impact under future compiler/refactor changes:** Possible bypass.
+
+**Recommendation:**
+
+Make the existence check explicit:
+
+```solidity
+function _onlyDealCell(address dealCell) internal view {
+    require(dealState[dealCell].deal != address(0), DACErrorsLib.NotAuthorized());
+    require(
+        IModuleFactory(dealState[dealCell].module).isActive(),
+        DACErrorsLib.InvalidDeal(dealCell)
+    );
+}
+```
+
+---
+
+#### L-06: `Deal.joinDac` is not explicitly one-shot guarded
+
+**Severity:** Low
+**Location:** `src/kernel/Deal.sol:78-84`
+
+```solidity
+function joinDac(address _dealCell) external {
+    require(msg.sender == factory, DACErrorsLib.NotAuthorized());
+    dealCell = _dealCell;
+}
+```
+
+`factory` is set in `__Deal_init` and never rotated. The legitimate flow calls `joinDac` exactly once during deal deployment. There is no explicit guard preventing the factory from calling it again later.
+
+Currently safe because `DealCellFactory.deployCell` is the only caller of `joinDac` and it's only invoked once per deal during the kernel's deployment flow. A defensive `require(dealCell == address(0), AlreadyInitialized())` makes the invariant local.
+
+**Recommendation:**
+
+```solidity
+function joinDac(address _dealCell) external {
+    require(msg.sender == factory, DACErrorsLib.NotAuthorized());
+    require(dealCell == address(0), DACErrorsLib.AlreadyInitialized());
+    dealCell = _dealCell;
+}
+```
+
+---
+
+#### L-07: `Permit2Treasury` allowance/approval entries are overwrite-on-write rather than incremental
+
+**Severity:** Low
+**Location:** `src/modules/core/deals/Permit2Treasury.sol:113-114, 142-149`
+
+```solidity
+function approveSpendAllowance(...) external onlyDeal {
+    bytes32 calldataHash = keccak256(abi.encode(agent, token, destination));
+    agentAllowance[calldataHash] = allowance;   // overwrite, not increment
+    ...
+}
+
+function approveReceive(...) external onlyDeal {
+    bytes32 calldataHash = keccak256(abi.encode(agent, token, source));
+    approvedAgents[calldataHash] = amount;       // overwrite, not increment
+    ...
+}
+```
+
+Each new governance proposal targeting the same `(agent, token, destination)` tuple silently **replaces** the prior entry. Remaining unspent balance from the prior allowance is discarded. A proposer who expects "approve another 100 in addition to the existing 50" gets "set to 100, lose the remaining unspent portion of 50."
+
+**Impact:**
+
+Surprise governance behavior. Funds are not lost (the treasury still holds them), but the agent's spendable pool is reset rather than extended.
+
+**Recommendation:**
+
+Either:
+1. **Document** the overwrite semantics in NatSpec on the proposal types `APPROVE_AGENT_SPEND` and `ASSIGN_CLAIMER`.
+2. Change to additive: `agentAllowance[calldataHash].totalAmount += allowance.totalAmount;` (while still overwriting `singleTxAmount` / `clockLimit` / `duration` since those are caps, not pools).
+
+Option 1 is the simpler path if overwrite is the intended semantic. Note that overwrite is also necessary for *decreasing* an allowance — additive-only would force `REVOKE_AGENT → APPROVE_AGENT_SPEND` for any reduction. So full additive is undesirable; the right move may be a per-field policy or a separate "extend allowance" proposal type.
 
 ---
 
 ### INFORMATIONAL
 
-#### I-01: Typo in Function Name `rewokeAgent`
+#### I-01: `DACCellGovernanceLib.approveFunding` is orphan library code
 
-**Location:** `Permit2Treasury.sol:129`
+**Location:** `src/kernel/libraries/DACCellGovernanceLib.sol:229-262`
+
+This `public` library function is not called from anywhere in `src/`. Confirmed via grep: no kernel contract or library imports it. Its responsibilities (validating stake, transferring funding, decrementing treasury) have been superseded by `executeTrancheApprove` on the same library and `approveFunding` on the asset controllers.
+
+Leaving orphan library code in the tree is an attractive nuisance — a future contributor (human or AI) might wire it into a new callsite, missing that its caller-side gate assumptions no longer match the kernel's invariants. **Recommend deletion** for the same reason `DACCellCapitalLib.sol` was deleted in the prior round.
+
+#### I-02: `UUPSProxy` name is misleading — no UUPS upgrade path is exposed
+
+**Location:** `src/kernel/proxies/UUPSProxy.sol`
+
+Despite the name, the proxy is a thin wrapper around OpenZeppelin's `ERC1967Proxy`. None of the implementation contracts (`DACCell`, `DealManager`, schemas, proposals, etc.) inherit `UUPSUpgradeable` or implement `_authorizeUpgrade`. Verified via grep: zero matches for `_authorizeUpgrade` or `UUPSUpgradeable` across the codebase. Deployed proxies are effectively **non-upgradeable**, matching the documented architectural intent ("DACCell has no upgrade or pause capabilities by design").
+
+The naming is harmless today but could mislead a future maintainer. Consider renaming to `NonUpgradeableProxy` or `ERC1967ProxyWrapper`, or adding a NatSpec comment clarifying that this is not a UUPS proxy.
+
+#### I-03: `MainToken.dacInit` / `AgentToken.dacInit` lack explicit one-shot guards
+
+**Locations:**
+- `src/kernel/tokens/MainToken.sol:41-50`
+- `src/kernel/tokens/AgentToken.sol:43-54`
 
 ```solidity
-function rewokeAgent(
-```
-
-Should be `revokeAgent`. This is a public function and will be part of the ABI.
-
----
-
-#### I-02: `DealManager.onMainDelegate` Declared as `view` but Calls External `view`
-
-**Location:** `DealManager.sol:305-308`
-
-```solidity
-function onMainDelegate(address from, address to) external view {
-    require(msg.sender == address(mainToken), DACErrorsLib.NotAuthorized());
-    IAssetController(assetController).onMainDelegate(from, to);
+function dacInit(address _dealManager, address _assetController) external {
+    require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+    dealManager = _dealManager;
+    _grantRole(MINTER_ROLE, _dealManager);
+    _grantRole(MINTER_ROLE, _assetController);
 }
 ```
 
-The function is `view` and calls `IAssetController.onMainDelegate` which is also `view`. This is correct but slightly unusual. The `view` modifier correctly indicates no state changes.
+Re-entry would re-grant `MINTER_ROLE` to the same addresses (idempotent, harmless), but could also pass new addresses — re-grant `MINTER_ROLE` to *new* attacker-controlled `_dealManager` / `_assetController` if the DACCell could be induced to call again.
 
----
+Currently safe via DACCell's `cellStarted` flag — `initializeAfterDeployment` is one-shot and is the only path that calls `dacInit`. So `dacInit` inherits one-shot semantics from the caller. Adding a local guard (`require(dealManager == address(0))`) would make the invariant self-protecting.
 
-#### I-03: `claimDividend` Is Permissionless by Design
+#### I-04: `Deal.createStakedAgentProposal` is permissionless
 
-**Location:** `DACCell.sol:439-455`
+**Location:** `src/kernel/Deal.sol:203-229`
 
-The function has no caller restriction. Anyone can submit a valid Merkle proof to claim dividends on behalf of a receiver. This is intentional - it enables meta-transaction relaying of dividend claims. The receiver (not the caller) receives the tokens, as enforced by the Merkle proof.
-
----
-
-#### I-04: `DealCell.onAgentTokenStaked` Lacks `nonReentrant`
-
-**Location:** `DealCell.sol:209-222`
-
-This external function calls `deal.onVoluntaryStake(staker, amount)` which is a callback to module code. While the function is access-controlled to `agentTokenAddr || dacCell`, a malicious deal contract could theoretically reenter. The risk is mitigated because:
-- The deal is deployed by a module-approved factory
-- The staker's agent tokens are already transferred before this call
-- The StakedAgent mint is the only state change after the callback
-
----
-
-#### I-05: `CoreModuleFactory` Accepts Any Evaluator-Deal Cross-Module Combination
-
-**Location:** `CoreModuleFactory.sol:64-71`
+The external function has no gate. Internal validation happens inside `DealCellGovernanceLib.checkStakedAgentProposal`, which (for the `else` branch — i.e., proposer is neither the DealCell nor the DealManager nor the Deal itself) requires:
 
 ```solidity
-function dealAcceptsEvaluator(bytes4, bytes4, address) external pure returns (bool) {
-    return true;
-}
-function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
-    return true;
+require(IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) > 0, NotStakedAgent());
+require(IVotes(stakeToken).getVotes(msg.sender) > totalSupply * qualification, NotEnoughBalance());
+```
+
+So only stakers above the qualification threshold can propose. The legitimate gate is enforced, just inside the library rather than via a modifier.
+
+No security issue — but worth noting because the function signature looks unprotected at a glance. Code-readability nit.
+
+#### I-05: Native-mode `non-controlled → controlled` MainToken transfers don't decrement `totalReleasedVotable`
+
+**Location:** `src/kernel/controllers/NativeAssetController.sol:285-306`
+
+The `onMainMove` callback handles three transitions:
+- `from == 0` (mint) → if `to` is controlled, increment `lockedMainTokens[to]` and `unreleasedMainTokens`
+- `from` controlled → either decrement (to non-controlled) or rebalance (controlled → controlled)
+- `from` non-controlled, `to` non-controlled → no-op (correct)
+
+But the case **`from` non-controlled, `to` controlled** is not handled. If a holder transfers MainTokens to (e.g.) the dealManager (controlled), the controller's bookkeeping does not register the tokens as "controlled balance" — they continue to count as `totalReleasedVotable` even though dealManager (controlled) cannot vote per `onMainDelegate`.
+
+**Impact:** The `totalReleasedVotable` over-counts the affected tokens, making the qualification threshold *higher* (safety-erring). No honest flow does this in production (the dealManager doesn't accept user main-token deposits via `transfer`), but a stray donation would inflate the threshold.
+
+The hybrid `ExistingTokenAssetController.onMainMove` (lines 298-313) handles this case correctly because it processes both directions independently. Native mode could mirror the same shape.
+
+This was documented in the prior audit as I-08; it remains unchanged.
+
+#### I-06: `Permit2Treasury` `approvedAgents` / `agentAllowance` keys are per-instance but not bound to proposal-id
+
+**Location:** `src/modules/core/deals/Permit2Treasury.sol:30-31`
+
+Each Permit2Treasury proxy has its own storage, so cross-deal collision is structurally impossible. But within one treasury, two separate governance proposals approving the same `(agent, token, destination)` tuple have no proposal-id binding — the second silently overwrites the first (per L-07).
+
+Adding a proposal-id field to the storage key would let multiple in-flight allowances coexist. Not necessary if overwrite is intentional, but worth considering.
+
+#### I-07: `DACFactory.deployDAC` salt+name uniqueness allows squatter front-runs on chosen-name salts
+
+**Location:** `src/kernel/libraries/DACDeployment.sol`
+
+`predictDACAddress` mixes `salt`, deployer (DACFactory address, fixed), `referenceImpl`, `cellFactory`, `name`, `description`, `governanceFactory` into the Create2 bytecode hash. Two different EOAs each calling `deployDAC` with the *same* `salt` + `name` + `description` + `governanceFactory` produce the same predicted address — the second `deployDAC` reverts at `Create2Failed` because a contract already exists at that address.
+
+**Impact:** A griefer can front-run a known DAC deployment by depositing at the predicted address with the chosen salt. The victim can recover by picking a different salt. Severity: nuisance.
+
+This is the standard Create2 squat issue and is acceptable design — the protocol expects deployers to use unique salts. Note it for ergonomics only.
+
+#### I-08: `Proposal.sol` and `HybridDACManagementProposal.sol` duplicate ~90% of resolution logic
+
+**Locations:** `src/kernel/governance/Proposal.sol`, `src/kernel/governance/HybridDACManagementProposal.sol`
+
+`_outcome`, `_checkAndEmitResolution`, `_isExecutableNow`, and `executionDeadline` are near-identical between the two contracts (with the hybrid version adding multi-phase state). A future bug-fix on one is easy to forget to mirror on the other.
+
+Code-hygiene only. Consider extracting into a shared `ProposalBase` internal contract, or an internal library.
+
+#### I-09: Revoke vs spend front-running on Permit2Treasury
+
+**Location:** `src/modules/core/deals/Permit2Treasury.sol:128-139, 208-227`
+
+A malicious agent who knows their allowance is about to be revoked can submit a higher-gas-priced `executeAgentSpend` ahead of the revoke proposal's execution, draining `totalAmount` first. This is the standard "revoke front-run" issue endemic to allowance-based systems. Mitigations are out of scope (would require commit-reveal or off-chain coordination); documentation is sufficient.
+
+#### I-10: `MainToken._update` and `_delegate` will revert if invoked between `initialize` and `dacInit`
+
+**Location:** `src/kernel/tokens/MainToken.sol:52-68`
+
+```solidity
+function _afterTokenTransfer(address from, address to, uint256 amount) private {
+    IDealManagerAdapter(dealManager).onMainMove(from, to, amount);
 }
 ```
 
-The core module accepts all evaluator-deal combinations from any approved module. This is a permissive design choice that relies on the module approval governance process for security.
+If any transfer or delegate operation is attempted on MainToken *after* `initialize` but *before* `dacInit` sets `dealManager`, the callback reverts (EXTCODESIZE check on `address(0)`). The legitimate flow has `DACFactory._initializeDAC` call `dacInit` via `initializeAfterDeployment` before any transfer can happen (no mint has occurred yet, no holders exist), so this is not a vulnerability.
+
+Worth noting because:
+- A test or scenario that mints MainToken directly before `dacInit` will fail confusingly.
+- A future fork or refactor that splits the deployment flow could expose the window.
+
+Cheap improvement: gate the callback on `if (dealManager != address(0))`.
 
 ---
 
-#### I-06: Assembly Usage Is Minimal and Correct
+## 6. Verification of prior High and Medium findings
 
-Three assembly blocks exist in the codebase:
+The prior audit (`6847a64`) identified one High (H-01) and one Medium (M-01) that landed in this audit's baseline. Both were verified intact:
 
-1. **`MathLib.mulDiv`** (lines 21-40) - Gas-optimized multiplication-division with overflow protection
-2. **`RevenueBasedEvaluator.evaluateDeal`** (line 182) - Dynamic array resizing: `assembly { mstore(results, resultIndex) }`
-3. **`MilestoneBasedEvaluator.evaluateDeal`** (line 195) - Same array resizing pattern
+### H-01 — `consumeExecution` executor gate
 
-All three uses are standard optimization patterns with no security implications.
+**Files verified:**
+- `src/kernel/governance/Proposal.sol:14-22, 129-142` — `executor` storage field; `consumeExecution` requires `msg.sender == executor`
+- `src/kernel/governance/HybridDACManagementProposal.sol:29, 67-94, 250-263` — same pattern on the hybrid proposal
+- `src/kernel/governance/DealManagementProposal.sol:37` — `executor` decoded from `addresses` blob and passed to `__Proposal_init`
+- `src/kernel/governance/factories/DACManagementProposalFactory.sol:67` — passes `msg.sender` as executor
+- `src/kernel/governance/factories/DealManagementProposalFactory.sol:133` — packs `msg.sender` into `addresses` blob as executor
+- `src/kernel/governance/factories/HybridDACManagementProposalFactory.sol:33` — passes `msg.sender` as executor
 
----
+The executor is structurally bound at factory-deployment to the address that ultimately drives `consumeExecution`:
+- DACManagementProposal → executor = NativeGovernanceSchema (which holds `consumeApprovedProposal` `onlyDACCell`)
+- HybridDACManagementProposal → executor = HybridGovernanceSchema (same)
+- DealManagementProposal → executor = Deal (which holds `executeStakedAgentProposal`)
 
-## 6. Gas Optimizations
+The 4 regression tests in `test/audit/ConsumeExecutionGriefingPoc.t.sol` continue to pass against the current commit.
 
-These are non-security observations that could reduce gas costs:
+### M-01 — SafeERC20 on TreasuryDeal
 
-| # | Location | Observation |
-|---|---|---|
-| G-01 | `DealCellGovernanceLib.stake:54-58` | Linear duplicate check could use a `mapping(address => bool)` lookup |
-| G-02 | `DACCellGovernanceLib.evaluateDeal:474-484` | Evaluation result loop allocates array upfront; could use dynamic sizing |
-| G-03 | `DACFactory.startDAC` | Missing `delete sleepingCells[deferInitCell]` forfeits ~4,800 gas refund |
-| G-04 | Multiple contracts | `address(0)` checks could use custom errors instead of generic `NotAllowed()` for better debugging |
+**Files verified:**
+- `src/modules/core/deals/TreasuryDeal.sol:18` — `using SafeERC20 for IERC20`
+- `src/modules/core/deals/TreasuryDeal.sol:66` — `_afterApprove` uses `safeTransfer`
+- `src/modules/core/deals/TreasuryDeal.sol:228` — `recoverProfits` uses `safeTransfer`
 
 ---
 
 ## 7. Test Coverage
 
-### 7.1 Test Suite Results
+### 7.1 Suite results on commit `be026d9`
 
 ```
-Total tests:    168
-Passing:        168
-Failing:          0
-Skipped:          0
+Total tests:    188
+Passing:        188
+Failing:        0
+Skipped:        0
 ```
 
-### 7.2 Test Categories
+### 7.2 Categories
 
-| Category | Tests | Description |
+| Category | Tests | Notes |
 |---|---|---|
-| DealGovernanceFlowTest | 23 | Proposal lifecycle, voting, execution, veto challenges |
-| Permit2TreasuryTest | 17 | Agent spend/receive, Permit2 flows, revocation |
-| RevenueBasedEvaluatorTest | 17 | Revenue cycles, slashing, auto-close, grace periods |
-| DealCellGovernanceLibBranchTest | 16 | Branch coverage for deal governance edge cases |
-| DealEvaluationRecoveryTest | 14 | Evaluation + recovery flow, deal closure |
-| MilestoneBasedEvaluatorTest | 12 | Milestone progress, curves, extensions, FDV mode |
-| MathLibTest | 12 | Fixed-point arithmetic, edge cases, signed math |
-| HybridDACManagementProposalTest | 8 | Multi-phase voting, oracle, fallback, emergency |
-| DACGovernanceControlTest | 7 | Config updates, blocking quorum, capability checks |
-| DirectAccessControlTest | 5 | Unauthorized access rejection across all entry points |
-| Fuzz tests (3 suites) | 7 | Accounting obligations, capital accounting, DAC accounting |
-| Other test suites | 30 | Deployment, tokens, dividends, existing-token mode |
+| `DealGovernanceFlowTest` | ≥23 | Lifecycle, voting, execution, veto challenges |
+| `Permit2TreasuryTest` | 17 | Agent spend/receive, Permit2 flows, revocation |
+| `RevenueBasedEvaluatorTest` | ≥17 | Revenue cycles, slashing, auto-close, grace periods |
+| `MilestoneBasedEvaluatorTest` | ≥12 | Milestones, curves, extensions, FDV mode |
+| `HybridDACManagementProposalTest` | ≥8 | Multi-phase voting, oracle, fallback, emergency |
+| `DACDealVoteSignTest` | new | ERC-1271 external venue voting (snapshot.org) |
+| `DealCellGovernanceLibBranchTest` | 16 | Branch coverage on deal governance |
+| `ExistingTokenAssetControllerTest` | new | Hybrid-mode controller paths |
+| `WrappedMainTokenTest` | new | Wrap/unwrap accounting incl. fee-on-transfer |
+| `DACAccountingFuzzTest` / `AccountingObligationsFuzzTest` / `TreasuryCapitalAccountingFuzzTest` | 6 fuzz | Treasury obligations, capital accounting |
+| `test/audit/ConsumeExecutionGriefingPoc.t.sol` | 4 | H-01 regression — all passing |
+| Other | balance | Deployment, tokens, dividends, deal config |
 
-### 7.3 Coverage Observations
+### 7.3 Coverage gaps observed
 
-**Well covered:**
-- Deal creation → approval → evaluation → close lifecycle
-- Governance proposal full lifecycle (create, vote, execute, expire)
-- Hybrid governance multi-phase flow (oracle → warmup → fallback)
-- Agent staking and unstaking with access control
-- Permit2Treasury agent operations
-- Evaluator reward/slash calculations with curves
-- Mathematical operations including edge cases
-- Access control rejection (5 dedicated tests)
-- Veto challenge mechanism
+The existing suite would benefit from explicit tests for the Low-severity findings above:
 
-**Recommended additional coverage:**
-- Edge cases around `_freeBalance` when balances approach zero
-- Non-standard ERC20 behavior (fee-on-transfer, rebasing tokens)
-- Very large `agentsLimit` values and gas consumption
-- Concurrent deal operations within a single DAC
-- Module addition/removal during active deals
+- **L-01**: A test that mocks `DACCell` calling `onAgentTokenStaked` and asserts the new behavior after the dacCell branch is removed (or asserts an explicit error).
+- **L-02**: A negative test for `approveSpendAllowance` with `duration == 0` after the validation is added.
+- **L-04**: A test that calls `WrappedMainToken.setController` a second time and asserts revert after the one-shot guard is added.
+- **I-10**: A test that exercises a transfer between `initialize` and `dacInit` (would currently revert with a confusing error).
+
+Pre-existing coverage gaps from the prior audit also still apply:
+
+- **Non-standard ERC-20s** (USDT-style, fee-on-transfer that yields zero on legitimate amounts) in `TreasuryDeal` paths.
+- **Oracle malfunction paths** in evaluators (zero price, extreme price, reverting oracle).
+- **Concurrent large-N deal evaluation gas** measurements.
+- **`startDAC` deferred-init path** edge cases (re-call after success, missing sleeping cell entry).
 
 ---
 
 ## 8. Contract Interaction Map
 
 ```
-                    External User
-                         |
-                    [DACFactory]
-                         |
-     +-------------------+-------------------+
-     |                                       |
- [DACCell]                           [WrappedMainToken]
-     |                                       |
-     +---- [GovernanceSchema] ----+          [Underlying ERC20]
-     |         (Native or Hybrid)  |
-     +---- [AssetController] -----+
-     |         (Native or Existing)|
-     +---- [ModuleRegistry] ------+
-     |
- [DealManager]
-     |
-     +---- [DealCell #1] --+-- [StakedAgent]
-     |         |            +-- [Deal (DACDeal)]
-     |         |            +-- [Evaluator (Milestone)]
-     |
-     +---- [DealCell #2] --+-- [StakedAgent]
-               |            +-- [Deal (TreasuryDeal)]
-               |            |      +-- [Permit2Treasury]
-               |            +-- [Evaluator (Revenue)]
+                          External User
+                              │
+                       [DACFactory] (immutable)
+            ┌─────────────────┴─────────────────────────┐
+            │                                            │
+    Native flow:                              Existing-token flow:
+       ↓                                          ↓
+    [DACCell] ←──── governance schema ────→  [DACCell]
+       │              proposals via              │
+       │           consumeApprovedProposal       │
+       │                                          │
+       ├── [NativeGovernanceSchema]               ├── [HybridGovernanceSchema]
+       ├── [NativeAssetController]                ├── [ExistingTokenAssetController]
+       ├── [MainToken (ERC20Votes, ts clock)]     ├── [WrappedMainToken (ERC20Votes, blk clock)]
+       │                                          │   └── [Underlying ERC-20]
+       │                                          ├── [BasicGovernanceOracle] ← (shared across DACs)
+       │                                          │
+       └── [AgentToken] (bound + distributor)     └── [AgentToken]
+
+                       ↓ both branches
+                  [ModuleRegistry] → approved [CoreModuleFactory] (and others)
+                       ↓
+                  [DealManager]
+                       │
+                       ├── deals[1] → [DealCell] → [StakedAgent]
+                       │                          → [Deal] (DACDeal | TreasuryDeal | …)
+                       │                              ↳ DACDeal: child [DACCell] (recursive)
+                       │                              ↳ TreasuryDeal: [Permit2Treasury]
+                       │                          → [Evaluator] (Milestone | Revenue)
+                       └── deals[N] → …
 ```
 
 ---
 
-## 9. Conclusion
+## 9. Trust Boundary Map (verified)
 
-The DAC Cloud contracts demonstrate mature security architecture and careful implementation. The dual-token governance model with challenge mechanisms, evaluator-capped rewards, and module isolation provides robust safeguards against common DeFi attack vectors.
+Each row lists a privileged operation, who is allowed to initiate, and the chain of gates that enforce it.
 
-**Key strengths:**
-- Zero use of dangerous primitives (`delegatecall`, `selfdestruct`, `tx.origin`, `unchecked`)
-- Comprehensive event logging (88 events) for off-chain monitoring
-- Immutable deployment model with no admin keys or upgrade paths
-- Double-capped reward system preventing runaway minting
-- Snapshot-based voting immune to flash-loan manipulation
-- Well-structured test suite with 100% pass rate including fuzz tests
+| Operation | Caller | Gate chain |
+|---|---|---|
+| Create DAC | anyone | `DACFactory.deployDAC` (permissionless by design; deployed DAC is self-contained) |
+| Create deal proposal | agent | `DealManager.createDealProposal` `onlyAgent` → `DACCellGovernanceLib.createDealProposal` checks `proposer == msg.sender` |
+| Approve / fulfill capital call | call recipient | `DACCell.fulfillCapitalCall` (permissionless trigger) → controller `onlyDACCell` → pulls cash from `tokenRecipient` (recipient must have approved) |
+| Create DAC management proposal | holder/manager | `DACCell.createManagementProposal` `onlyHolderOrManager` → schema `onlyDACCell` |
+| Execute DAC management proposal | anyone | `DACCell.executeDACProposal` → schema `consumeApprovedProposal` `onlyDACCell` → proposal `consumeExecution` `msg.sender == executor` (= schema) |
+| Stake to deal | agent token holder | `AgentToken.stakeToDeal` (self) or `forceStakeToDeal` (DealManager only) → `DealCell.onAgentTokenStaked` `msg.sender == agentTokenAddr` (or dead `dacCell` branch — see L-01) |
+| Create deal-level proposal | staked agent (or Deal/DealCell/DealManager) | `Deal.createStakedAgentProposal` → `DealCellGovernanceLib.checkStakedAgentProposal` (branches by msg.sender; non-special caller must have qualified stake) |
+| Execute deal-level proposal | anyone | `Deal.executeStakedAgentProposal` → proposal `consumeExecution` `msg.sender == executor` (= Deal) |
+| Mark deal success / failed / extend | DealManager (via evaluator) | `DealCell.markAsSuccess` / `markAsFailed` / `extendDeadline` all `onlyDealManager` |
+| Recover deal | DAC governance via legal-wrapper authorization | `DealManager.executeProp` (RECOVER_DEAL branch) `onlyDACCell` + legal-wrapper-msg-sender check |
+| Mint main token rewards | DealCell (via DealManager) | `DealCell.claimMainToken` → `DealCellGovernanceLib.claimMainToken` → `DealManager.mintMain` `onlyDealCell` → controller `settleMainRewardClaim` `onlyDealManager` |
+| Update voting / strategy / oracle config | DAC governance proposal | `DACCell.executeDACProposal` → `_executeXxxUpdate` → schema setter `onlyDACCell` |
+| Publish oracle snapshot | publisher | `BasicGovernanceOracle.publishSnapshot` `onlyRole(PUBLISHER_ROLE)` |
+| Deactivate oracle for a DAC | admin or publisher | `BasicGovernanceOracle.deactivate` (DEFAULT_ADMIN_ROLE OR PUBLISHER_ROLE) |
+| Wrap / unwrap existing token | anyone | `WrappedMainToken.wrap` / `unwrap` permissionless by design (only affects caller's own tokens) |
+| Move main token (transfer) | any holder | `MainToken._update` → `_afterTokenTransfer` → `DealManager.onMainMove` `msg.sender == mainToken` → controller `onMainMove` `onlyDealManager` |
+| Move wrapped main token (transfer) | any holder | `WrappedMainToken._update` → `_afterTokenTransfer` → controller `onMainMove` `onlyWrappedMainToken` |
+| Approve agent spend allowance | DAC governance via deal | `Deal.executeStakedAgentProposal` → `TreasuryDeal._executeModuleManagementProposal` → `Permit2Treasury.approveSpendAllowance` `onlyDeal` |
+| Execute agent spend | the agent itself | `Permit2Treasury.executeAgentSpend` (permissionless caller; bound by `agentAllowance[(msg.sender, token, dest)]`) |
+| Claim dividend | anyone with valid Merkle proof | `DACCell.claimDividend` → controller `claimDividend` `onlyDACCell` + Merkle verification |
+| Register controlled address | DealCell | `DealCell.registerControlledAddress` `onlyDeal` → `DealManager.registerControlledAddress` `onlyDealCell` → controller `registerControlledAddress` `onlyDealManager` |
 
-**Key recommendations before mainnet deployment:**
-1. Add SafeERC20 wrappers to all token transfer calls in AssetControllers and governance libraries (M-01)
-2. Document or enforce a practical `agentsLimit` ceiling to prevent gas exhaustion (M-02)
-3. Add oracle response validation in evaluators (L-03)
-4. Consider timelock or two-step process for quorum-reduction proposals (L-05)
-5. Fix `rewokeAgent` typo before ABI is locked (I-01)
-6. Expand test coverage for edge cases noted in Section 7.3
+No gate chain in the table above terminates in an unguarded surface.
 
 ---
 
-*This audit was performed by an automated system and should be complemented by manual review from specialized security auditors before production deployment. The findings represent the auditor's best assessment at the time of review and do not constitute a guarantee of security.*
+## 10. Conclusion
+
+The DAC Cloud codebase is in strong shape for the testnet deployment. The kernel/module split is clean, the dual-token native/hybrid architecture is internally consistent, and the discipline of explicit `require(msg.sender == X)` or `onlyX` modifiers on every state-mutating external function is held throughout. The H-01 fix is correctly structural — the executor is bound at factory time to the only address that legitimately drives execution, and the binding cannot be tampered with by a third party.
+
+**No High- or Medium-severity vulnerabilities were identified in this pass.**
+
+The Low-severity findings are all hardening / defense-in-depth improvements rather than current exploitable issues. The most important among them is **L-01** (`DealCell.onAgentTokenStaked` over-broad caller gate) because it matches the exact H-01 pattern the prior audit's two iterations both found: a caller gate that *looks* properly modifier-protected but admits more callers than the design needs. Removing the dead `dacCell` branch closes that specific instance of the class and is cheap to apply.
+
+### Recommended actions before testnet deployment
+
+Prioritized:
+
+1. **L-01** — Drop `|| msg.sender == dacCell` from `DealCell.onAgentTokenStaked`. **Highest priority** as it directly addresses the recurring pattern.
+2. **L-02** — Add `duration > 0` and `singleTxAmount > 0` validation to `Permit2Treasury.approveSpendAllowance`.
+3. **L-04** — Add one-shot guard to `WrappedMainToken.setController`.
+4. **L-06** — Add one-shot guard to `Deal.joinDac`.
+5. **I-01** — Delete the orphan `DACCellGovernanceLib.approveFunding` function.
+6. **L-05** — Make `DealManager._onlyDealCell` existence check explicit.
+7. **L-03, L-07** — Document the wildcard fallthrough and overwrite-vs-increment semantics on `Permit2Treasury`.
+8. **I-03** — Add explicit one-shot guards to `MainToken.dacInit` and `AgentToken.dacInit`.
+9. **I-10** — Gate `MainToken._afterTokenTransfer` / `_beforeDelegate` on `dealManager != address(0)` for cleaner error in edge cases.
+
+The remaining informational items are code-hygiene observations that can be addressed in routine maintenance without urgency.
+
+### Final state
+
+- 188 / 188 tests passing.
+- `forge build` clean (warnings only, no errors).
+- Source tree: 10,250 LoC across 88 files.
+
+---
+
+*This audit was produced by an automated security review system (Claude Opus 4.7, 1M-context). Findings reflect the auditor's best assessment of the code at commit `be026d9`. The codebase has now passed three rounds of independent automated review, each producing progressively smaller findings sets. As with any single-auditor review, a complementary review by an independent firm is recommended before mainnet deployment; for testnet deployment, the current codebase appears ready subject to the hardening recommendations above.*
