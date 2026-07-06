@@ -1,13 +1,13 @@
 # DAC Cloud Contracts
 
-DAC Cloud is a modular smart-contract framework for running **Decentralized Autonomous Corporations**: self-organizing entities where capital (token holders) and managers/agents, and economically aligned through explicit funding, governance, evaluation, and reward rules.
+DAC Cloud is a modular smart-contract framework for running **Decentralized Autonomous Corporations**: self-organizing entities where capital (token holders) and managers/agents are economically aligned through explicit funding, governance, evaluation, and reward rules.
 
 This repository contains the protocol kernel, the shipped core module, Solidity tests, and deployment / scenario scripts.
 
 ## Documentation
 
 - [Whitepaper](docs/whitepaper.md)
-  Concept, philosophy, and higher-level vision.
+  Concept, philosophy, and high-level vision.
 - [Architecture](docs/architecture.md)
   System model, lifecycle, governance, token design, and deal flow.
 - [Contract Inventory](docs/contracts.md)
@@ -24,7 +24,7 @@ This repository contains the protocol kernel, the shipped core module, Solidity 
 - `src/kernel/`
   The protocol kernel: `DACFactory`, `DACCell`, `DealManager`, `DealCell`, `Deal`, governance schemas, asset controllers, module registry, libraries, and tokens.
 - `src/modules/core/`
-  The shipped core module with `DACDeal`, `TreasuryDeal`, `Permit2Treasury`, and the built-in evaluators.
+  The shipped core module with `DACDeal`, `TreasuryDeal`, `AgentDeal`, `Permit2Treasury`, and the built-in evaluators.
 - `src/lib/`
   Supporting interfaces and third-party compatibility shims such as `IVotes`, `IClock`, and `IPermit2`.
 - `test/`

@@ -10,6 +10,7 @@ import {BasicGovernanceOracle} from "../src/kernel/governance/BasicGovernanceOra
 import {WrappedMainToken} from "../src/kernel/tokens/WrappedMainToken.sol";
 import {HybridDACManagementProposal} from "../src/kernel/governance/HybridDACManagementProposal.sol";
 import {UUPSProxy} from "../src/kernel/proxies/UUPSProxy.sol";
+import {TestUUPSProxy} from "./base/TestUUPSProxy.sol";
 
 contract MockHybridUnderlyingToken is ERC20 {
     constructor() ERC20("Underlying", "UND") {}
@@ -56,7 +57,7 @@ contract HybridDACManagementProposalTest is Test {
             )
         );
         proposal = HybridDACManagementProposal(
-            address(new UUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
+            address(new TestUUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
         );
 
         // Mock asset controller: no controlled balances (returns 0 for any block)

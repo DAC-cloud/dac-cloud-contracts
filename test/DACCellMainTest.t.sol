@@ -27,6 +27,7 @@ import {IDealManager} from "../src/interfaces/IDealManager.sol";
 import {DACConfig, CapitalCall, ProposalParams, DealParams} from "../src/interfaces/Structs.sol";
 import {CoreModuleFactory} from "../src/modules/core/CoreModuleFactory.sol";
 import {DACDealFactory} from "../src/modules/core/deals/factories/DACDealFactory.sol";
+import {AgentDealFactory} from "../src/modules/core/deals/factories/AgentDealFactory.sol";
 import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {MilestoneEvaluatorFactory} from "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
@@ -70,6 +71,7 @@ contract DACCellMainTest is Test {
         coreModule = new CoreModuleFactory(
             address(new DACDealFactory()),
             address(new TreasuryDealFactory(permit2)),
+            address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
             address(new RevenueEvaluatorFactory())
         );

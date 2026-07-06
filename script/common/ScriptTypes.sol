@@ -47,6 +47,8 @@ struct ProtocolDeployment {
     address treasuryDealFactory;
     address treasuryDealImpl;
     address permit2TreasuryFactory;
+    address agentDealFactory;
+    address agentDealImpl;
     address milestoneEvaluatorFactory;
     address milestoneEvaluatorImpl;
     address revenueEvaluatorFactory;

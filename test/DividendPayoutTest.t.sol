@@ -10,6 +10,7 @@ import {DACManagementProposalType} from "../src/kernel/governance/DACManagementP
 import {DACManagementProposalFactory} from "../src/kernel/governance/factories/DACManagementProposalFactory.sol";
 import {CoreModuleFactory} from "../src/modules/core/CoreModuleFactory.sol";
 import {DACDealFactory} from "../src/modules/core/deals/factories/DACDealFactory.sol";
+import {AgentDealFactory} from "../src/modules/core/deals/factories/AgentDealFactory.sol";
 import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {MilestoneEvaluatorFactory} from "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
@@ -54,6 +55,7 @@ contract DividendPayoutTest is Test {
         CoreModuleFactory coreModule = new CoreModuleFactory(
             address(new DACDealFactory()),
             address(new TreasuryDealFactory(permit2)),
+            address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
             address(new RevenueEvaluatorFactory())
         );

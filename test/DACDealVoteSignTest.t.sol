@@ -7,6 +7,7 @@ import {SnapshotV1Payload} from "../src/modules/core/interfaces/Structs.sol";
 import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
 import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
 import {UUPSProxy} from "../src/kernel/proxies/UUPSProxy.sol";
+import {TestUUPSProxy} from "./base/TestUUPSProxy.sol";
 
 // Test harness exposing the new vote-sign internals so we can exercise them
 // without bootstrapping the full Deal/DAC lifecycle. The harness inherits the
@@ -43,7 +44,7 @@ contract DACDealVoteSignTest is Test {
         // Bare proxy deploy — Deal initializer never called. The new code paths
         // don't read Deal-init storage so this is sufficient for unit testing.
         dacDeal = TestableDACDeal(
-            address(new UUPSProxy(address(new TestableDACDeal()), bytes("")))
+            address(new TestUUPSProxy(address(new TestableDACDeal()), bytes("")))
         );
     }
 

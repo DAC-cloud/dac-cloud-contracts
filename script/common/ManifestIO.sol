@@ -63,6 +63,8 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeAddress(root, "treasuryDealFactory", deployment.treasuryDealFactory);
         vm.serializeAddress(root, "treasuryDealImpl", deployment.treasuryDealImpl);
         vm.serializeAddress(root, "permit2TreasuryFactory", deployment.permit2TreasuryFactory);
+        vm.serializeAddress(root, "agentDealFactory", deployment.agentDealFactory);
+        vm.serializeAddress(root, "agentDealImpl", deployment.agentDealImpl);
         vm.serializeAddress(root, "milestoneEvaluatorFactory", deployment.milestoneEvaluatorFactory);
         vm.serializeAddress(root, "milestoneEvaluatorImpl", deployment.milestoneEvaluatorImpl);
         vm.serializeAddress(root, "revenueEvaluatorFactory", deployment.revenueEvaluatorFactory);
@@ -118,6 +120,8 @@ abstract contract ManifestIO is ScriptConfig {
         deployment.treasuryDealFactory = json.readAddress(".treasuryDealFactory");
         deployment.treasuryDealImpl = json.readAddress(".treasuryDealImpl");
         deployment.permit2TreasuryFactory = json.readAddress(".permit2TreasuryFactory");
+        deployment.agentDealFactory = json.readAddress(".agentDealFactory");
+        deployment.agentDealImpl = json.readAddress(".agentDealImpl");
         deployment.milestoneEvaluatorFactory = json.readAddress(".milestoneEvaluatorFactory");
         deployment.milestoneEvaluatorImpl = json.readAddress(".milestoneEvaluatorImpl");
         deployment.revenueEvaluatorFactory = json.readAddress(".revenueEvaluatorFactory");

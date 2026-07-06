@@ -523,6 +523,7 @@ The built-in core module serves as the canonical reference implementation. Study
 | `CoreModuleDeals` | `src/modules/core/CoreModuleDeals.sol` | Deal and evaluator kind selector definitions |
 | `DACDeal` | `src/modules/core/deals/DACDeal.sol` | Deal that deploys/manages a child DAC; reference for ERC-1271 external voting via virtual hooks |
 | `TreasuryDeal` | `src/modules/core/deals/TreasuryDeal.sol` | Deal for treasury management via Permit2 |
+| `AgentDeal` | `src/modules/core/deals/AgentDeal.sol` | Deal that lets the home DAC act as an agent inside one host DAC; reference for cross-DAC deal participation and host-registry-validated actions |
 | `CoreDealManagementProposals` | `src/modules/core/governance/CoreDealManagementProposals.sol` | Module-specific proposal type selectors |
 | `CoreManagementProposalFactory` | `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol` | Quorum configuration for core proposal types |
 | `MilestoneBasedEvaluator` | `src/modules/core/evaluators/MilestoneBasedEvaluator.sol` | Evaluator that checks milestone completion |

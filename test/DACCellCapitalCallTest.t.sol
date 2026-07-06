@@ -26,6 +26,7 @@ import {IDACFactory} from "../src/interfaces/IDACFactory.sol";
 import {DACConfig, CapitalCall, ProposalParams, DealParams} from "../src/interfaces/Structs.sol";
 import {CoreModuleFactory} from "../src/modules/core/CoreModuleFactory.sol";
 import {DACDealFactory} from "../src/modules/core/deals/factories/DACDealFactory.sol";
+import {AgentDealFactory} from "../src/modules/core/deals/factories/AgentDealFactory.sol";
 import {TreasuryDealFactory} from "../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {MilestoneEvaluatorFactory} from "../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
@@ -70,6 +71,7 @@ contract DACCellCapitalCallTest is Test {
         coreModule = new CoreModuleFactory(
             address(new DACDealFactory()),
             address(new TreasuryDealFactory(permit2)),
+            address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
             address(new RevenueEvaluatorFactory())
         );
@@ -170,11 +172,13 @@ contract DACCellCapitalCallTest is Test {
         assertEq(patch, 0);
 
         bytes4[] memory dealKinds = coreModule.supportedDealKinds();
-        assertEq(dealKinds.length, 2);
+        assertEq(dealKinds.length, 3);
         assertEq(dealKinds[0], CoreDealType.DAC_DEAL);
         assertEq(dealKinds[1], CoreDealType.PERMIT2_TREASURY);
+        assertEq(dealKinds[2], CoreDealType.AGENT_DEAL);
         assertTrue(coreModule.supportsDealKind(dealKinds[0]));
         assertTrue(coreModule.supportsDealKind(dealKinds[1]));
+        assertTrue(coreModule.supportsDealKind(dealKinds[2]));
 
         bytes4[] memory evaluatorKinds = coreModule.supportedEvaluatorKinds();
         assertEq(evaluatorKinds.length, 2);

@@ -401,10 +401,11 @@ Supports:
 
 - `DACDeal`
 - `TreasuryDeal`
+- `AgentDeal`
 - milestone evaluator
 - revenue evaluator
 
-The core module also declares reward-pool support through `supportsDealRewardPool(...)` for its shipped deal kinds.
+The core module also declares reward-pool support through `supportsDealRewardPool(...)` for the `DACDeal` and `TreasuryDeal` kinds (`AgentDeal` does not use a deal reward pool).
 
 Evaluator deployment is kernel-controlled and handled separately from deal deployment. The evaluator can use a different module factory than the deal, as specified by `DealParams.evaluatorModuleFactory`. `IModuleFactory.deployDeal` deploys only the `DealCell` and `Deal`; `IModuleFactory.deployEvaluator` is called separately by the kernel.
 
@@ -420,6 +421,7 @@ Core-module proposal selector registry for:
 - child-DAC operations
 - external voting venue management (`APPROVE_VOTING_VENUE_VERSION`)
 - external vote signature approvals (`EXTERNAL_VOTE_SIGN`)
+- agent operations inside a host DAC (`HOST_STAKE`, `HOST_APPROVE_STAKE`, `HOST_CREATE_DEAL`, `HOST_CREATE_PROPOSAL`, `HOST_VOTE`, `HOST_CLAIM_REWARD`, `HOST_UNSTAKE`, `RETURN_ASSET_TO_DAC`)
 
 ### `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol`
 
@@ -467,10 +469,27 @@ Features:
 - agent allowance enforcement
 - capital return to the deal
 
+### `src/modules/core/deals/AgentDeal.sol`
+
+Agent deal implementation: lets the home DAC act as an agent inside one bound host DAC (the inverse of `DACDeal`).
+
+Capabilities:
+
+- bind a single host DAC at creation and cache its agent/main token DNA
+- stake host agent tokens into host deals and self-delegate the host stake (`HOST_STAKE`)
+- approve post-activation host add-stake (`HOST_APPROVE_STAKE`)
+- originate new deals in the host DAC, with the proposer forced to the deal itself (`HOST_CREATE_DEAL`)
+- create and vote on host deal proposals (`HOST_CREATE_PROPOSAL`, `HOST_VOTE`)
+- claim host main-token incentives (`HOST_CLAIM_REWARD`) and exit host deals (`HOST_UNSTAKE`)
+- route earned host assets back to the home treasury, excluding the home main token (`RETURN_ASSET_TO_DAC`)
+- validate every host interaction against the bound host DAC's deal registry
+- emit `DealRelatedContract` for host DAC and host token discovery
+
 ### Deal factories
 
 - `src/modules/core/deals/factories/DACDealFactory.sol`
 - `src/modules/core/deals/factories/TreasuryDealFactory.sol`
+- `src/modules/core/deals/factories/AgentDealFactory.sol`
 
 ## 11. Evaluators
 

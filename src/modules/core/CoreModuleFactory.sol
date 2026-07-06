@@ -16,6 +16,7 @@ contract CoreModuleFactory is ModuleFactory {
     // Deals
     address public dacDealFactory;
     address public treasuryDealFactory;
+    address public agentDealFactory;
 
     // Evaluators
     address public milestoneEvaluatorFactory;
@@ -27,11 +28,13 @@ contract CoreModuleFactory is ModuleFactory {
     constructor(
         address _dacDealFactory,
         address _treasuryDealFactory,
+        address _agentDealFactory,
         address _milestoneEvaluatorFactory,
         address _revenueEvaluatorFactory
     ) {
         dacDealFactory = _dacDealFactory;
         treasuryDealFactory = _treasuryDealFactory;
+        agentDealFactory = _agentDealFactory;
         milestoneEvaluatorFactory = _milestoneEvaluatorFactory;
         revenueEvaluatorFactory = _revenueEvaluatorFactory;
     }
@@ -45,9 +48,10 @@ contract CoreModuleFactory is ModuleFactory {
     function moduleManifestURI() external pure returns (string memory) { return MODULE_MANIFEST_URI; }
 
     function supportedDealKinds() external pure returns (bytes4[] memory kinds) {
-        kinds = new bytes4[](2);
+        kinds = new bytes4[](3);
         kinds[0] = CoreDealType.DAC_DEAL;
         kinds[1] = CoreDealType.PERMIT2_TREASURY;
+        kinds[2] = CoreDealType.AGENT_DEAL;
     }
 
     function supportedEvaluatorKinds() external pure returns (bytes4[] memory kinds) {
@@ -57,7 +61,9 @@ contract CoreModuleFactory is ModuleFactory {
     }
 
     function supportsDealKind(bytes4 dealKind) external pure returns (bool) {
-        return dealKind == CoreDealType.DAC_DEAL || dealKind == CoreDealType.PERMIT2_TREASURY;
+        return dealKind == CoreDealType.DAC_DEAL
+            || dealKind == CoreDealType.PERMIT2_TREASURY
+            || dealKind == CoreDealType.AGENT_DEAL;
     }
 
     // Core module accepts any evaluator from any module
@@ -84,6 +90,10 @@ contract CoreModuleFactory is ModuleFactory {
 
         else if (dealKind == CoreDealType.PERMIT2_TREASURY) {
             factory = IDealFactory(treasuryDealFactory);
+        }
+
+        else if (dealKind == CoreDealType.AGENT_DEAL) {
+            factory = IDealFactory(agentDealFactory);
         }
 
         else {

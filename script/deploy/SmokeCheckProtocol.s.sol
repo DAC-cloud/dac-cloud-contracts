@@ -186,6 +186,12 @@ contract SmokeCheckProtocol is ManifestIO {
         );
 
         _expect(
+            "CoreModuleFactory.agentDealFactory",
+            CoreModuleFactory(deployment.coreModuleFactory).agentDealFactory(),
+            deployment.agentDealFactory
+        );
+
+        _expect(
             "TreasuryDealFactory.permit2VaultFactory",
             TreasuryDealFactory(deployment.treasuryDealFactory).permit2VaultFactory(),
             deployment.permit2TreasuryFactory

@@ -23,6 +23,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {UUPSProxy} from "../../src/kernel/proxies/UUPSProxy.sol";
+import {TestUUPSProxy} from "../base/TestUUPSProxy.sol";
 
 import {DACTestBase} from "../base/DACTestBase.t.sol";
 
@@ -235,7 +236,7 @@ contract H01HybridHarness is Test {
         wrapped.setPastTotalSupply(block.number - 1, 100e18);
 
         proposal = HybridDACManagementProposal(
-            address(new UUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
+            address(new TestUUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
         );
 
         // The harness contract acts as both the dacCell and the legitimate

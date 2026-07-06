@@ -39,6 +39,8 @@ contract PreflightProtocol is ManifestIO {
         _checkCode("treasuryDealFactory", deployment.treasuryDealFactory);
         _checkCode("treasuryDealImpl", deployment.treasuryDealImpl);
         _checkCode("permit2TreasuryFactory", deployment.permit2TreasuryFactory);
+        _checkCode("agentDealFactory", deployment.agentDealFactory);
+        _checkCode("agentDealImpl", deployment.agentDealImpl);
         _checkCode("coreModuleFactory", deployment.coreModuleFactory);
         _checkCode("milestoneEvaluatorFactory", deployment.milestoneEvaluatorFactory);
         _checkCode("milestoneEvaluatorImpl", deployment.milestoneEvaluatorImpl);
@@ -50,6 +52,7 @@ contract PreflightProtocol is ManifestIO {
         _logMargin("DealManager", deployment.dealManagerImpl);
         _logMargin("DACDeal", deployment.dacDealImpl);
         _logMargin("TreasuryDeal", deployment.treasuryDealImpl);
+        _logMargin("AgentDeal", deployment.agentDealImpl);
         _logMargin("MainToken", deployment.mainTokenImpl);
         _logMargin("AgentToken", deployment.agentTokenImpl);
 

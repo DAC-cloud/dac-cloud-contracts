@@ -21,6 +21,7 @@ import {MainTokenFactory, AgentTokenFactory, StakedAgentFactory} from "../../src
 import {WrappedMainTokenFactory} from "../../src/kernel/tokens/factories/WrappedMainTokenFactory.sol";
 import {DACDealFactory} from "../../src/modules/core/deals/factories/DACDealFactory.sol";
 import {TreasuryDealFactory} from "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
+import {AgentDealFactory} from "../../src/modules/core/deals/factories/AgentDealFactory.sol";
 import {MilestoneEvaluatorFactory} from "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
 import {RevenueEvaluatorFactory} from "../../src/modules/core/evaluators/factories/RevenueEvaluatorFactory.sol";
 import {CoreModuleFactory} from "../../src/modules/core/CoreModuleFactory.sol";
@@ -74,12 +75,14 @@ contract DeployProtocol is ManifestIO {
         deployment.coreDealGovernanceFactory = address(new CoreManagementProposalFactory());
         deployment.dacDealFactory = address(new DACDealFactory());
         deployment.treasuryDealFactory = address(new TreasuryDealFactory(config.permit2));
+        deployment.agentDealFactory = address(new AgentDealFactory());
         deployment.milestoneEvaluatorFactory = address(new MilestoneEvaluatorFactory());
         deployment.revenueEvaluatorFactory = address(new RevenueEvaluatorFactory());
 
         deployment.coreModuleFactory = address(new CoreModuleFactory(
             deployment.dacDealFactory,
             deployment.treasuryDealFactory,
+            deployment.agentDealFactory,
             deployment.milestoneEvaluatorFactory,
             deployment.revenueEvaluatorFactory
         ));
@@ -148,6 +151,7 @@ contract DeployProtocol is ManifestIO {
         deployment.dacDealImpl = DACDealFactory(deployment.dacDealFactory).referenceImpl();
         deployment.treasuryDealImpl = treasuryDealFactory.referenceImpl();
         deployment.permit2TreasuryFactory = treasuryDealFactory.permit2VaultFactory();
+        deployment.agentDealImpl = AgentDealFactory(deployment.agentDealFactory).referenceImpl();
         deployment.milestoneEvaluatorImpl =
             MilestoneEvaluatorFactory(deployment.milestoneEvaluatorFactory).referenceImpl();
         deployment.revenueEvaluatorImpl =

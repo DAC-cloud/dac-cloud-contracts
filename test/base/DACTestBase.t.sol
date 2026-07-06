@@ -13,6 +13,7 @@ import {MathLib} from "../../src/kernel/libraries/MathLib.sol";
 import {CoreDealType, CoreEvaluatorType} from "../../src/modules/core/CoreModuleDeals.sol";
 import {CoreModuleFactory} from "../../src/modules/core/CoreModuleFactory.sol";
 import {DACDealFactory} from "../../src/modules/core/deals/factories/DACDealFactory.sol";
+import {AgentDealFactory} from "../../src/modules/core/deals/factories/AgentDealFactory.sol";
 import {TreasuryDealFactory} from "../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
 import {MilestoneBasedEvaluator} from "../../src/modules/core/evaluators/MilestoneBasedEvaluator.sol";
 import {MilestoneEvaluatorFactory} from "../../src/modules/core/evaluators/factories/MilestoneEvaluatorFactory.sol";
@@ -90,6 +91,7 @@ abstract contract DACTestBase is Test {
         coreModule = new CoreModuleFactory(
             address(new DACDealFactory()),
             address(new TreasuryDealFactory(permit2)),
+            address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
             address(new RevenueEvaluatorFactory())
         );

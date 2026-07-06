@@ -36,13 +36,24 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
             params.typ == CoreDealManagementType.ASSIGN_CLAIMER ||
             params.typ == CoreDealManagementType.REVOKE_AGENT ||
             params.typ == CoreDealManagementType.RETURN_CAPITAL_TO_DAC ||
-            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS
+            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS ||
+            params.typ == CoreDealManagementType.HOST_STAKE ||
+            params.typ == CoreDealManagementType.HOST_APPROVE_STAKE ||
+            params.typ == CoreDealManagementType.HOST_CREATE_DEAL ||
+            params.typ == CoreDealManagementType.HOST_CREATE_PROPOSAL ||
+            params.typ == CoreDealManagementType.HOST_VOTE ||
+            params.typ == CoreDealManagementType.HOST_CLAIM_REWARD ||
+            params.typ == CoreDealManagementType.HOST_UNSTAKE ||
+            params.typ == CoreDealManagementType.RETURN_ASSET_TO_DAC
         );
 
         quorum.high = (
             params.typ == CoreDealManagementType.REINVEST_PROFITS ||
             params.typ == CoreDealManagementType.APPROVE_VOTING_VENUE_VERSION ||
-            params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND
+            params.typ == CoreDealManagementType.APPROVE_DIRECT_SPEND ||
+            params.typ == CoreDealManagementType.HOST_STAKE ||
+            params.typ == CoreDealManagementType.HOST_APPROVE_STAKE ||
+            params.typ == CoreDealManagementType.HOST_CREATE_DEAL
         );
 
         quorum.veto = quorum.high;
@@ -53,7 +64,10 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
             params.typ == CoreDealManagementType.EXTERNAL_VOTE_SIGN ||
             params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND ||
             params.typ == CoreDealManagementType.APPROVE_AGENT_SPEND ||
-            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS
+            params.typ == CoreDealManagementType.DELEGATE_VOTE_RIGHTS ||
+            params.typ == CoreDealManagementType.HOST_CREATE_PROPOSAL ||
+            params.typ == CoreDealManagementType.HOST_VOTE ||
+            params.typ == CoreDealManagementType.HOST_UNSTAKE
         );
     }
 }

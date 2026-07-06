@@ -478,10 +478,11 @@ The shipped module is `CoreModuleFactory`, which includes:
 
 - `DACDeal`
 - `TreasuryDeal`
+- `AgentDeal`
 - `MilestoneBasedEvaluator`
 - `RevenueBasedEvaluator`
 
-The core module declares support for deal reward pools on both shipped deal kinds.
+The core module declares support for deal reward pools on the `DACDeal` and `TreasuryDeal` kinds. `AgentDeal` does not use a deal reward pool: its economic role is to earn incentives inside a host DAC and route them home, not to accrue a home-main-token pool.
 
 Module deals can emit standardized `DealRelatedContract` events so indexers can discover runtime-linked addresses such as:
 
@@ -521,6 +522,29 @@ When `evaluatorModuleFactory` is `address(0)`, the deal's own `moduleFactory` is
 Later-added evaluators (via the `ADD_EVALUATOR` proposal) can also independently specify any approved module as their evaluator factory. The `ADD_EVALUATOR` proposal data encoding includes the `evaluatorModuleFactory` field, giving each evaluator its own module provenance.
 
 This architecture creates a **trust stratification** between deal risk and reward risk. The deal module governs capital flow and state transitions, while the evaluator module governs performance assessment. By allowing these to come from different approved modules, a DAC can mix and match deal types with evaluation strategies -- for example, running a treasury deal with a third-party evaluation oracle, or attaching a custom milestone tracker to a standard deal shell.
+
+### 10.3 AgentDeal: DAC-as-agent composition
+
+`AgentDeal` is the inverse of `DACDeal`. Where `DACDeal` lets a DAC *own and capitalize a child DAC*, `AgentDeal` lets a DAC *act as an agent inside another (host) DAC* -- the lego piece that lets, for example, a drone/heavy-machinery DAC provide services to a farmland-field DAC for incentives.
+
+An `AgentDeal` binds to exactly one host DAC at creation (via `DealParams.dealTarget`, stored as `managedEntity`) and caches the host's agent and main token addresses. Reading those host kernel getters during initialization also asserts the target is a real DAC. The relationship is emitted as `DealRelatedContract` events (`HOST_DAC`, `HOST_AGENT_TOKEN`, `HOST_MAIN_TOKEN`) for indexers.
+
+Two governance layers apply, both reusing existing kernel mechanics:
+
+- **Home layer.** The agent-deal is an ordinary deal in its home DAC. Its own staked agents govern every host-side action through staked-agent proposals.
+- **Host layer.** The agent-deal is itself a staked agent inside the host DAC's deals. It holds the host's `AgentToken` (minted to it by host governance) and, after staking, the host's `StakedAgent`. It can only ever *propose and vote* there; host governance still has to pass anything it proposes. Because the agent-deal holds the host's `AgentToken`/`StakedAgent` and never the host's `MainToken`, it has no host *DAC-level* vote -- its power inside the host is bounded to deal-level agency by construction.
+
+The home-side staked-agent proposals are:
+
+- `HOST_STAKE` -- stake host agent tokens into a host deal, then self-delegate the resulting host `StakedAgent` (which is `ERC20Votes` and does not auto-delegate) so the position carries voting power.
+- `HOST_APPROVE_STAKE` -- approve a host deal to pull additional stake via its own `ADD_STAKE` flow after activation.
+- `HOST_CREATE_DEAL` -- originate a brand-new deal in the host DAC. Because an agent above the host's qualification threshold may propose deals, the agent-deal can act on what it observes (e.g. drones survey a field and propose a fertilizer deal). The proposer is forced to the agent-deal itself.
+- `HOST_CREATE_PROPOSAL` / `HOST_VOTE` -- create and vote on staked-agent proposals inside existing host deals.
+- `HOST_CLAIM_REWARD` -- claim main-token incentives the agent-deal earned in a host deal.
+- `HOST_UNSTAKE` -- exit a host deal and recover the host agent tokens.
+- `RETURN_ASSET_TO_DAC` -- route earned host incentives (and any other idle foreign assets) back to the home treasury. The home main token is excluded from this path to avoid interfering with main-token obligation accounting.
+
+Every host action takes a host deal cell and is validated against the bound host DAC's deal registry (the same `DealManager.state(...).id != 0` trust anchor used by `AgentToken`), so an agent-deal can only ever interact with deals belonging to its one bound host DAC. As with the rest of the core module, host interactions are typed kernel-interface calls on validated host contracts rather than arbitrary external calls.
 
 ## 11. Deployment Paths
 

@@ -18,6 +18,16 @@ interface ICoreDealManagementProposals {
     function revokeAgent() external pure returns (bytes4);
     function returnCapitalToDAC() external pure returns (bytes4);
     function delegateVotingPower() external pure returns (bytes4);
+
+    // Agent deal (DAC acts as an agent inside another, host DAC)
+    function hostStake() external pure returns (bytes4);
+    function hostApproveStake() external pure returns (bytes4);
+    function hostCreateDeal() external pure returns (bytes4);
+    function hostCreateProposal() external pure returns (bytes4);
+    function hostVote() external pure returns (bytes4);
+    function hostClaimReward() external pure returns (bytes4);
+    function hostUnstake() external pure returns (bytes4);
+    function returnAssetToDAC() external pure returns (bytes4);
 }
 
 library CoreDealManagementType {
@@ -35,4 +45,13 @@ library CoreDealManagementType {
     bytes4 public constant REVOKE_AGENT          = ICoreDealManagementProposals.revokeAgent.selector;                   // Default quorum
     bytes4 public constant RETURN_CAPITAL_TO_DAC = ICoreDealManagementProposals.returnCapitalToDAC.selector;            // Default quorum
     bytes4 public constant DELEGATE_VOTE_RIGHTS  = ICoreDealManagementProposals.delegateVotingPower.selector;           // Default quorum, blocking allowed
+
+    bytes4 public constant HOST_STAKE            = ICoreDealManagementProposals.hostStake.selector;                     // High quorum, veto allowed
+    bytes4 public constant HOST_APPROVE_STAKE    = ICoreDealManagementProposals.hostApproveStake.selector;             // High quorum, veto allowed
+    bytes4 public constant HOST_CREATE_DEAL      = ICoreDealManagementProposals.hostCreateDeal.selector;               // High quorum, veto allowed
+    bytes4 public constant HOST_CREATE_PROPOSAL  = ICoreDealManagementProposals.hostCreateProposal.selector;           // Default quorum, blocking allowed
+    bytes4 public constant HOST_VOTE             = ICoreDealManagementProposals.hostVote.selector;                     // Default quorum, blocking allowed
+    bytes4 public constant HOST_CLAIM_REWARD     = ICoreDealManagementProposals.hostClaimReward.selector;              // Default quorum
+    bytes4 public constant HOST_UNSTAKE          = ICoreDealManagementProposals.hostUnstake.selector;                  // Default quorum, blocking allowed
+    bytes4 public constant RETURN_ASSET_TO_DAC   = ICoreDealManagementProposals.returnAssetToDAC.selector;             // Default quorum
 }
