@@ -183,7 +183,7 @@ contract TreasuryDeal is Deal {
         }
 
         else {
-            revert DACErrorsLib.CapitalWithdrawNotSupported();
+            revert DACErrorsLib.UnsupportedProposal();
         }
     }
 

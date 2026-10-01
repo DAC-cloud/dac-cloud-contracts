@@ -44,6 +44,7 @@ contract CoreManagementProposalFactory is DealManagementProposalFactory {
             params.typ == CoreDealManagementType.HOST_VOTE ||
             params.typ == CoreDealManagementType.HOST_CLAIM_REWARD ||
             params.typ == CoreDealManagementType.HOST_UNSTAKE ||
+            params.typ == CoreDealManagementType.HOST_INVITE ||
             params.typ == CoreDealManagementType.RETURN_ASSET_TO_DAC
         );
 

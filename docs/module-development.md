@@ -39,6 +39,7 @@ interface IModuleFactory {
     function supportsDealKind(bytes4 dealKind) external view returns (bool);
     function dealAcceptsEvaluator(bytes4 dealKind, bytes4 evaluatorKind, address evaluatorModule) external view returns (bool);
     function evaluatorAcceptsDeal(bytes4 evaluatorKind, bytes4 dealKind, address dealModule) external view returns (bool);
+    function dealAcceptsGovernanceFactory(bytes4 dealKind, address governanceFactory) external view returns (bool);
     function supportsDealRewardPool(bytes4 dealKind) external view returns (bool);
 
     // Status
@@ -74,6 +75,7 @@ Key points:
 - **`supportedDealKinds` / `supportedEvaluatorKinds`** -- enumerate all `bytes4` selectors this module handles.
 - **`dealAcceptsEvaluator(dealKind, evaluatorKind, evaluatorModule)`** -- called on the deal's module: "can my deal work with this evaluator kind from this module?" See section 6.
 - **`evaluatorAcceptsDeal(evaluatorKind, dealKind, dealModule)`** -- called on the evaluator's module: "can my evaluator work with this deal kind from this module?" See section 6.
+- **`dealAcceptsGovernanceFactory(dealKind, governanceFactory)`** -- called on the deal's module at deal creation with the proposer-supplied `DealParams.governanceFactory`. That factory deploys every deal-level proposal, so it decides quorum, blocking, the DAC veto hook and `consumeExecution`. Return `true` only for factories you ship with the module (the core module pins its single `CoreManagementProposalFactory`). The kernel rejects deals whose factory the module does not vouch for.
 - **`supportsDealRewardPool(dealKind)`** -- whether deals of this kind can allocate a portion of rewards to the deal contract itself (see section 7).
 - **`isActive`** -- the kernel checks this before deploying. Return `false` to pause new deployments.
 - **`safetyCheck(deal)`** -- a hook for runtime invariant checks. The kernel may call this during deal lifecycle transitions.
@@ -200,7 +202,7 @@ function executeStakedAgentProposal(uint256 proposalId) external;
 The kernel handles a set of built-in proposal types (defined in `AbstractDealManagementType`):
 
 - `UPDATE_VOTING_CONFIG` -- change the deal's voting parameters
-- `REQUEST_TRANCHE` -- request a funding tranche
+- `REQUEST_TRANCHE` -- request a funding tranche. The tranche token cannot be the agent token or the deal's stake token, and a token only joins the deal's funding-token set (the set `withdrawCapital` returns to the DAC) once the DAC settles a tranche in it, never on request. Closed deals cannot request tranches.
 - `ADD_STAKE` / `PERMIT_UNSTAKE` / `STRIKE_OUT_AGENT` -- agent management
 - `TOGGLE_WHITELIST` / `TOGGLE_EARLY_RETURNS` / `ENABLE_VETO_RIGHT` -- deal configuration
 - `PERMIT_EVALUATOR_ADD` -- allow adding an evaluator
@@ -307,7 +309,7 @@ interface IEvaluator {
 
 ### evaluateDeal
 
-Called by the kernel during evaluation cycles. Returns an array of `EvaluationResult`:
+Called by the kernel during evaluation cycles. Staked agents can trigger an evaluation at any time; main-token holders only once the deal's `evaluationDeadline` has passed, which is the earliest point LPs may step in. Actions after a `close` in the same result set are ignored, and `percent` is capped at 100%. Returns an array of `EvaluationResult`:
 
 ```solidity
 struct EvaluationResult {

@@ -61,7 +61,7 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 params.typ == AbstractDealManagementType.TOGGLE_EARLY_RETURNS ||
                 params.typ == AbstractDealManagementType.PERMIT_EVALUATOR_ADD
             ) {
-                quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
+                quorum = MathLib.mulRoundUp(totalSupply, votingConfig.highQuorumPercent);
 
                 if (
                     vetoEnabled ||
@@ -72,13 +72,13 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
                 }
             }
             else {
-                quorum = MathLib.mul(totalSupply, votingConfig.quorumPercent);
+                quorum = MathLib.mulRoundUp(totalSupply, votingConfig.quorumPercent);
             }
 
             if (
                 params.typ == AbstractDealManagementType.REQUEST_TRANCHE
             ) {
-                blockingQuorum = MathLib.mul(totalSupply, votingConfig.blockingPercent);
+                blockingQuorum = MathLib.mulRoundUp(totalSupply, votingConfig.blockingPercent);
 
                 if (vetoEnabled) {
                     challengeable = true;
@@ -105,14 +105,14 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
             require(quorumConfig.allowed, ProposalNotSupported());
 
             if (quorumConfig.high) {
-                quorum = MathLib.mul(totalSupply, votingConfig.highQuorumPercent);
+                quorum = MathLib.mulRoundUp(totalSupply, votingConfig.highQuorumPercent);
             }
             else {
-                quorum = MathLib.mul(totalSupply, votingConfig.quorumPercent);
+                quorum = MathLib.mulRoundUp(totalSupply, votingConfig.quorumPercent);
             }
 
             if (quorumConfig.blocking) {
-                blockingQuorum = MathLib.mul(totalSupply, votingConfig.blockingPercent);
+                blockingQuorum = MathLib.mulRoundUp(totalSupply, votingConfig.blockingPercent);
             }
             
             if (vetoEnabled) {

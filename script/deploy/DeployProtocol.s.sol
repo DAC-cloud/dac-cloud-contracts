@@ -84,7 +84,8 @@ contract DeployProtocol is ManifestIO {
             deployment.treasuryDealFactory,
             deployment.agentDealFactory,
             deployment.milestoneEvaluatorFactory,
-            deployment.revenueEvaluatorFactory
+            deployment.revenueEvaluatorFactory,
+            deployment.coreDealGovernanceFactory
         ));
 
         deployment.dacFactory = address(new DACFactory(

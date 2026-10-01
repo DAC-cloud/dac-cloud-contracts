@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
+import {CoreManagementProposalFactory} from "../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {DACCell} from "../src/kernel/DACCell.sol";
 import {MainToken} from "../src/kernel/tokens/MainToken.sol";
@@ -69,7 +70,8 @@ contract DACDeployTest is Test {
             address(new TreasuryDealFactory(permit2)),
             address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
-            address(new RevenueEvaluatorFactory())
+            address(new RevenueEvaluatorFactory()),
+            address(new CoreManagementProposalFactory())
         );
 
         governanceFactory = new DACManagementProposalFactory();

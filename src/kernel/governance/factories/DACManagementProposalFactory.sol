@@ -39,10 +39,10 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.REMOVE_MODULE ||
             proposalParams.typ == DACManagementProposalType.TOGGLE_DIVIDENDS
         ) {
-            quorum = MathLib.mul(totalVotingSupply, votingConfig.highQuorumPercent);
+            quorum = MathLib.mulRoundUp(totalVotingSupply, votingConfig.highQuorumPercent);
         }
         else {
-            quorum = MathLib.mul(totalVotingSupply, votingConfig.quorumPercent);
+            quorum = MathLib.mulRoundUp(totalVotingSupply, votingConfig.quorumPercent);
         }
 
         if (
@@ -55,7 +55,7 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.BURN_MAIN_TOKENS ||
             proposalParams.typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS
         ) {
-            blockingQuorum = MathLib.mul(totalVotingSupply, votingConfig.blockingPercent);
+            blockingQuorum = MathLib.mulRoundUp(totalVotingSupply, votingConfig.blockingPercent);
         }
 
         // The caller (the GovernanceSchema) owns the proposal's consume-and-act

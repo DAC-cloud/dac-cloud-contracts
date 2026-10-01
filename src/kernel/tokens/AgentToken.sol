@@ -116,6 +116,13 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
         return true;
     }
 
+    // `transferFrom` is how approved deals pull stake (ADD_STAKE). Distributor
+    // inventory is not an agent's stake: it must never enter a deal this way.
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        require(qualifiedBalanceOf(from) >= amount, DACErrorsLib.NotTransferable());
+        return super.transferFrom(from, to, amount);
+    }
+
     function approve(address deal, uint256 amount) public override returns (bool) {
         require(
             IDealManagerAdapter(dealManager).state(deal).id != 0, 

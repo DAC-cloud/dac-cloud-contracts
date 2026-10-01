@@ -155,9 +155,6 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         _dealDeadline = params.dealDeadline;
 
         if (params.fundingAmount > 0) {
-            if (_requestedFunding[params.fundingToken] == 0) {
-                _fundingTokens.push(params.fundingToken);
-            }
             _requestedFunding[params.fundingToken] = params.fundingAmount;
         }
 
@@ -192,7 +189,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         IDealManagerAdapter(manager).registerControlledAddress(controlled);
     }
 
-    function stake(address staker, uint256 amount) internal {
+    function stake(address staker, uint256 amount, bool enforceLimits) internal {
         DealCellGovernanceLib.stake(
             dacCell,
             staker,
@@ -201,8 +198,8 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             deal,
             token,
             holders,
-            _agentsLimit,
-            _minimalStake
+            enforceLimits ? _agentsLimit : 0,
+            enforceLimits ? _minimalStake : 0
         );
     }
 
@@ -216,13 +213,22 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             require(isWhitelisted[staker], DACErrorsLib.NotWhitelistedAgent());
         }
 
-        stake(staker, amount);
+        stake(staker, amount, true);
 
         deal.onVoluntaryStake(staker, amount);
     }
 
     function approveFunding(uint256 trancheId, uint256 rewardsLimit) external onlyDealManager {
+        require(!closed, DACErrorsLib.DealIsClosed());
+
         deal.beforeApproveFunding(trancheId);
+
+        // `_fundingTokens` only ever holds tokens that were actually settled into the
+        // deal. Requested-but-unapproved tokens must not enter the list: every entry is
+        // force-approved and returned by `withdrawCapital`, so an unapprovable token
+        // there (e.g. the agent token) would brick the DAC's clawback forever.
+        Tranche memory settling = _fundingTranches[trancheId];
+        bool firstSettlement = settling.amount > 0 && investedCapital[settling.token] == 0;
 
         (_tokenRewardsLimit, rewardsConverted) = DealCellGovernanceLib.approveFunding(
             dacCell,
@@ -237,6 +243,10 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             _fundingTranches,
             investedCapital
         );
+
+        if (firstSettlement) {
+            _fundingTokens.push(settling.token);
+        }
 
         if (!approved) {
             approved = true;
@@ -335,6 +345,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
     function extendDeadline(uint256 newDeadline) external onlyDealManager {
         require(!closed, DACErrorsLib.DealIsClosed());
+        require(newDeadline > _dealDeadline, DACErrorsLib.NotAllowed());
         
         deal.onExtendDeadline(_dealDeadline, newDeadline);
 
@@ -372,7 +383,9 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         recovery = true;
 
-        stake(liquidator, liquidatorStake);
+        // The liquidator is appointed by DAC governance; voluntary-staker limits
+        // (agentsLimit, minimalStake) must not make a closed deal unrecoverable.
+        stake(liquidator, liquidatorStake, false);
         
         emit DACEventsLib.DealRecovered(dacCell, id, address(deal), liquidator);
 
@@ -422,13 +435,18 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         bytes4 typ = DealManagementProposal(prop).typ();
 
         if (typ == AbstractDealManagementType.REQUEST_TRANCHE) {
+            address trancheToken = DealManagementProposal(prop).target();
+            require(
+                trancheToken != agentTokenAddr && trancheToken != address(token),
+                DACErrorsLib.InvalidToken()
+            );
+
             DealCellGovernanceLib.requestTranche(
                 dacCell,
                 id,
                 address(deal),
                 prop,
                 _fundingTranches,
-                _fundingTokens,
                 _requestedFunding
             );
         }

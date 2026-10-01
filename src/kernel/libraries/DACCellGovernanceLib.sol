@@ -104,6 +104,12 @@ library DACCellGovernanceLib {
         require(params.proposer == msg.sender, DACErrorsLib.NotAuthorized());
 
         require(IModuleFactory(params.moduleFactory).isActive(), DACErrorsLib.ModuleDisabled());
+        // The proposer picks the deal-proposal factory; the module must vouch for it,
+        // otherwise deal governance and the DAC veto hook are whatever the proposer says.
+        require(
+            IModuleFactory(params.moduleFactory).dealAcceptsGovernanceFactory(params.dealKind, params.governanceFactory),
+            DACErrorsLib.GovernanceFactoryNotAccepted()
+        );
         require(params.dealRewardPoolPercent <= MathLib.SCALE, DACErrorsLib.NotAllowed());
         if (params.dealRewardPoolPercent > 0) {
             require(IModuleFactory(params.moduleFactory).supportsDealRewardPool(params.dealKind), DACErrorsLib.NotAllowed());
@@ -363,9 +369,11 @@ library DACCellGovernanceLib {
 
         require(dealState[dealCell].active, DACErrorsLib.DealIsNotApproved());
 
-        if (agentToken.balanceOf(msg.sender) == 0) {
+        // Agents may evaluate at any time; main-token holders only once the deal's
+        // evaluation deadline has passed (the earliest point LPs may step in).
+        if (agentToken.qualifiedBalanceOf(msg.sender) == 0) {
             require(
-                IDealCell(dealCell).dealDeadline() < block.timestamp, 
+                IDealCell(dealCell).evaluationDeadline() < block.timestamp, 
                 DACErrorsLib.NotAllowed()
             );
         }
@@ -387,10 +395,14 @@ library DACCellGovernanceLib {
         );
 
         for (uint256 i = 0; i < evaluations.length; i++) {
+            // Once an action closes the deal, nothing further can be applied; stop
+            // instead of reverting the whole evaluation (which would strand it).
+            if (IDealCell(dealCell).isClosed()) break;
+
             if (evaluations[i].action == 0) {           // slash
-                _performSlash(id, evaluations[i].percent, agentToken, deals);
+                _performSlash(id, MathLib.capAt100(evaluations[i].percent), agentToken, deals);
             } else if (evaluations[i].action == 1) {    // convert
-                _performTransformation(id, evaluations[i].percent, deals, dealState);
+                _performTransformation(id, MathLib.capAt100(evaluations[i].percent), deals, dealState);
             } else if (evaluations[i].action == 2) {    // extend
                 IDealCellAdapter(dealCell).extendDeadline(evaluations[i].extendTo);
             } else if (evaluations[i].action == 3) {    // close

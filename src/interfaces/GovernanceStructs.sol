@@ -35,6 +35,15 @@ enum AgentTokenMintAction {
     DISTRIBUTOR_DISABLE
 }
 
+/// Upper bounds for time/block config fields. Consumers add these to
+/// block.timestamp / block.number with checked arithmetic, so an unbounded value
+/// (or one absurdly large) would make every later proposal creation or
+/// activation revert, bricking governance with no proposal left to fix it.
+library GovernanceLimits {
+    uint256 internal constant MAX_DURATION = 365 days;
+    uint256 internal constant MAX_WARMUP_BLOCKS = 5_000_000;
+}
+
 struct GovernanceStrategyConfig {
     uint256 quorumPercent;
     uint256 highQuorumPercent;

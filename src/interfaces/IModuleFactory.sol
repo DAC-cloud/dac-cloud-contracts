@@ -18,6 +18,11 @@ interface IModuleFactory {
     // Cross-module compatibility: called on the evaluator's module
     function evaluatorAcceptsDeal(bytes4 evaluatorKind, bytes4 dealKind, address dealModule) external view returns (bool);
 
+    // Deal-proposal factory allow-list: called on the deal's module. The factory
+    // deploys every deal-level proposal (quorum, veto hooks, consumeExecution), so
+    // a proposer-chosen factory must be one the module vouches for.
+    function dealAcceptsGovernanceFactory(bytes4 dealKind, address governanceFactory) external view returns (bool);
+
     function isActive() external view returns (bool);
     function safetyCheck(address deal) external view returns (bool);
 

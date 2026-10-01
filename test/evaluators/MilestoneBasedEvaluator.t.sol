@@ -94,7 +94,10 @@ contract MilestoneBasedEvaluatorTest is Test {
     uint256 constant DEAL_ID = 1;
     address constant DEAL_ADDR = address(0xDEA11);
 
+    MilestoneEvaluatorFactory internal factory;
+
     function setUp() public {
+        factory = new MilestoneEvaluatorFactory();
         usdc = new MockUSDC();
         dai = new MockUSDC();
         mockDealCell = new MockDealCell(block.timestamp);
@@ -107,7 +110,6 @@ contract MilestoneBasedEvaluatorTest is Test {
     }
 
     function deployEvaluator(MilestoneBasedEvaluator.Config memory cfg) internal {
-        MilestoneEvaluatorFactory factory = new MilestoneEvaluatorFactory();
         bytes memory configData = abi.encode(cfg);
 
         DealParams memory dealParams = DealParams({
@@ -396,7 +398,7 @@ contract MilestoneBasedEvaluatorTest is Test {
             oracle: address(0),
             valuationMode: 0,
             fundingToken: address(usdc),
-            expectedReturn: 10_000e6,
+            expectedReturn: 1e18, // 100% of invested capital back
             timestamp: block.timestamp + 30 days,
             rewardPercentage: MathLib.atScale(25),
             rewardCurve: new int256[](1),
@@ -425,6 +427,101 @@ contract MilestoneBasedEvaluatorTest is Test {
         assertEq(results[0].percent, MathLib.atScale(25));
     }
 
+    /// Returning the bare principal is not a success when expectedReturn asks for more:
+    /// agents cannot unlock rewards by round-tripping the funding back to the DAC.
+    function test_sameTokenFunding_expectedReturnAppliesToPrincipalReturned() public {
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(usdc),
+            expectedReturn: 12e17, // 120% back
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(25),
+            rewardCurve: new int256[](1), // zero reward on a miss
+            penaltyCurve: new int256[](1), // zero penalty on a miss
+            minPercentGrace: 0,
+            extension: 0
+        });
+
+        MilestoneBasedEvaluator.Config memory cfg = MilestoneBasedEvaluator.Config({
+            rewardShare: MathLib.atScale(100),
+            milestones: milestones
+        });
+
+        deployEvaluator(cfg);
+        mockDealCell.setInvestedCapital(address(usdc), 10_000e6);
+        mockDealCell.setReturnedCapital(10_000e6); // exactly the principal
+
+        vm.warp(block.timestamp + 30 days);
+
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(results.length, 0); // deadline passed, 83% progress: no unlock
+        assertTrue(evaluator.evaluated(0));
+    }
+
+    function test_sameTokenFunding_zeroInvestedCapitalIsZeroProgressNotRevert() public {
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(usdc),
+            expectedReturn: 1e18,
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(25),
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
+        });
+        milestones[0].penaltyCurve[0] = 1e18;
+
+        deployEvaluator(MilestoneBasedEvaluator.Config({rewardShare: MathLib.atScale(100), milestones: milestones}));
+        // nothing invested in the accounting token
+        mockDealCell.setReturnedCapital(10_000e6);
+
+        vm.warp(block.timestamp + 30 days);
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+
+        assertEq(results.length, 1);
+        assertEq(results[0].action, 0); // full miss: penalty curve applies
+        assertEq(results[0].percent, MathLib.SCALE);
+    }
+
+    function test_initialize_rejectsMisconfiguredMilestones() public {
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(0),
+            expectedReturn: 10_000e6,
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(25),
+            rewardCurve: new int256[](0), // empty curve
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0
+        });
+        vm.expectRevert(MilestoneBasedEvaluator.InvalidConfig.selector);
+        deployEvaluator(MilestoneBasedEvaluator.Config({rewardShare: MathLib.atScale(100), milestones: milestones}));
+
+        milestones[0].rewardCurve = new int256[](1);
+        milestones[0].expectedReturn = 0;
+        vm.expectRevert(MilestoneBasedEvaluator.InvalidConfig.selector);
+        deployEvaluator(MilestoneBasedEvaluator.Config({rewardShare: MathLib.atScale(100), milestones: milestones}));
+
+        milestones[0].expectedReturn = 1e18;
+        milestones[0].fundingToken = address(dai); // two tokens, no oracle
+        vm.expectRevert(MilestoneBasedEvaluator.OracleNotSet.selector);
+        deployEvaluator(MilestoneBasedEvaluator.Config({rewardShare: MathLib.atScale(100), milestones: milestones}));
+    }
+
     function test_holdingsMode_withFundingTokenConversion_usesOraclePrices() public {
         Milestone[] memory milestones = new Milestone[](1);
         milestones[0] = Milestone({
@@ -433,7 +530,7 @@ contract MilestoneBasedEvaluatorTest is Test {
             oracle: address(oracle),
             valuationMode: 0,
             fundingToken: address(dai),
-            expectedReturn: 0,
+            expectedReturn: 1e18,
             timestamp: block.timestamp + 30 days,
             rewardPercentage: MathLib.atScale(25),
             rewardCurve: new int256[](1),

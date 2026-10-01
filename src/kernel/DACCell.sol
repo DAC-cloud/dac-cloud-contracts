@@ -536,6 +536,9 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     function _executeRevokeAgent(uint256 id, IManagementProposal prop) internal {
         uint256 amount = uint256(prop.i());
         address holder = prop.target();
+        // Staked collateral lives on DealCells (controlled). Burning it from there would
+        // desync StakedAgent supply from the cell's AgentToken balance and break unstakes.
+        require(!IAssetController(assetController).isControlledAddress(holder), DACErrorsLib.NotAllowed());
         agentToken.burnFrom(holder, amount);
         emit DACEventsLib.AgentTokenRevoked(id, holder, amount);
     }

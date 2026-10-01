@@ -76,7 +76,10 @@ contract RevenueBasedEvaluatorTest is Test {
 
     event EvaluatorResult(uint256 action, uint256 percent, uint256 extendTo);
 
+    RevenueEvaluatorFactory internal factory;
+
     function setUp() public {
+        factory = new RevenueEvaluatorFactory();
         mockDealCell = new MockDealCell(block.timestamp);
         vm.mockCall(
             DAC,
@@ -90,7 +93,6 @@ contract RevenueBasedEvaluatorTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function deployEvaluator(RevenueBasedEvaluator.Config memory cfg) internal {
-        RevenueEvaluatorFactory factory = new RevenueEvaluatorFactory();
         bytes memory configData = abi.encode(cfg);
 
         DealParams memory dealParams = DealParams({
@@ -530,7 +532,7 @@ contract RevenueBasedEvaluatorTest is Test {
         assertEq(results[0].percent, MathLib.atScale(10));
     }
 
-    function test_projectionModeWithoutInvestedCapital_reverts() public {
+    function test_projectionModeWithoutInvestedCapital_settlesCyclesWithoutResults() public {
         RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
             duration: 30 days,
@@ -556,9 +558,38 @@ contract RevenueBasedEvaluatorTest is Test {
         });
         deployEvaluator(evaluatorCfg);
 
+        uint256 lastCheckedBefore = evaluator.lastChecked();
         vm.warp(block.timestamp + 30 days);
-        vm.expectRevert(RevenueBasedEvaluator.RevenueBaseMisconfigured.selector);
-        evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        // No target can be derived, but the evaluation must not revert forever (that
+        // would make agents slash-immune); elapsed cycles settle without results.
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(results.length, 0);
+        assertEq(evaluator.lastChecked(), lastCheckedBefore + 30 days);
+        assertEq(evaluator.totalEvaluatedCycles(), 1);
+    }
+
+    function test_initialize_rejectsZeroDurationAndEmptyCurves() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 0,
+            revenueProjectionMode: 0,
+            revenueProjection: 10_000e6,
+            requirementCurveCoeffs: new int256[](1),
+            curveCoeffs: new int256[](1),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(25),
+            graceCycles: 0,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false
+        });
+        vm.expectRevert(RevenueBasedEvaluator.InvalidConfig.selector);
+        deployEvaluator(RevenueBasedEvaluator.Config({rewardShare: MathLib.atScale(100), schedule: cfg}));
+
+        cfg.duration = 30 days;
+        cfg.curveCoeffs = new int256[](0);
+        vm.expectRevert(RevenueBasedEvaluator.InvalidConfig.selector);
+        deployEvaluator(RevenueBasedEvaluator.Config({rewardShare: MathLib.atScale(100), schedule: cfg}));
     }
 
     function test_multiCycleBatch_usesRequirementCurveForEachCycle() public {

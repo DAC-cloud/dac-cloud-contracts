@@ -38,6 +38,7 @@ library DACErrorsLib {
 
     error ModuleNotApproved();
     error ModuleDisabled();
+    error GovernanceFactoryNotAccepted();
 
     error InvalidDealAddress();
     error InvalidDeal(address deal);

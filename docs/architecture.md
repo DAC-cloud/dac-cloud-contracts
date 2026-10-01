@@ -191,7 +191,7 @@ In existing-token mode, `WrappedMainToken` is the DAC-native governance and acco
 
 - wraps an existing underlying ERC-20 at 1:1
 - is `ERC20Votes`-compatible
-- auto-self-delegates on first wrap
+- auto-self-delegates on first self-wrap
 - reports moves and delegations to the asset controller
 - is the asset used for:
   - wrapper-based qualification
@@ -272,7 +272,7 @@ If the oracle does not publish in time, the proposal transitions into fallback:
 
 Fallback is wrapped-token-only and starts from a clean vote state after warmup.
 
-The primary phase snapshots at proposal creation. The fallback phase snapshots at the last block of warmup: warmup is measured in blocks (`fallbackWarmupBlocks`) and the snapshot block is fixed and public the moment fallback is triggered, by oracle miss, emergency, or creation in wrapped-only mode. Holders can therefore wrap and delegate in response to a proposal during warmup, while no single actor can choose when the snapshot is taken. Voting activates once the snapshot block has passed. A phase whose votable supply at its snapshot is zero cannot be activated and the proposal stays dormant.
+The primary phase snapshots at proposal creation. The fallback phase snapshots at the last block of warmup: warmup is measured in blocks (`fallbackWarmupBlocks`) and the snapshot block is fixed and public the moment fallback is triggered, by oracle miss, emergency, or creation in wrapped-only mode. Holders can therefore wrap and delegate in response to a proposal during warmup, while no single actor can choose when the snapshot is taken. Voting activates once the snapshot block has passed; any state read after that block finalizes the transition lazily. A phase whose votable supply at its snapshot is zero resolves as rejected: nobody could vote, and a dormant proposal would freeze anything gated on its resolution, such as a deal proposal held by a `CAST_VETO_DEAL` challenge. Quorum and blocking thresholds round up, so a dust-level supply cannot pass a proposal with no votes.
 
 ### 5.3 Hybrid Strategy Tweaks
 
@@ -538,12 +538,14 @@ Two governance layers apply, both reusing existing kernel mechanics:
 
 The home-side staked-agent proposals are:
 
-- `HOST_STAKE` -- stake host agent tokens into a host deal, then self-delegate the resulting host `StakedAgent` (which is `ERC20Votes` and does not auto-delegate) so the position carries voting power.
+- `HOST_STAKE` -- stake host agent tokens into a host deal; the resulting host `StakedAgent` self-delegates on mint, so the position carries voting power.
+- `HOST_APPROVE_STAKE` -- approve host agent tokens for a host `ADD_STAKE` into an already-approved host deal, and delegate the host stake up front so the pulled position carries voting power.
 - `HOST_APPROVE_STAKE` -- approve a host deal to pull additional stake via its own `ADD_STAKE` flow after activation.
 - `HOST_CREATE_DEAL` -- originate a brand-new deal in the host DAC. Because an agent above the host's qualification threshold may propose deals, the agent-deal can act on what it observes (e.g. drones survey a field and propose a fertilizer deal). The proposer is forced to the agent-deal itself.
 - `HOST_CREATE_PROPOSAL` / `HOST_VOTE` -- create and vote on staked-agent proposals inside existing host deals.
 - `HOST_CLAIM_REWARD` -- claim main-token incentives the agent-deal earned in a host deal.
 - `HOST_UNSTAKE` -- exit a host deal and recover the host agent tokens.
+- `HOST_INVITE` -- invite an agent into a whitelist-only host deal the agent-deal originated (it is that deal's sole initial inviter).
 - `RETURN_ASSET_TO_DAC` -- route earned host incentives (and any other idle foreign assets) back to the home treasury. The home main token is excluded from this path to avoid interfering with main-token obligation accounting.
 
 Every host action takes a host deal cell and is validated against the bound host DAC's deal registry (the same `DealManager.state(...).id != 0` trust anchor used by `AgentToken`), so an agent-deal can only ever interact with deals belonging to its one bound host DAC. As with the rest of the core module, host interactions are typed kernel-interface calls on validated host contracts rather than arbitrary external calls.

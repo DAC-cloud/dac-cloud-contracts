@@ -148,6 +148,8 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
             DACErrorsLib.NotAllowed()
         );
         require(strategy.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
+        // Finalize a primary vote that already ended by time before wiping it.
+        _checkAndEmitResolution();
         require(!proposalResolved, DACErrorsLib.NotAllowed());
         require(!IGovernanceOracle(governanceOracle).isActive(dacCell), DACErrorsLib.NotAllowed());
 
@@ -277,11 +279,13 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         phaseStartTime = block.timestamp;
         phaseEndTime = block.timestamp + duration;
         totalVotingPower = phaseTotalVotingPower;
-        quorum = MathLib.mul(
+        // Round up: a quorum that rounds to zero would let a dust-level supply pass a
+        // proposal with no votes at all.
+        quorum = MathLib.mulRoundUp(
             phaseTotalVotingPower,
             highQuorum ? strategy.highQuorumPercent : strategy.quorumPercent
         );
-        blockingQuorum = blockingEnabled ? MathLib.mul(phaseTotalVotingPower, strategy.blockingPercent) : 0;
+        blockingQuorum = blockingEnabled ? MathLib.mulRoundUp(phaseTotalVotingPower, strategy.blockingPercent) : 0;
 
         emit DACEventsLib.ProposalPhaseTransition(
             id,
@@ -344,6 +348,11 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         uint256 wrappedVotable = IVotes(wrappedToken).getPastTotalSupply(primarySnapshotBlock)
             - IAssetController(assetController).getPastControlledBalance(primarySnapshotBlock);
 
+        if (totalUnderlyingVotingPower + wrappedVotable == 0) {
+            _resolveWithoutElectorate(primarySnapshotBlock);
+            return;
+        }
+
         _activateVotingPhase(
             ProposalPhase.PrimaryVoting,
             primarySnapshotBlock,
@@ -379,11 +388,32 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         uint256 wrappedVotable = IVotes(wrappedToken).getPastTotalSupply(fallbackSnapshotBlock)
             - IAssetController(assetController).getPastControlledBalance(fallbackSnapshotBlock);
 
+        if (wrappedVotable == 0) {
+            _resolveWithoutElectorate(fallbackSnapshotBlock);
+            return;
+        }
+
         _activateVotingPhase(
             ProposalPhase.FallbackVoting,
             fallbackSnapshotBlock,
             wrappedVotable,
             strategy.fallbackDuration
+        );
+    }
+
+    // No votable supply at the snapshot: nobody can vote, so the proposal is rejected
+    // rather than left dormant. A dormant proposal would never resolve, and anything
+    // gated on its resolution (a CAST_VETO_DEAL challenge holding a deal proposal)
+    // would be frozen forever.
+    function _resolveWithoutElectorate(uint256 snapshotBlock) internal {
+        proposalResolved = true;
+        resolvedOutcome = false;
+        resolutionTime = block.timestamp;
+        phase = ProposalPhase.Resolved;
+
+        emit DACEventsLib.ProposalResolved(0, 0, false);
+        emit DACEventsLib.ProposalPhaseTransition(
+            id, uint8(phase), snapshotBlock, block.timestamp, block.timestamp, 0, 0, 0
         );
     }
 
@@ -397,6 +427,14 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
 
     function _checkAndEmitResolution() internal {
         if (proposalResolved) return;
+
+        // Lazy fallback activation: once the snapshot block has passed, any state
+        // read finalizes the transition (and, with no electorate, the rejection).
+        if (phase == ProposalPhase.FallbackWarmup && block.number > fallbackSnapshotBlock) {
+            _activateFallbackInternal();
+            if (proposalResolved) return;
+        }
+
         if (phase != ProposalPhase.PrimaryVoting && phase != ProposalPhase.FallbackVoting) return;
 
         bool nowResolved =
@@ -431,6 +469,15 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     }
 
     function _outcome() internal view returns (bool) {
+        // Before a voting phase is active quorum is still zero and `0 >= 0` would read
+        // as a yes; only voting and resolved phases carry an outcome.
+        require(
+            phase == ProposalPhase.PrimaryVoting ||
+                phase == ProposalPhase.FallbackVoting ||
+                phase == ProposalPhase.Resolved,
+            DACErrorsLib.NotResolved()
+        );
+
         bool yesQuorumReached = yesVotes >= quorum;
 
         if (blockingQuorum > 0) {

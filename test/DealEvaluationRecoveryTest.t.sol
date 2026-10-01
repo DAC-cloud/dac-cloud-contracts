@@ -120,6 +120,9 @@ contract MockEvaluatorModuleFactory is ModuleFactory {
     function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
         return true;
     }
+    function dealAcceptsGovernanceFactory(bytes4, address) external pure returns (bool) {
+        return true;
+    }
     function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
         return dealKind == CoreDealType.PERMIT2_TREASURY;
     }
@@ -273,7 +276,8 @@ contract DealEvaluationRecoveryTest is DACTestBase {
     function test_mockEvaluator_extendUpdatesDealDeadline() public {
         DealHandle memory handle = _setupApprovedMockTreasuryDeal();
 
-        uint256 extendedDeadline = block.timestamp + 10 days;
+        // Extensions must move the deadline forward; shortening it is rejected by the kernel.
+        uint256 extendedDeadline = IDealCell(handle.dealCell).dealDeadline() + 10 days;
         EvaluationResult[] memory results = _singleResult(2, 0, extendedDeadline);
         MockEvaluator(handle.evaluatorAddr).setResults(results);
 

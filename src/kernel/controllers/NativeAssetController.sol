@@ -104,6 +104,8 @@ contract NativeAssetController is IAssetController, Initializable {
         uint256 amount,
         uint256 cashAmount
     ) external onlyDACCell returns (bytes32 callHash) {
+        _requireMintHeadroom(amount);
+
         CapitalCall memory call = CapitalCall({
             treasuryToken: treasuryToken,
             nonce: id,
@@ -131,6 +133,8 @@ contract NativeAssetController is IAssetController, Initializable {
         storedCall = capitalCalls[callHash].call;
         require(storedCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
 
+        _requireMintHeadroom(storedCall.tokenAmount);
+
         IERC20(call.treasuryToken).safeTransferFrom(storedCall.tokenRecipient, address(this), call.cashAmount);
 
         treasuryBalances[call.treasuryToken] += call.cashAmount;
@@ -149,6 +153,8 @@ contract NativeAssetController is IAssetController, Initializable {
         onlyDACCell
     {
         require(dividendPayouts[proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
+        // A zero root can never be claimed against and there is no un-commit path.
+        require(merkleRoot != bytes32(0) && totalPayout > 0, DACErrorsLib.NotAllowed());
         require(_freeBalance(token) >= totalPayout, DACErrorsLib.InsufficientTreasury());
 
         dividendPayouts[proposalId] = DividendPayoutState({
@@ -232,6 +238,7 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     function mintMainToTreasury(uint256 amount) external onlyDACCell {
+        _requireMintHeadroom(amount);
         mainToken.mint(address(this), amount);
         treasuryBalances[address(mainToken)] += amount;
     }
@@ -347,6 +354,15 @@ contract NativeAssetController is IAssetController, Initializable {
         return capability == AssetCapability.MINT
             || capability == AssetCapability.BURN
             || capability == AssetCapability.CAPITAL_CALL;
+    }
+
+    // Treasury mints and capital calls must leave room under maxSupply for every
+    // reward the DAC has already promised to active deals, or those claims revert.
+    function _requireMintHeadroom(uint256 amount) internal view {
+        require(
+            mainToken.totalSupply() + _mainTokenObligations + amount <= mainToken.maxSupply(),
+            DACErrorsLib.MaxSupplyExceeded()
+        );
     }
 
     function _freeBalance(address token) internal view returns (uint256) {

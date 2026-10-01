@@ -29,9 +29,11 @@ import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 ///         governance layers apply: the home DAC's staked agents govern this
 ///         deal's host-side behaviour through the proposals below, while the
 ///         host DAC's own governance still has to pass anything the deal
-///         proposes there. The deal holds host `AgentToken`/`StakedAgent` only
-///         (never host `MainToken`), so it has no host *DAC-level* vote — its
-///         power inside the host is bounded to deal-level agency by construction.
+///         proposes there. The deal holds host `AgentToken`/`StakedAgent`, and
+///         host `MainToken` only transiently as claimed rewards on their way home
+///         (RETURN_ASSET_TO_DAC); it never delegates host main token and has no
+///         host *DAC-level* proposal path, so its power inside the host is
+///         bounded to deal-level agency by construction.
 contract AgentDeal is Deal {
     using SafeERC20 for IERC20;
 
@@ -51,6 +53,7 @@ contract AgentDeal is Deal {
     event HostVoteCast(address indexed hostDealCell, uint256 indexed hostProposalId, bool support);
     event HostRewardClaimed(address indexed hostDealCell, uint256 evaluatorId);
     event HostUnstaked(address indexed hostDealCell);
+    event HostInvited(address indexed hostDealCell, address indexed invitee, bool grantInviteRight);
     event AssetReturnedToDAC(address indexed token, uint256 amount);
 
     function initialize(
@@ -79,7 +82,7 @@ contract AgentDeal is Deal {
     ) internal override {
         // Bind the single host DAC this deal will act as an agent inside.
         address hostDac = params.dealTarget;
-        require(hostDac != address(0), DACErrorsLib.NotAllowed());
+        require(hostDac != address(0) && hostDac != dacCell, DACErrorsLib.NotAllowed());
 
         managedEntity = hostDac;
 
@@ -108,6 +111,7 @@ contract AgentDeal is Deal {
             params.typ == CoreDealManagementType.HOST_VOTE ||
             params.typ == CoreDealManagementType.HOST_CLAIM_REWARD ||
             params.typ == CoreDealManagementType.HOST_UNSTAKE ||
+            params.typ == CoreDealManagementType.HOST_INVITE ||
             params.typ == CoreDealManagementType.RETURN_ASSET_TO_DAC
         );
     }
@@ -135,6 +139,10 @@ contract AgentDeal is Deal {
             address hostDealCell = abi.decode(params.data, (address));
             _resolveHostDeal(hostDealCell);
         }
+        else if (params.typ == CoreDealManagementType.HOST_INVITE) {
+            (address hostDealCell,,) = abi.decode(params.data, (address, address, bool));
+            _resolveHostDeal(hostDealCell);
+        }
     }
 
     function _executeModuleManagementProposal(DealManagementProposal proposal) internal virtual override {
@@ -160,6 +168,10 @@ contract AgentDeal is Deal {
 
             // Post-approval staking: lets a host ADD_STAKE proposal pull more stake.
             IERC20(hostDNA.hostAgentToken).forceApprove(hostDealCell, amount);
+
+            // The stake minted by the host's ADD_STAKE must carry voting power too;
+            // delegation can be set before any balance exists.
+            IVotes(IDealCell(hostDealCell).stakeToken()).delegate(address(this));
 
             emit HostStakeApproved(hostDealCell, amount);
         }
@@ -221,6 +233,18 @@ contract AgentDeal is Deal {
             IDealCell(hostDealCell).unstake();
 
             emit HostUnstaked(hostDealCell);
+        }
+
+        else if (typ == CoreDealManagementType.HOST_INVITE) {
+            (address hostDealCell, address invitee, bool grantInviteRight) =
+                abi.decode(proposal.data(), (address, address, bool));
+            _resolveHostDeal(hostDealCell);
+
+            // As proposer of a host deal this contract is its sole initial inviter;
+            // whitelist-only host deals cannot be staffed without this path.
+            IDealCell(hostDealCell).invite(invitee, grantInviteRight);
+
+            emit HostInvited(hostDealCell, invitee, grantInviteRight);
         }
 
         else if (typ == CoreDealManagementType.RETURN_ASSET_TO_DAC) {

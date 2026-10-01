@@ -17,6 +17,7 @@ import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {MathLib} from "./MathLib.sol";
 import {IVotes} from "../../lib/IVotes.sol";
+import {GovernanceLimits} from "../../interfaces/GovernanceStructs.sol";
 
 interface IDealCellGovernanceAdapter {
     function invite(address invitee, bool grantInviteRight) external;
@@ -50,23 +51,38 @@ library DealCellGovernanceLib {
 
         deal.beforeEveryStake(staker, amount);
 
-        bool newHolder = true;
-        for (uint256 i = 0; i < holders.length; i++) {
-            if (holders[i] == staker) {
-                newHolder = false;
-            }
-        }
-
-        if (newHolder) {
-            require(agentsLimit == 0 || holders.length < agentsLimit, DACErrorsLib.AgentsLimitReached());
-            holders.push(staker);
-        }
+        _admitHolder(staker, token, holders, agentsLimit);
         
         token.mint(staker, amount);
         
         emit DACEventsLib.AgentTokensStaked(dacCell, id, address(deal), staker, amount);
 
         deal.afterEveryStake(staker, amount);
+    }
+
+    // `holders` is historical (never pruned, used for claimable tracking), so the
+    // agents limit is enforced against holders with a live stake, not list length.
+    function _admitHolder(
+        address staker,
+        StakedAgent token,
+        address[] storage holders,
+        uint256 agentsLimit
+    ) internal {
+        bool newHolder = true;
+        uint256 activeHolders = 0;
+        for (uint256 i = 0; i < holders.length; i++) {
+            if (holders[i] == staker) {
+                newHolder = false;
+            }
+            if (token.balanceOf(holders[i]) > 0) {
+                activeHolders++;
+            }
+        }
+
+        if (newHolder) {
+            require(agentsLimit == 0 || activeHolders < agentsLimit, DACErrorsLib.AgentsLimitReached());
+            holders.push(staker);
+        }
     }
 
     function addStake(
@@ -92,17 +108,7 @@ library DealCellGovernanceLib {
 
         deal.beforeEveryStake(staker, amount);
 
-        bool newHolder = true;
-        for (uint256 i = 0; i < holders.length; i++) {
-            if (holders[i] == staker) {
-                newHolder = false;
-            }
-        }
-
-        if (newHolder) {
-            require(agentsLimit == 0 || holders.length < agentsLimit, DACErrorsLib.AgentsLimitReached());
-            holders.push(staker);
-        }
+        _admitHolder(staker, token, holders, agentsLimit);
         
         token.mint(staker, amount);
         
@@ -241,6 +247,12 @@ library DealCellGovernanceLib {
             );
         }
 
+        if (params.typ == AbstractDealManagementType.REQUEST_TRANCHE) {
+            // A closed deal can never unlock rewards, so a tranche approved after close
+            // would leak its reward reservation forever.
+            require(!IDealCell(dealCell).isClosed(), DACErrorsLib.DealIsClosed());
+        }
+
         if (params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG) {
             VotingConfig memory _votingConfig = abi.decode(params.data, (VotingConfig));
             
@@ -248,6 +260,8 @@ library DealCellGovernanceLib {
             require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.duration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
+            require(_votingConfig.executionValidityDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
             require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
@@ -345,13 +359,22 @@ library DealCellGovernanceLib {
         }
 
         else {
-            // Adjusting rewards converted to extend percents
-            rewardsConverted = MathLib.div(
-                MathLib.mulDiv(_tokenRewardsLimit, rewardsConverted, MathLib.SCALE),
-                _tokenRewardsLimit + rewardsLimit - 1 // leaving some dust but preventing accounting issues
-            );
-
+            // Adjusting rewards converted to extend percents. Divides by (limit - 1) so
+            // the rescaled percent rounds up and leaves dust unconvertible rather than
+            // over-converting; guarded so zero-reward deals (limit <= 1) do not underflow
+            // or divide by zero, and capped at 100%.
             tokenRewardsLimit = _tokenRewardsLimit + rewardsLimit;
+
+            if (tokenRewardsLimit <= 1) {
+                rewardsConverted = 0;
+            } else {
+                rewardsConverted = MathLib.capAt100(
+                    MathLib.div(
+                        MathLib.mulDiv(_tokenRewardsLimit, _rewardsConverted, MathLib.SCALE),
+                        tokenRewardsLimit - 1
+                    )
+                );
+            }
         }
     }
 
@@ -361,15 +384,12 @@ library DealCellGovernanceLib {
         address dealAddr,
         DealManagementProposal prop,
         mapping(uint256 => Tranche) storage _fundingTranches,
-        address[] storage _fundingTokens,
         mapping(address => uint256) storage _requestedFunding
     ) public {
         address _fundingToken = DealManagementProposal(prop).target();
         
-        // Creating tranche state
-        if (_requestedFunding[_fundingToken] == 0) {
-            _fundingTokens.push(_fundingToken);
-        }
+        // Creating tranche state. The token joins `_fundingTokens` only when the DAC
+        // settles the tranche (DealCell.approveFunding), never on request.
         _requestedFunding[_fundingToken] += uint256(DealManagementProposal(prop).i());
 
         _fundingTranches[prop.id()] = Tranche({

@@ -80,6 +80,7 @@ Current responsibilities:
 - route evaluator output
 - determine recoverability / active lifecycle state
 - interact with the asset controller for reward and main-asset accounting
+- validate the proposer-supplied deal-proposal factory against the module (`dealAcceptsGovernanceFactory`); reject deals whose factory the module does not vouch for
 - gate module-registered controlled addresses: at most `MAX_MODULE_CONTROLLED_ADDRESSES` (3) per deal beyond the kernel-registered `DealCell` and `Deal`; contract accounts only (no EOAs, no EIP-7702 delegated EOAs) that have never delegated
 
 ### `src/kernel/DealCell.sol`
@@ -149,8 +150,8 @@ Existing-token DAC governance policy.
 Uses:
 
 - `WrappedMainToken` delegated votes for qualification
-- `GovernanceStrategyConfig` for oracle/fallback behavior
-- `GovernanceOracle` address management
+- `GovernanceStrategyConfig` for oracle/fallback behavior (durations capped by `GovernanceLimits.MAX_DURATION`, warmup by `GovernanceLimits.MAX_WARMUP_BLOCKS`, so a passed config can never brick proposal creation)
+- `GovernanceOracle` address management (a non-zero oracle must be a contract)
 
 Handles:
 
@@ -273,8 +274,8 @@ Handles:
 
 - main-token treasury accounting
 - native main-token obligations
-- dividend payout commitments
-- capital calls
+- dividend payout commitments (non-zero root and amount, claims capped at the committed total)
+- capital calls and treasury mints, both keeping max-supply headroom for outstanding reward obligations
 - controlled address registration
 - released-votable accounting
 - DAC-managed `AgentToken` distributor allowances and recipient validation
@@ -367,10 +368,11 @@ Key semantics:
 - distributor inventory is transferable only from DAC-approved distributor wallets
 - distributed balances become bound / non-transferable at the recipient
 - qualification-sensitive checks use `qualifiedBalanceOf(...)`, which excludes distributor inventory
+- `transferFrom` (the path approved deals use to pull stake) requires a qualified balance, so distributor inventory can never enter a deal as stake
 
 ### `src/kernel/tokens/StakedAgent.sol`
 
-Per-deal non-transferable `ERC20Votes` token used for deal governance.
+Per-deal non-transferable `ERC20Votes` token used for deal governance. Self-delegates on mint, so a fresh stake carries voting and proposing power without a separate delegate call.
 
 ### Token factories
 
@@ -422,7 +424,7 @@ Core-module proposal selector registry for:
 - child-DAC operations
 - external voting venue management (`APPROVE_VOTING_VENUE_VERSION`)
 - external vote signature approvals (`EXTERNAL_VOTE_SIGN`)
-- agent operations inside a host DAC (`HOST_STAKE`, `HOST_APPROVE_STAKE`, `HOST_CREATE_DEAL`, `HOST_CREATE_PROPOSAL`, `HOST_VOTE`, `HOST_CLAIM_REWARD`, `HOST_UNSTAKE`, `RETURN_ASSET_TO_DAC`)
+- agent operations inside a host DAC (`HOST_STAKE`, `HOST_APPROVE_STAKE`, `HOST_CREATE_DEAL`, `HOST_CREATE_PROPOSAL`, `HOST_VOTE`, `HOST_CLAIM_REWARD`, `HOST_UNSTAKE`, `HOST_INVITE`, `RETURN_ASSET_TO_DAC`)
 
 ### `src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol`
 
@@ -481,7 +483,7 @@ Capabilities:
 - approve post-activation host add-stake (`HOST_APPROVE_STAKE`)
 - originate new deals in the host DAC, with the proposer forced to the deal itself (`HOST_CREATE_DEAL`)
 - create and vote on host deal proposals (`HOST_CREATE_PROPOSAL`, `HOST_VOTE`)
-- claim host main-token incentives (`HOST_CLAIM_REWARD`) and exit host deals (`HOST_UNSTAKE`)
+- claim host main-token incentives (`HOST_CLAIM_REWARD`), exit host deals (`HOST_UNSTAKE`) and invite agents into host deals it originated (`HOST_INVITE`)
 - route earned host assets back to the home treasury, excluding the home main token (`RETURN_ASSET_TO_DAC`)
 - validate every host interaction against the bound host DAC's deal registry
 - emit `DealRelatedContract` for host DAC and host token discovery
@@ -503,6 +505,8 @@ Milestone-driven evaluator with:
 - extension support
 - close milestones
 
+Configuration is validated at deployment (non-empty curves, positive `expectedReturn`, oracle present whenever two tokens are compared, non-zero growth snapshot) and zero denominators evaluate to zero progress, so a misconfigured milestone can never make `evaluateDeal` revert forever. When `fundingToken` is set, `expectedReturn` is the scaled share of invested capital expected back (`1e18` = 100%): returning the bare principal is not a completed milestone unless the milestone says so. Unlocks are clamped to what the deal can still convert.
+
 ### `src/modules/core/evaluators/RevenueBasedEvaluator.sol`
 
 Recurring revenue evaluator with:
@@ -511,6 +515,8 @@ Recurring revenue evaluator with:
 - unlock curves
 - missed-cycle penalties
 - optional close behavior
+
+Configuration is validated at deployment (positive duration and projection, non-empty curves, percents within scale). A zero requirement counts as met, a projection-mode deal with nothing invested settles its cycles without results, and at most `MAX_CYCLES_PER_EVALUATION` cycles settle per call (the rest carry over), so evaluation can never revert forever or run out of gas after a long gap. Unlocks are clamped to what the deal can still convert.
 
 ### Evaluator factories
 
@@ -536,7 +542,8 @@ Key shared structs:
 
 - `dealRewardPoolPercent` — percentage of deal funding allocated to the deal reward pool
 - `evaluatorModuleFactory` — module factory for evaluator deployment; `address(0)` means use the deal's own module factory
-- `agentsLimit` — maximum number of stakers in a deal; `0` means no limit
+- `agentsLimit` — maximum number of agents with a live stake in a deal; `0` means no limit
+- `approveDeadline` / `evaluationDeadline` / `dealDeadline` — the DAC must approve the deal by the first; from the second, main-token holders (not only staked agents) may trigger evaluations; after the third, the DAC may force capital to be returned. A deal cannot be closed by the DAC before its deadlines: those deadlines are part of the obligation the DAC takes on when it approves the deal
 - `minimalStake` — minimum stake per agent; `0` means no minimum
 
 ### `src/interfaces/GovernanceStructs.sol`

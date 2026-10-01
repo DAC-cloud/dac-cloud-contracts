@@ -44,6 +44,12 @@ contract StakedAgent is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgr
         require(hasRole(MINTER_ROLE, msg.sender), DACErrorsLib.NotAuthorized());
 
         _mint(to, amount);
+
+        // Non-transferable, so self-delegation is always the right default: a fresh
+        // stake carries voting and proposing power without a separate delegate call.
+        if (delegates(to) == address(0)) {
+            _delegate(to, to);
+        }
     }
 
     function burn(address from, uint256 amount) external {

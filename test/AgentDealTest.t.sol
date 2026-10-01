@@ -298,6 +298,97 @@ contract AgentDealTest is DACTestBase {
     }
 
     // --------------------------------------------------------------------- //
+    //                 Audit 2026-10: invites, approve-stake, self-host       //
+    // --------------------------------------------------------------------- //
+
+    function test_agentDeal_rejectsSelfHosting() public {
+        vm.prank(agent1);
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        IDealManager(dealManager).createDealProposal(_agentDealParams(agent1, address(dac)));
+    }
+
+    /// The agent-deal is the sole initial inviter of host deals it originates; without
+    /// HOST_INVITE a whitelist-only host deal could never be staffed.
+    function test_agentDeal_invitesIntoOriginatedHostDeal() public {
+        (DealHandle memory handle, address hostDealCell) = _setupStakedAgentDealInHost();
+
+        address hostAgent = makeAddr("host-agent");
+        _mintHostAgentTokens(hostAgent, 10_000);
+
+        vm.prank(hostAgent);
+        vm.expectRevert(DACErrorsLib.NotWhitelistedAgent.selector);
+        hostAgentToken.stakeToDeal(hostDealCell, 10_000);
+
+        _passAgentProposal(
+            handle,
+            agent1,
+            ProposalParams({
+                typ: CoreDealManagementType.HOST_INVITE,
+                target: address(0),
+                i: 0,
+                data: abi.encode(hostDealCell, hostAgent, false)
+            })
+        );
+
+        vm.prank(hostAgent);
+        hostAgentToken.stakeToDeal(hostDealCell, 10_000);
+        assertEq(StakedAgent(IDealCell(hostDealCell).stakeToken()).balanceOf(hostAgent), 10_000);
+    }
+
+    /// Joining an already-approved host deal (originated by someone else) goes through
+    /// HOST_APPROVE_STAKE + the host's ADD_STAKE. The position must carry voting power,
+    /// so delegation is set up front, before any stake exists.
+    function test_agentDeal_approveStakeSelfDelegatesHostStake() public {
+        DealHandle memory handle = _createAgentDeal(agent1);
+        _activateAgentDeal(handle, agent1);
+        _mintHostAgentTokens(handle.dealAddr, HOST_AGENT_MINT);
+
+        // A native host agent originates and stakes a host deal, inviting the agent-deal.
+        address hostAgent = makeAddr("host-agent");
+        _mintHostAgentTokens(hostAgent, 50_000);
+
+        DealParams memory hostParams = _hostTreasuryDealParams();
+        hostParams.proposer = hostAgent;
+
+        vm.recordLogs();
+        vm.prank(hostAgent);
+        (, address hostDealCell,,) = IDealManager(hostDealManager).createDealProposal(hostParams);
+        uint256 hostApproveId = uint256(
+            _findTopic(vm.getRecordedLogs(), keccak256("DealCreated(address,uint256,uint256,address,bytes4,address,address)"), 3)
+        );
+
+        vm.warp(block.timestamp + 1);
+        vm.startPrank(hostAgent);
+        IDealCell(hostDealCell).invite(handle.dealAddr, false);
+        hostAgentToken.stakeToDeal(hostDealCell, 20_000);
+        vm.stopPrank();
+
+        vm.startPrank(hostFounder);
+        IVoting(hostDac.getProposalVoting(hostApproveId)).vote(true);
+        hostDac.executeDACProposal(hostApproveId);
+        vm.stopPrank();
+        assertTrue(IDealCell(hostDealCell).isApproved());
+
+        StakedAgent hostStake = StakedAgent(IDealCell(hostDealCell).stakeToken());
+        assertEq(hostStake.balanceOf(handle.dealAddr), 0);
+        assertEq(hostStake.delegates(handle.dealAddr), address(0));
+
+        _passAgentProposal(
+            handle,
+            agent1,
+            ProposalParams({
+                typ: CoreDealManagementType.HOST_APPROVE_STAKE,
+                target: address(0),
+                i: 0,
+                data: abi.encode(hostDealCell, HOST_STAKE_AMOUNT)
+            })
+        );
+
+        assertEq(hostAgentToken.allowance(handle.dealAddr, hostDealCell), HOST_STAKE_AMOUNT);
+        assertEq(hostStake.delegates(handle.dealAddr), handle.dealAddr, "approve-stake did not self-delegate");
+    }
+
+    // --------------------------------------------------------------------- //
     //                              Helpers                                   //
     // --------------------------------------------------------------------- //
 

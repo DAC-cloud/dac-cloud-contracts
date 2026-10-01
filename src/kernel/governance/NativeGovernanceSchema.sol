@@ -9,7 +9,7 @@ import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
-import {AssetCapability, DealCreationConfig, GovernanceStrategyConfig} from "../../interfaces/GovernanceStructs.sol";
+import {AssetCapability, DealCreationConfig, GovernanceStrategyConfig, GovernanceLimits} from "../../interfaces/GovernanceStructs.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {DACManagementProposalType} from "./DACManagementProposals.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
@@ -61,6 +61,8 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         uint256 totalVotingSupply,
         bool dividendsEnabled
     ) external onlyDACCell returns (uint256 id, address proposal) {
+        require(_isKnownType(params.typ), DACErrorsLib.UnsupportedProposal());
+
         if (creator == dealManager) {
             require(
                 params.typ == DACManagementProposalType.APPROVE_DEAL ||
@@ -254,6 +256,8 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.duration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.duration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
+        require(config.executionValidityDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         require(config.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
@@ -261,6 +265,33 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         require(
             config.qualification <= MathLib.SCALE / 2,
             DACErrorsLib.InvalidVotingConfig()
+        );
+    }
+
+    function _isKnownType(bytes4 typ) internal pure returns (bool) {
+        return (
+            typ == DACManagementProposalType.UPDATE_VOTING_CONFIG ||
+            typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY ||
+            typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG ||
+            typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE ||
+            typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER ||
+            typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION ||
+            typ == DACManagementProposalType.MINT_MAIN_TOKENS ||
+            typ == DACManagementProposalType.BURN_MAIN_TOKENS ||
+            typ == DACManagementProposalType.MINT_AGENT_TOKENS ||
+            typ == DACManagementProposalType.REVOKE_AGENT_TOKENS ||
+            typ == DACManagementProposalType.CAPITAL_CALL ||
+            typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS ||
+            typ == DACManagementProposalType.TOGGLE_DIVIDENDS ||
+            typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
+            typ == DACManagementProposalType.APPROVE_DEAL ||
+            typ == DACManagementProposalType.APPROVE_TRANCHE ||
+            typ == DACManagementProposalType.RECOVER_DEAL ||
+            typ == DACManagementProposalType.DEAL_MESSAGE ||
+            typ == DACManagementProposalType.CAST_VETO_DEAL ||
+            typ == DACManagementProposalType.ADD_EVALUATOR ||
+            typ == DACManagementProposalType.ADD_MODULE ||
+            typ == DACManagementProposalType.REMOVE_MODULE
         );
     }
 }

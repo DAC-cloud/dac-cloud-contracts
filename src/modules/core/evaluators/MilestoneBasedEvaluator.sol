@@ -17,6 +17,7 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
     error NotInitialized();
     error OracleNotSet();
     error InvalidValuationMode();
+    error InvalidConfig();
 
     bool private initialized;
 
@@ -55,35 +56,46 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
         cell = _cell;
 
         Config memory _config = abi.decode(_configData, (Config));
+        require(_config.rewardShare <= MathLib.SCALE, InvalidConfig());
+        require(_config.milestones.length > 0, InvalidConfig());
         config.rewardShare = _config.rewardShare;
 
-        // Take oracle snapshot once at creation
+        // Validate every milestone up front: a misconfigured one would make
+        // evaluateDeal revert forever, leaving agents slash-immune and the deal
+        // impossible to close.
         for (uint256 i = 0; i < _config.milestones.length; i++) {
             Milestone memory m = _config.milestones[i];
             config.milestones.push(m);
 
-            if (m.valuationMode != 2) {
-                if (m.valuationMode == 1) {
-                    // If mode is `FDV` oracle must be set
+            require(m.rewardCurve.length > 0 && m.penaltyCurve.length > 0, InvalidConfig());
+            require(m.rewardPercentage <= MathLib.SCALE, InvalidConfig());
+            require(m.expectedReturn > 0, InvalidConfig());
+            require(m.milestoneType <= 1, InvalidValuationMode());
+
+            if (m.valuationMode == 0) {
+                // Holdings mode converts through the oracle whenever two tokens are involved
+                if (m.fundingToken != address(0) && m.fundingToken != m.token) {
                     require(m.oracle != address(0), OracleNotSet());
                 }
-                else {
-                    require(m.valuationMode == 0, InvalidValuationMode());
-                }
-
-                // Only need snapshot for `growth` evaluation mode
                 continue;
             }
 
-            // If mode is `growth` oracle must be set
+            if (m.valuationMode == 1) {
+                // If mode is `FDV` oracle must be set
+                require(m.oracle != address(0), OracleNotSet());
+                continue;
+            }
+
+            require(m.valuationMode == 2, InvalidValuationMode());
+
+            // If mode is `growth` oracle must be set and the creation snapshot non-zero
             require(m.oracle != address(0), OracleNotSet());
 
-            // Skip if already have snapshot
             if (snapshotPrice[m.token] > 0) continue;
 
-            if (m.oracle != address(0)) {
-                snapshotPrice[m.token] = getOraclePrice(m.oracle, m.token);
-            }
+            uint256 price = getOraclePrice(m.oracle, m.token);
+            require(price > 0, InvalidConfig());
+            snapshotPrice[m.token] = price;
         }
     }
 
@@ -116,6 +128,10 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
         EvaluationResult[] memory results = new EvaluationResult[](config.milestones.length * 3 + 1);
         uint256 resultIndex = 0;
 
+        // The kernel caps conversions at 100% of the deal's rewards; never ask for more
+        // than what is left, or the whole evaluation reverts.
+        uint256 remaining = MathLib.SCALE - MathLib.capAt100(IDealCell(cell).rewardsConvertedPct());
+
         for (uint256 i = 0; i < config.milestones.length; i++) {
             Milestone memory m = config.milestones[i];
             if (evaluated[i]) continue;
@@ -134,9 +150,12 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
                     rewardPercent = config.rewardShare - unlockedRewards;
                 }
 
+                if (rewardPercent > remaining) rewardPercent = remaining;
+
                 if (rewardPercent > 0) {
                     results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
                     unlockedRewards += rewardPercent;
+                    remaining -= rewardPercent;
                 }
                 
                 if (m.milestoneType == 1) {
@@ -168,10 +187,12 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
                             // Rewards limited by `rewardShare`
                             rewardPercent = config.rewardShare - unlockedRewards;
                         }
+                        if (rewardPercent > remaining) rewardPercent = remaining;
 
                         if (rewardPercent > 0) {
                             results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
                             unlockedRewards += rewardPercent;
+                            remaining -= rewardPercent;
                         }
                     }
 
@@ -220,7 +241,14 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
                     investedCapital = MathLib.mul(investedCapital, price);
                 }
 
-                progress = MathLib.div(totalReturnsVolume, investedCapital);
+                // Nothing invested: nothing to measure against (zero progress, never a revert)
+                if (investedCapital == 0) return 0;
+
+                // Returns as a share of invested capital, measured against the expected
+                // cumulative return (scaled percent, e.g. 1.2e18 = 120% back). Returning
+                // the bare principal alone is not a 100% milestone unless expectedReturn
+                // says so.
+                progress = MathLib.div(MathLib.div(totalReturnsVolume, investedCapital), m.expectedReturn);
             }
             else {
                 // Funding token not set, assuming m.expectedReturn as monetary target
@@ -242,7 +270,9 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
             require(m.oracle != address(0), OracleNotSet());
             
             uint256 currentPrice = getOraclePrice(m.oracle, m.token);
-            uint256 growth = MathLib.div(currentPrice, snapshotPrice[m.token]);
+            uint256 snapshot = snapshotPrice[m.token];
+            if (snapshot == 0) return 0;
+            uint256 growth = MathLib.div(currentPrice, snapshot);
 
             progress = MathLib.div(growth, m.expectedReturn);
         }

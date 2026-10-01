@@ -7,11 +7,12 @@ import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Nonce
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
-contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable {
+contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public underlying;
@@ -43,7 +44,10 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
         return wrapTo(msg.sender, amount);
     }
 
-    function wrapTo(address recipient, uint256 amount) public returns (uint256 wrappedAmount) {
+    // Balance-delta accounting is only sound if no nested wrap can observe the same
+    // `balanceBefore`; underlyings with sender hooks (ERC777-style) could otherwise
+    // mint unbacked wrapped tokens.
+    function wrapTo(address recipient, uint256 amount) public nonReentrant returns (uint256 wrappedAmount) {
         require(recipient != address(0), DACErrorsLib.NotAllowed());
         require(amount > 0, DACErrorsLib.NotAllowed());
 
@@ -70,7 +74,7 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
         return unwrapTo(msg.sender, amount);
     }
 
-    function unwrapTo(address recipient, uint256 amount) public returns (uint256 underlyingAmount) {
+    function unwrapTo(address recipient, uint256 amount) public nonReentrant returns (uint256 underlyingAmount) {
         require(recipient != address(0), DACErrorsLib.NotAllowed());
         require(amount > 0, DACErrorsLib.NotAllowed());
 

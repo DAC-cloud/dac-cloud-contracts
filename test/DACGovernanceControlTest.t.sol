@@ -83,6 +83,9 @@ contract MockGovernanceModuleFactory is ModuleFactory {
     function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
         return true;
     }
+    function dealAcceptsGovernanceFactory(bytes4, address) external pure returns (bool) {
+        return true;
+    }
     function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {
         return dealKind == CoreDealType.PERMIT2_TREASURY;
     }

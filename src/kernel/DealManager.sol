@@ -101,6 +101,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             dealState
         );
 
+        require(dealAddr.code.length > 0, DACErrorsLib.InvalidDealAddress());
         IAssetController(assetController).registerControlledAddress(dealCell);
         IAssetController(assetController).registerControlledAddress(dealAddr);
 
@@ -290,6 +291,9 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     function onDealClosed(uint256 dealId) external onlyDealCell {
         require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
+        // Kernel-boundary guard: unused reward reservations are released exactly once
+        // per deal, whatever a module does inside its own cell.
+        require(dealState[deals[dealId]].active, DACErrorsLib.DealIsClosed());
 
         uint256 unused = dealState[deals[dealId]].rewardsLimit >= dealState[deals[dealId]].rewardsUnlocked
             ? dealState[deals[dealId]].rewardsLimit - dealState[deals[dealId]].rewardsUnlocked

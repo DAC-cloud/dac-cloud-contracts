@@ -158,6 +158,8 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         onlyDACCell
     {
         require(dividendPayouts[proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
+        // A zero root can never be claimed against and there is no un-commit path.
+        require(merkleRoot != bytes32(0) && totalPayout > 0, DACErrorsLib.NotAllowed());
         require(_freeBalance(token) >= totalPayout, DACErrorsLib.InsufficientTreasury());
 
         dividendPayouts[proposalId] = DividendPayoutState({

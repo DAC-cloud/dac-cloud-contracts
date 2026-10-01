@@ -22,6 +22,9 @@ contract CoreModuleFactory is ModuleFactory {
     address public milestoneEvaluatorFactory;
     address public revenueEvaluatorFactory;
 
+    // Deal-proposal factory every core deal must use
+    address public dealGovernanceFactory;
+
     error DealKindNotSupported(bytes4 dealKind);
     error EvaluatorKindNotSupported(bytes4 dealKind);
 
@@ -30,13 +33,15 @@ contract CoreModuleFactory is ModuleFactory {
         address _treasuryDealFactory,
         address _agentDealFactory,
         address _milestoneEvaluatorFactory,
-        address _revenueEvaluatorFactory
+        address _revenueEvaluatorFactory,
+        address _dealGovernanceFactory
     ) {
         dacDealFactory = _dacDealFactory;
         treasuryDealFactory = _treasuryDealFactory;
         agentDealFactory = _agentDealFactory;
         milestoneEvaluatorFactory = _milestoneEvaluatorFactory;
         revenueEvaluatorFactory = _revenueEvaluatorFactory;
+        dealGovernanceFactory = _dealGovernanceFactory;
     }
 
     function moduleId() external pure returns (bytes32) { return MODULE_ID; }
@@ -74,6 +79,11 @@ contract CoreModuleFactory is ModuleFactory {
     // Core module evaluators accept any deal from any module
     function evaluatorAcceptsDeal(bytes4, bytes4, address) external pure returns (bool) {
         return true;
+    }
+
+    // Core deals only accept the core deal-proposal factory
+    function dealAcceptsGovernanceFactory(bytes4, address governanceFactory) external view returns (bool) {
+        return governanceFactory == dealGovernanceFactory;
     }
 
     function supportsDealRewardPool(bytes4 dealKind) external pure returns (bool) {

@@ -113,6 +113,7 @@ contract DACCellGovernanceLibTest is Test {
         // Mock: module compatibility checks
         vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.dealAcceptsEvaluator.selector), abi.encode(true));
         vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.evaluatorAcceptsDeal.selector), abi.encode(true));
+        vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.dealAcceptsGovernanceFactory.selector), abi.encode(true));
 
         // Mock: module.deployEvaluator
         vm.mockCall(mockModuleFactory, abi.encodeWithSelector(IModuleFactory.deployEvaluator.selector), abi.encode(mockEvaluator));

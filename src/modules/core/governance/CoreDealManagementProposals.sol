@@ -27,6 +27,7 @@ interface ICoreDealManagementProposals {
     function hostVote() external pure returns (bytes4);
     function hostClaimReward() external pure returns (bytes4);
     function hostUnstake() external pure returns (bytes4);
+    function hostInvite() external pure returns (bytes4);
     function returnAssetToDAC() external pure returns (bytes4);
 }
 
@@ -53,5 +54,6 @@ library CoreDealManagementType {
     bytes4 public constant HOST_VOTE             = ICoreDealManagementProposals.hostVote.selector;                     // Default quorum, blocking allowed
     bytes4 public constant HOST_CLAIM_REWARD     = ICoreDealManagementProposals.hostClaimReward.selector;              // Default quorum
     bytes4 public constant HOST_UNSTAKE          = ICoreDealManagementProposals.hostUnstake.selector;                  // Default quorum, blocking allowed
+    bytes4 public constant HOST_INVITE           = ICoreDealManagementProposals.hostInvite.selector;                   // Default quorum
     bytes4 public constant RETURN_ASSET_TO_DAC   = ICoreDealManagementProposals.returnAssetToDAC.selector;             // Default quorum
 }

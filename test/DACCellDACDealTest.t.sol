@@ -99,7 +99,8 @@ contract DACCellDealTest is Test {
             address(new TreasuryDealFactory(permit2)),
             address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
-            address(new RevenueEvaluatorFactory())
+            address(new RevenueEvaluatorFactory()),
+            address(coreDealGovernanceFactory)
         );
 
         governanceFactory = new DACManagementProposalFactory();

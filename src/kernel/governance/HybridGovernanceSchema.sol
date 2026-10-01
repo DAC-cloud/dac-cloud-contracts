@@ -9,7 +9,7 @@ import {IExecutableProposal} from "../../interfaces/IExecutableProposal.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
-import {AssetCapability, DealCreationConfig, GovernanceStrategyConfig} from "../../interfaces/GovernanceStructs.sol";
+import {AssetCapability, DealCreationConfig, GovernanceStrategyConfig, GovernanceLimits} from "../../interfaces/GovernanceStructs.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACManagementProposalType} from "./DACManagementProposals.sol";
 import {HybridDACManagementProposalFactory} from "./factories/HybridDACManagementProposalFactory.sol";
@@ -70,6 +70,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         uint256,
         bool dividendsEnabled
     ) external onlyDACCell returns (uint256 id, address proposal) {
+        require(_isKnownType(params.typ), DACErrorsLib.UnsupportedProposal());
+
         if (creator == dealManager) {
             require(
                 params.typ == DACManagementProposalType.APPROVE_DEAL ||
@@ -113,7 +115,9 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
 
             if (params.typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
                 VotingConfig memory nextVotingConfig = abi.decode(params.data, (VotingConfig));
-                _validateVotingConfig(nextVotingConfig);
+                // Validate the merged strategy, not the voting slice alone: blocking flags
+                // depend on blockingPercent, which this proposal can change.
+                _validateStrategyConfig(_mergeVotingConfig(nextVotingConfig));
             }
             else if (params.typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY) {
                 GovernanceStrategyConfig memory nextStrategy = abi.decode(params.data, (GovernanceStrategyConfig));
@@ -123,7 +127,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
                 _validateDealCreationConfig(abi.decode(params.data, (DealCreationConfig)));
             }
             else if (params.typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE) {
-                require(params.target != address(0), DACErrorsLib.NotAllowed());
+                require(params.target.code.length > 0, DACErrorsLib.NotAllowed());
             }
         }
 
@@ -156,13 +160,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     }
 
     function setVotingConfig(VotingConfig calldata config) external onlyDACCell {
-        _validateVotingConfig(config);
-        strategyConfig.quorumPercent = config.quorumPercent;
-        strategyConfig.highQuorumPercent = config.highQuorumPercent;
-        strategyConfig.blockingPercent = config.blockingPercent;
-        strategyConfig.duration = config.duration;
-        strategyConfig.qualification = config.qualification;
-        strategyConfig.executionValidityDuration = config.executionValidityDuration;
+        _setStrategyConfig(_mergeVotingConfig(config));
     }
 
     function setDealCreationConfig(DealCreationConfig calldata config) external onlyDACCell {
@@ -179,6 +177,10 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         // Plugging in a non-zero oracle is always allowed (enables future oracle-primary strategy updates).
         if (oracle == address(0)) {
             require(!strategyConfig.oraclePrimaryEnabled, DACErrorsLib.NotAllowed());
+        } else {
+            // An EOA or wrong contract here makes every isActive() call revert and
+            // blocks primary activation until the oracle deadline passes.
+            require(oracle.code.length > 0, DACErrorsLib.NotAllowed());
         }
         governanceOracle = oracle;
     }
@@ -220,6 +222,16 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         strategyConfig = config;
     }
 
+    function _mergeVotingConfig(VotingConfig memory config) internal view returns (GovernanceStrategyConfig memory merged) {
+        merged = strategyConfig;
+        merged.quorumPercent = config.quorumPercent;
+        merged.highQuorumPercent = config.highQuorumPercent;
+        merged.blockingPercent = config.blockingPercent;
+        merged.duration = config.duration;
+        merged.qualification = config.qualification;
+        merged.executionValidityDuration = config.executionValidityDuration;
+    }
+
     function _validateStrategyConfig(GovernanceStrategyConfig memory config) internal view {
         _validateVotingConfig(
             VotingConfig({
@@ -233,8 +245,11 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         );
         require(config.blockingPercent > 0 || (!config.blockingOnAllProposals && !config.blockingOnHighQuorum), DACErrorsLib.InvalidVotingConfig());
         require(config.oraclePublishDeadline > 0 || !config.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
+        require(config.oraclePublishDeadline <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackWarmupBlocks > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackWarmupBlocks <= GovernanceLimits.MAX_WARMUP_BLOCKS, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         // Oracle-primary mode requires a non-zero oracle to already be plugged in
         require(!config.oraclePrimaryEnabled || governanceOracle != address(0), DACErrorsLib.InvalidVotingConfig());
     }
@@ -244,6 +259,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.duration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.duration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
+        require(config.executionValidityDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         require(config.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
         require(config.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
@@ -251,6 +268,33 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(
             config.qualification <= MathLib.SCALE / 2,
             DACErrorsLib.InvalidVotingConfig()
+        );
+    }
+
+    function _isKnownType(bytes4 typ) internal pure returns (bool) {
+        return (
+            typ == DACManagementProposalType.UPDATE_VOTING_CONFIG ||
+            typ == DACManagementProposalType.UPDATE_GOVERNANCE_STRATEGY ||
+            typ == DACManagementProposalType.UPDATE_DEAL_CREATION_CONFIG ||
+            typ == DACManagementProposalType.UPDATE_GOVERNANCE_ORACLE ||
+            typ == DACManagementProposalType.UPDATE_LEGAL_WRAPPER ||
+            typ == DACManagementProposalType.APPROVE_OFFCHAIN_ACTION ||
+            typ == DACManagementProposalType.MINT_MAIN_TOKENS ||
+            typ == DACManagementProposalType.BURN_MAIN_TOKENS ||
+            typ == DACManagementProposalType.MINT_AGENT_TOKENS ||
+            typ == DACManagementProposalType.REVOKE_AGENT_TOKENS ||
+            typ == DACManagementProposalType.CAPITAL_CALL ||
+            typ == DACManagementProposalType.DELEGATE_VOTE_RIGHTS ||
+            typ == DACManagementProposalType.TOGGLE_DIVIDENDS ||
+            typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
+            typ == DACManagementProposalType.APPROVE_DEAL ||
+            typ == DACManagementProposalType.APPROVE_TRANCHE ||
+            typ == DACManagementProposalType.RECOVER_DEAL ||
+            typ == DACManagementProposalType.DEAL_MESSAGE ||
+            typ == DACManagementProposalType.CAST_VETO_DEAL ||
+            typ == DACManagementProposalType.ADD_EVALUATOR ||
+            typ == DACManagementProposalType.ADD_MODULE ||
+            typ == DACManagementProposalType.REMOVE_MODULE
         );
     }
 

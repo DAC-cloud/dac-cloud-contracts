@@ -14,6 +14,11 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
 
     error NotInitialized();
     error RevenueBaseMisconfigured();
+    error InvalidConfig();
+
+    // Cycles settled per evaluation. Bounds gas on long gaps; `lastChecked` advances
+    // by the settled cycles so the remainder is picked up by the next evaluation.
+    uint256 public constant MAX_CYCLES_PER_EVALUATION = 64;
 
     bool private initialized;
 
@@ -52,6 +57,18 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         cell = _cell;
 
         config = abi.decode(_configData, (Config));
+
+        // Validate up front: a misconfigured schedule would make evaluateDeal revert
+        // forever, leaving agents slash-immune and the deal impossible to close.
+        require(config.rewardShare <= MathLib.SCALE, InvalidConfig());
+        require(config.schedule.duration > 0, InvalidConfig());
+        require(config.schedule.revenueProjection > 0, InvalidConfig());
+        require(config.schedule.revenueProjectionMode <= 1, InvalidConfig());
+        require(config.schedule.curveCoeffs.length > 0, InvalidConfig());
+        require(config.schedule.requirementCurveCoeffs.length > 0, InvalidConfig());
+        require(config.schedule.maxCycleUnlockPercent <= MathLib.SCALE, InvalidConfig());
+        require(config.schedule.minCycleRevenuePercent <= MathLib.SCALE, InvalidConfig());
+        require(config.schedule.penaltyPerMiss <= MathLib.SCALE, InvalidConfig());
 
         uint256 start = config.schedule.evaluationStart == 0 ? block.timestamp : config.schedule.evaluationStart;
         lastChecked = start;
@@ -96,6 +113,9 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         if (cycles == 0) {
             return new EvaluationResult[](0); // nothing to evaluate yet
         }
+        if (cycles > MAX_CYCLES_PER_EVALUATION) {
+            cycles = MAX_CYCLES_PER_EVALUATION;
+        }
 
         // Taking revenue snapshot
         uint256 totalCapitalReturned = IDealCell(cell).getReturnedCapital(config.schedule.token);
@@ -106,7 +126,13 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         uint256 baseExpectedRevenue = config.schedule.revenueProjection;
         if (config.schedule.revenueProjectionMode != 0) {
             uint256 investedCapital = IDealCell(cell).getInvestedCapital(config.schedule.token);
-            require(investedCapital > 0, RevenueBaseMisconfigured());
+            if (investedCapital == 0) {
+                // Nothing invested in the accounting token: no target can be derived.
+                // Settle the elapsed cycles as unevaluated rather than revert forever.
+                lastChecked = lastChecked + cycles * config.schedule.duration;
+                totalEvaluatedCycles += cycles;
+                return new EvaluationResult[](0);
+            }
 
             baseExpectedRevenue = investedCapital / config.schedule.revenueProjection;
         }
@@ -125,8 +151,9 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
 
             uint256 expected = _evaluateRequirement(totalEvaluatedCycles + c, baseExpectedRevenue);
 
-            // x = progress (0 to 1+)
-            uint256 progressScaled = MathLib.div(cycleRevenue, expected);
+            // x = progress (0 to 1+). A zero requirement (declining curve, rounding) is
+            // trivially met rather than a division by zero.
+            uint256 progressScaled = expected == 0 ? MathLib.SCALE : MathLib.div(cycleRevenue, expected);
 
             // Evaluate polynomial curve: y = reward % (0 to 1)
             // forge-lint: disable-next-line(unsafe-typecast)
@@ -166,6 +193,11 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
             if (unlockedRewards + rewardPercent > config.rewardShare) {
                 rewardPercent = config.rewardShare - unlockedRewards;
             }
+
+            // The kernel caps conversions at 100% of the deal's rewards; never ask for
+            // more than what is left, or the whole evaluation reverts.
+            uint256 remaining = MathLib.SCALE - MathLib.capAt100(IDealCell(cell).rewardsConvertedPct());
+            if (rewardPercent > remaining) rewardPercent = remaining;
 
             if (rewardPercent > 0) {
                 results[resultIndex++] = EvaluationResult(1, rewardPercent, 0);
@@ -224,6 +256,6 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         if (y < 0) y = 0;
         // casting to 'uint256' is safe because y > 0
         // forge-lint: disable-next-line(unsafe-typecast)
-        return MathLib.mul(uint256(y), baseCycleRevenue); // always at least base
+        return MathLib.mul(uint256(y), baseCycleRevenue); // y is a scaled multiplier of the base (may be below 1e18)
     }
 }

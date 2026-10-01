@@ -34,8 +34,6 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
 
         dacCell = _dacCell;
         maxSupply = _maxSupply;
-
-        _grantRole(MINTER_ROLE, dacCell);
     }
 
     function dacInit(
@@ -45,7 +43,8 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
 
         dealManager = _dealManager;
-        _grantRole(MINTER_ROLE, _dealManager);
+        // Only the asset controller mints: DACCell and DealManager route every
+        // mint through it, so they carry no minting privilege of their own.
         _grantRole(MINTER_ROLE, _assetController);
     }
 

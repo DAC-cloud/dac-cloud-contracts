@@ -241,9 +241,10 @@ contract HybridDACManagementProposalTest is Test {
         assertEq(proposal.yesVotes(), 50e18);
     }
 
-    /// With no votable supply at the snapshot the proposal must not activate (it would
-    /// otherwise resolve vacuously with zero votes against a zero quorum).
-    function test_fallbackActivation_revertsWithoutVotableSupplyAtSnapshot() external {
+    /// With no votable supply at the snapshot nobody can vote, so the proposal resolves
+    /// as rejected instead of passing vacuously (0 >= quorum 0) or staying dormant
+    /// forever (which would freeze anything gated on its resolution, e.g. a veto hold).
+    function test_fallbackActivation_withoutVotableSupplyResolvesRejected() external {
         vm.roll(50);
         _init(50, bytes4(keccak256("TEST_ZERO_SUPPLY")), _wrappedOnlyStrategyConfig(), false, false);
         uint256 snapshot = 50 + WARMUP_BLOCKS;
@@ -252,15 +253,78 @@ contract HybridDACManagementProposalTest is Test {
         vm.prank(fallbackHolder);
         wrapped.wrap(90e18); // too late: after the snapshot block
 
-        vm.expectRevert(DACErrorsLib.NoVotingPower.selector);
-        proposal.activateFallbackVoting();
+        // Any state read finalizes the rejection lazily.
+        assertTrue(proposal.isResolved());
+        assertFalse(proposal.outcome());
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.Resolved));
+        assertFalse(proposal.isExecutableNow());
 
         vm.prank(fallbackHolder);
-        vm.expectRevert(DACErrorsLib.NoVotingPower.selector);
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
         proposal.vote(true);
+    }
 
-        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
+    /// Dust-level supply must not pass with zero votes: quorum rounds up.
+    function test_fallbackQuorum_roundsUpForDustSupply() external {
+        vm.roll(70);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(3); // 3 wei votable
+
+        vm.roll(71);
+        _init(71, bytes4(keccak256("TEST_DUST")), _wrappedOnlyStrategyConfig(), false, false);
+
+        vm.roll(71 + WARMUP_BLOCKS + 1);
+        proposal.activateFallbackVoting();
+
+        assertEq(proposal.totalVotingPower(), 3);
+        assertEq(proposal.quorum(), 2); // ceil(3 * 50%)
         assertFalse(proposal.isResolved());
+
+        vm.prank(fallbackHolder);
+        proposal.vote(true);
+        assertTrue(proposal.isResolved());
+        assertTrue(proposal.outcome());
+    }
+
+    /// outcome() has no answer before a voting phase exists.
+    function test_outcome_revertsBeforeActivation() external {
+        vm.roll(80);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(10e18);
+
+        vm.roll(81);
+        _init(81, bytes4(keccak256("TEST_PRE_OUTCOME")), _wrappedOnlyStrategyConfig(), false, false);
+
+        vm.expectRevert(DACErrorsLib.NotResolved.selector);
+        proposal.outcome();
+    }
+
+    /// An expired-by-time primary vote is finalized, not wiped, by an emergency fallback.
+    function test_emergencyFallback_finalizesExpiredPrimaryVote() external {
+        vm.roll(90);
+        vm.prank(wrappedHolder);
+        wrapped.wrap(100e18);
+
+        vm.roll(91);
+        _init(91, bytes4(keccak256("TEST_EXPIRED_PRIMARY")), _strategyConfig(), false, false);
+
+        vm.prank(publisher);
+        oracle.publishSnapshot(address(this), 91, 90, keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(50e18))), 50e18);
+        proposal.activatePrimaryVoting();
+
+        vm.prank(wrappedHolder);
+        proposal.voteWrapped(true); // 100 of 150: above 50% quorum, not an early resolution
+
+        vm.warp(block.timestamp + 7 days + 1);
+        vm.prank(publisher);
+        oracle.deactivate(address(this));
+
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        proposal.triggerEmergencyFallback();
+
+        assertTrue(proposal.isResolved());
+        assertTrue(proposal.outcome());
+        assertEq(proposal.yesVotes(), 100e18);
     }
 
     function test_blockingFlags_enableHighQuorumBlocking() external {

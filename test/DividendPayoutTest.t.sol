@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
+import {CoreManagementProposalFactory} from "../src/modules/core/governance/factories/CoreDealManagementProposalFactory.sol";
 import {DACCell} from "../src/kernel/DACCell.sol";
 import {DACFactory} from "../src/kernel/DACFactory.sol";
 import {IVoting} from "../src/interfaces/IVoting.sol";
@@ -57,7 +58,8 @@ contract DividendPayoutTest is Test {
             address(new TreasuryDealFactory(permit2)),
             address(new AgentDealFactory()),
             address(new MilestoneEvaluatorFactory()),
-            address(new RevenueEvaluatorFactory())
+            address(new RevenueEvaluatorFactory()),
+            address(new CoreManagementProposalFactory())
         );
 
         DACManagementProposalFactory governanceFactory = new DACManagementProposalFactory();
