@@ -262,13 +262,14 @@ contract H01HybridHarness is Test {
             false
         );
 
-        // Bootstrap mode starts in FallbackWarmup; warp through it and into
+        // Bootstrap mode starts in FallbackWarmup with the snapshot fixed at the
+        // warmup's last block; give the voter weight there, roll past it into
         // FallbackVoting, then cast a fully-passing vote.
-        vm.warp(block.timestamp + 2 days + 1);
-        vm.roll(block.number + 1);
+        uint256 snapshot = proposal.fallbackSnapshotBlock();
+        wrapped.setPastVotes(voter, 100e18, snapshot);
+        wrapped.setPastTotalSupply(snapshot, 100e18);
+        vm.roll(snapshot + 1);
         proposal.activateFallbackVoting();
-        wrapped.setPastVotes(voter, 100e18, block.number - 1);
-        wrapped.setPastTotalSupply(block.number - 1, 100e18);
 
         vm.prank(voter);
         proposal.vote(true);
@@ -288,7 +289,7 @@ contract H01HybridHarness is Test {
             qualification: 0,
             executionValidityDuration: 1 days,
             oraclePublishDeadline: 0,
-            fallbackWarmupDuration: 1 days,
+            fallbackWarmupBlocks: 5,
             fallbackDuration: 1 days,
             blockingOnAllProposals: false,
             blockingOnHighQuorum: false,

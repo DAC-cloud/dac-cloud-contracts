@@ -47,6 +47,12 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     mapping(bytes32 => bool) public evaluatorWhitelist;         // keccak256((dealCell,keccak256(evaluator_config))) => true
 
+    // Controlled addresses a Deal module may register beyond the kernel-registered
+    // pair (DealCell + Deal). Bounded so an approved-but-malicious module cannot
+    // mark arbitrary holders "controlled" and strip their voting power.
+    uint256 public constant MAX_MODULE_CONTROLLED_ADDRESSES = 3;
+    mapping(address => uint256) public moduleControlledCount;   // dealCell => module-registered controlled addresses
+
     constructor() {
         _disableInitializers();
     }
@@ -294,6 +300,28 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function registerControlledAddress(address controlled) external onlyDealCell {
+        if (IAssetController(assetController).isControlledAddress(controlled)) return;
+
+        require(
+            moduleControlledCount[msg.sender] < MAX_MODULE_CONTROLLED_ADDRESSES,
+            DACErrorsLib.ControlledAddressLimitReached()
+        );
+        // A controlled address is excluded from votable supply and barred from
+        // delegation. A module may only register contract accounts (pools, vaults,
+        // its own deployments), never EOAs, including EIP-7702 delegated EOAs.
+        require(_isContractAccount(controlled), DACErrorsLib.ControlledAddressNotContract());
+        // ...and only ones that never delegated: a contract that chose to vote is a
+        // governance participant, not custody. Balances and incoming delegations are
+        // allowed because undelegated tokens cannot vote, and delegators' balances
+        // stay in the votable total. Only the address itself (or a key it does not
+        // have before deployment) can set its delegation, so a griefer cannot
+        // pre-poison an address a deal is about to deploy or register.
+        require(
+            IVotes(address(mainToken)).delegates(controlled) == address(0),
+            DACErrorsLib.ControlledAddressHasVotingPower()
+        );
+
+        moduleControlledCount[msg.sender] += 1;
         IAssetController(assetController).registerControlledAddress(controlled);
     }
 
@@ -379,6 +407,15 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             ), 
             DACErrorsLib.NotAuthorized()
         );
+    }
+
+    // Contract account: has code, and that code is not an EIP-7702 delegation
+    // designator (0xef0100 || address), which marks a delegated EOA.
+    function _isContractAccount(address account) internal view returns (bool) {
+        bytes memory code = account.code;
+        if (code.length == 0) return false;
+        if (code.length == 23 && code[0] == 0xef && code[1] == 0x01 && code[2] == 0x00) return false;
+        return true;
     }
 
     function _onlyDealCell(address dealCell) internal view {

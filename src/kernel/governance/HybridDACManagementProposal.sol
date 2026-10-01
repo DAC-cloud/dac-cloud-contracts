@@ -34,6 +34,9 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     ProposalPhase public phase;
 
     uint256 public primarySnapshotBlock;
+    // Fixed when fallback warmup begins, as a block in the future (warmup end).
+    // Known in advance so holders can wrap and delegate during warmup, and no
+    // single actor can choose the snapshot block. Zero until fallback is triggered.
     uint256 public fallbackSnapshotBlock;
     uint256 public phaseStartTime;
     uint256 public phaseEndTime;
@@ -86,7 +89,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         require(_strategy.duration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.oraclePublishDeadline > 0 || !_strategy.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
-        require(_strategy.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(_strategy.fallbackWarmupBlocks > 0, DACErrorsLib.InvalidVotingConfig());
         require(_strategy.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
 
         id = _id;
@@ -103,32 +106,17 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         if (_strategy.oraclePrimaryEnabled) {
             oracleSnapshotDeadline = block.timestamp + _strategy.oraclePublishDeadline;
             phase = ProposalPhase.AwaitingOracleSnapshot;
+
+            emit DACEventsLib.ProposalCreated(wrappedToken, 0, 0, 0, primarySnapshotBlock, oracleSnapshotDeadline, false);
+            emit DACEventsLib.ProposalPhaseTransition(
+                id, uint8(phase), primarySnapshotBlock, block.timestamp, oracleSnapshotDeadline, 0, 0, 0
+            );
         } else {
             oracleSnapshotDeadline = 0;
-            phase = ProposalPhase.FallbackWarmup;
-            phaseStartTime = block.timestamp;
-            phaseEndTime = block.timestamp + _strategy.fallbackWarmupDuration;
-        }
+            _beginFallbackWarmupInternal();
 
-        emit DACEventsLib.ProposalCreated(
-            wrappedToken,
-            0,
-            0,
-            0,
-            primarySnapshotBlock,
-            phase == ProposalPhase.AwaitingOracleSnapshot ? oracleSnapshotDeadline : phaseEndTime,
-            false
-        );
-        emit DACEventsLib.ProposalPhaseTransition(
-            id,
-            uint8(phase),
-            primarySnapshotBlock,
-            phase == ProposalPhase.AwaitingOracleSnapshot ? block.timestamp : phaseStartTime,
-            phase == ProposalPhase.AwaitingOracleSnapshot ? oracleSnapshotDeadline : phaseEndTime,
-            0,
-            0,
-            0
-        );
+            emit DACEventsLib.ProposalCreated(wrappedToken, 0, 0, 0, fallbackSnapshotBlock, 0, false);
+        }
     }
 
     function activatePrimaryVoting() external {
@@ -151,20 +139,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
             DACErrorsLib.NotAllowed()
         );
 
-        phase = ProposalPhase.FallbackWarmup;
-        phaseStartTime = block.timestamp;
-        phaseEndTime = block.timestamp + strategy.fallbackWarmupDuration;
-
-        emit DACEventsLib.ProposalPhaseTransition(
-            id,
-            uint8(phase),
-            primarySnapshotBlock,
-            phaseStartTime,
-            phaseEndTime,
-            0,
-            0,
-            0
-        );
+        _beginFallbackWarmupInternal();
     }
 
     function triggerEmergencyFallback() external {
@@ -184,26 +159,12 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         oracleMerkleRoot = bytes32(0);
         totalUnderlyingVotingPower = 0;
 
-        phase = ProposalPhase.FallbackWarmup;
-        phaseStartTime = block.timestamp;
-        phaseEndTime = block.timestamp + strategy.fallbackWarmupDuration;
-
-        emit DACEventsLib.ProposalPhaseTransition(
-            id,
-            uint8(phase),
-            primarySnapshotBlock,
-            phaseStartTime,
-            phaseEndTime,
-            0,
-            0,
-            0
-        );
+        _beginFallbackWarmupInternal();
     }
 
     function activateFallbackVoting() external {
         require(phase == ProposalPhase.FallbackWarmup, DACErrorsLib.NotAllowed());
-        require(block.timestamp > phaseEndTime, DACErrorsLib.NotAllowed());
-        require(block.number > 0, DACErrorsLib.NotAllowed());
+        require(block.number > fallbackSnapshotBlock, DACErrorsLib.NotAllowed());
 
         _activateFallbackInternal();
     }
@@ -308,6 +269,10 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         uint256 phaseTotalVotingPower,
         uint256 duration
     ) internal {
+        // A phase with no votable supply at its snapshot would resolve vacuously
+        // (0 >= quorum 0). Refuse to activate instead; the proposal stays dormant.
+        require(phaseTotalVotingPower > 0, DACErrorsLib.NoVotingPower());
+
         phase = nextPhase;
         phaseStartTime = block.timestamp;
         phaseEndTime = block.timestamp + duration;
@@ -335,7 +300,7 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         // Keeps vote() usable by lightweight clients that don't implement explicit activation calls.
         if (phase == ProposalPhase.AwaitingOracleSnapshot) {
             _tryActivatePrimary();
-        } else if (phase == ProposalPhase.FallbackWarmup && block.timestamp > phaseEndTime) {
+        } else if (phase == ProposalPhase.FallbackWarmup && block.number > fallbackSnapshotBlock) {
             _activateFallbackInternal();
         }
 
@@ -387,9 +352,30 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
         );
     }
 
-    function _activateFallbackInternal() internal {
-        fallbackSnapshotBlock = block.number - 1;
+    // Warmup is measured in blocks and its last block is the fallback snapshot. The
+    // snapshot is fixed and public the moment fallback is triggered, so holders can
+    // wrap and delegate in response to the proposal, and nobody can pick the
+    // snapshot block at their discretion (which would let an attacker wrap >= quorum
+    // of the 1:1 underlying one block before activating, vote, and unwrap).
+    function _beginFallbackWarmupInternal() internal {
+        phase = ProposalPhase.FallbackWarmup;
+        phaseStartTime = block.timestamp;
+        phaseEndTime = 0; // warmup ends by block, see fallbackSnapshotBlock
+        fallbackSnapshotBlock = block.number + strategy.fallbackWarmupBlocks;
 
+        emit DACEventsLib.ProposalPhaseTransition(
+            id,
+            uint8(phase),
+            fallbackSnapshotBlock,
+            phaseStartTime,
+            0,
+            0,
+            0,
+            0
+        );
+    }
+
+    function _activateFallbackInternal() internal {
         uint256 wrappedVotable = IVotes(wrappedToken).getPastTotalSupply(fallbackSnapshotBlock)
             - IAssetController(assetController).getPastControlledBalance(fallbackSnapshotBlock);
 

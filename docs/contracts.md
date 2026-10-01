@@ -80,6 +80,7 @@ Current responsibilities:
 - route evaluator output
 - determine recoverability / active lifecycle state
 - interact with the asset controller for reward and main-asset accounting
+- gate module-registered controlled addresses: at most `MAX_MODULE_CONTROLLED_ADDRESSES` (3) per deal beyond the kernel-registered `DealCell` and `Deal`; contract accounts only (no EOAs, no EIP-7702 delegated EOAs) that have never delegated
 
 ### `src/kernel/DealCell.sol`
 
@@ -157,7 +158,7 @@ Handles:
 - oracle-based governance strategy validation
 - wrapped-only bootstrap mode when `oraclePrimaryEnabled == false`
 - blocking behavior toggles for all proposals / high-quorum proposals
-- fallback durations and execution-validity configuration
+- fallback warmup (in blocks), fallback duration and execution-validity configuration
 - capability-aware proposal support via the asset controller
 
 ### `src/kernel/governance/BasicGovernanceOracle.sol`
@@ -254,7 +255,7 @@ Main responsibilities exposed at interface level:
 
 - treasury deposits and treasury sync
 - capital-call creation and fulfillment
-- dividend payout registration and claim settlement
+- dividend payout registration and claim settlement (claims capped at the committed total)
 - deal funding approval
 - main reward settlement
 - DAC-managed distributor registry for `AgentToken`
@@ -346,7 +347,7 @@ Features:
 
 - 1:1 wrap / unwrap against an underlying ERC-20
 - `ERC20Votes`
-- auto-self-delegation on first wrap
+- auto-self-delegation on first self-wrap (third-party `wrapTo` recipients delegate themselves)
 - move/delegate notifications to the asset controller
 - explicit `Wrapped` / `Unwrapped` events
 

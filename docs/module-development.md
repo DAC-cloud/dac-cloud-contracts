@@ -463,7 +463,13 @@ _registerRelatedContract(
 );
 ```
 
-- **`controlled = true`** -- the related contract is registered with the DealCell's asset controller. Use this for contracts that hold or manage capital on behalf of the deal.
+- **`controlled = true`** -- the related contract is registered with the DealCell's asset controller. Use this for contracts that hold or manage capital on behalf of the deal: its own deployments (a treasury, a vault) or pre-existing custody contracts whose main-token balance must not count in governance (a Uniswap pool, a Morpho market). Controlled addresses are excluded from votable supply and cannot delegate, so the kernel bounds what a module may register:
+  - at most `DealManager.MAX_MODULE_CONTROLLED_ADDRESSES` (3) addresses per deal, on top of the `DealCell` and `Deal` the kernel registers itself;
+  - contract accounts only: EOAs, including EIP-7702 delegated EOAs, revert with `ControlledAddressNotContract`;
+  - the contract must never have delegated (`delegates(addr) == address(0)`), otherwise the call reverts with `ControlledAddressHasVotingPower`. A contract that chose to vote is a governance participant, not custody;
+  - balances and incoming delegations are allowed. Undelegated tokens cannot vote, and delegators' balances stay in the votable total;
+  - registering an address that is already controlled is a no-op and does not consume the budget.
+  Only the address itself can set its delegation, and third-party `wrapTo` does not auto-delegate, so nobody can pre-poison an address a deal is about to deploy or register.
 - **`managed = true`** -- signals to indexers that this is a managed entity (e.g., a child DAC whose governance the deal participates in).
 - If `relatedContract` is `address(0)`, the call is a no-op.
 

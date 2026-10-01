@@ -185,7 +185,7 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
             qualification: votingConfig.qualification,
             executionValidityDuration: votingConfig.executionValidityDuration,
             oraclePublishDeadline: 0,
-            fallbackWarmupDuration: 0,
+            fallbackWarmupBlocks: 0,
             fallbackDuration: 0,
             blockingOnAllProposals: false,
             blockingOnHighQuorum: false,
@@ -217,7 +217,7 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
 
     function _validateStrategyConfig(GovernanceStrategyConfig memory config) internal view {
         require(config.oraclePublishDeadline == 0, DACErrorsLib.InvalidVotingConfig());
-        require(config.fallbackWarmupDuration == 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackWarmupBlocks == 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration == 0, DACErrorsLib.InvalidVotingConfig());
         require(!config.blockingOnAllProposals, DACErrorsLib.InvalidVotingConfig());
         require(!config.blockingOnHighQuorum, DACErrorsLib.InvalidVotingConfig());

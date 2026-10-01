@@ -13,6 +13,9 @@ library DACErrorsLib {
     error InvalidVotingConfig();
 
     error NoVotingPower();
+    error ControlledAddressLimitReached();
+    error ControlledAddressNotContract();
+    error ControlledAddressHasVotingPower();
     error VoteNotPassed();
     error ProposalNotExecutable();
     error ProposalAlreadyChallenged();
@@ -53,6 +56,7 @@ library DACErrorsLib {
     error DividendsNotEnabled();
     error DividendAlreadyClaimed(uint256 id, address claimer);
     error InvalidMerkleProof();
+    error DividendPayoutExceeded();
 
     error DealNotRecoverable();
 

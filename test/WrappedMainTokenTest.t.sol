@@ -65,14 +65,29 @@ contract WrappedMainTokenTest is Test {
         assertEq(underlying.balanceOf(alice), 940e18);
     }
 
-    function test_wrapToDelegatesRecipient() external {
+    /// Third-party wraps must not set the recipient's delegation: that would let
+    /// anyone pre-poison `delegates(x)` for an address a deal is about to register
+    /// as controlled. Recipients delegate themselves.
+    function test_wrapToDoesNotDelegateRecipient() external {
         vm.expectEmit(true, true, false, true, address(wrapped));
         emit DACEventsLib.Wrapped(alice, bob, 55e18);
         vm.prank(alice);
         wrapped.wrapTo(bob, 55e18);
 
         assertEq(wrapped.balanceOf(bob), 55e18);
+        assertEq(wrapped.getVotes(bob), 0);
+        assertEq(wrapped.delegates(bob), address(0));
+
+        vm.prank(bob);
+        wrapped.delegate(bob);
         assertEq(wrapped.getVotes(bob), 55e18);
-        assertEq(wrapped.delegates(bob), bob);
+    }
+
+    function test_selfWrapAutoDelegates() external {
+        vm.prank(alice);
+        wrapped.wrapTo(alice, 10e18);
+
+        assertEq(wrapped.delegates(alice), alice);
+        assertEq(wrapped.getVotes(alice), 10e18);
     }
 }

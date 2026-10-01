@@ -159,7 +159,7 @@ The deployment flow is split into two layers:
 - `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
-- `EXISTING_DAC_FALLBACK_WARMUP`
+- `EXISTING_DAC_FALLBACK_WARMUP_BLOCKS` (blocks, not seconds: the fallback snapshot is the warmup's last block)
 - `EXISTING_DAC_FALLBACK_DURATION`
 
 ### Existing governance flow config
@@ -378,7 +378,7 @@ Useful environment variables for this mode:
 - `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
-- `EXISTING_DAC_FALLBACK_WARMUP`
+- `EXISTING_DAC_FALLBACK_WARMUP_BLOCKS`
 - `EXISTING_DAC_FALLBACK_DURATION`
 
 Run:

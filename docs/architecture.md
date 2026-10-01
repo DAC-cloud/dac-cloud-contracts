@@ -272,6 +272,8 @@ If the oracle does not publish in time, the proposal transitions into fallback:
 
 Fallback is wrapped-token-only and starts from a clean vote state after warmup.
 
+The primary phase snapshots at proposal creation. The fallback phase snapshots at the last block of warmup: warmup is measured in blocks (`fallbackWarmupBlocks`) and the snapshot block is fixed and public the moment fallback is triggered, by oracle miss, emergency, or creation in wrapped-only mode. Holders can therefore wrap and delegate in response to a proposal during warmup, while no single actor can choose when the snapshot is taken. Voting activates once the snapshot block has passed. A phase whose votable supply at its snapshot is zero cannot be activated and the proposal stays dormant.
+
 ### 5.3 Hybrid Strategy Tweaks
 
 Hybrid governance strategy has three important toggles:
@@ -458,7 +460,7 @@ Implications:
 
 - capital calls are tracked centrally by the controller
 - dividend payouts reserve actual treasury balances
-- claims settle against controller-held state
+- claims settle against controller-held state, and cumulative claims against a payout are capped at its committed total, so a malformed Merkle root can never draw on other commitments or free treasury
 - arbitrary treasury assets such as USDC are tracked consistently with the same commitment discipline
 
 ## 10. Module System

@@ -55,7 +55,13 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
         require(wrappedAmount > 0, DACErrorsLib.TransferFailed());
 
         _mint(recipient, wrappedAmount);
-        _autoDelegate(recipient);
+        // Only self-wraps auto-delegate. Delegating on behalf of a third-party
+        // recipient would let anyone set `delegates(x)` for an arbitrary x with one
+        // wei, which modules rely on being unset for custody contracts they register
+        // as controlled (see DealManager.registerControlledAddress).
+        if (recipient == msg.sender) {
+            _autoDelegate(recipient);
+        }
 
         emit DACEventsLib.Wrapped(msg.sender, recipient, wrappedAmount);
     }

@@ -159,6 +159,33 @@ contract DividendPayoutTest is Test {
         dac.claimDividend(proposalId, 0, recipient1, 3_001e6, proof1);
     }
 
+    /// L-3 regression: a root whose leaves sum to more than totalPayout cannot
+    /// draw beyond the committed amount.
+    function test_dividendPayout_claimsCappedAtTotalPayout() public {
+        (DACCell dac,,) = _deployDAC(true, "DIV-CAP");
+
+        // Leaves sum to 5_000e6 but governance committed only 4_000e6.
+        (bytes32 root, bytes32[] memory proof1, bytes32[] memory proof2) = _buildTwoLeafTree(
+            recipient1,
+            3_000e6,
+            recipient2,
+            2_000e6
+        );
+
+        uint256 proposalId = _executeDividendPayoutProposal(dac, root, 4_000e6);
+        uint256 controllerBefore = usdc.balanceOf(dac.getAssetController());
+
+        vm.prank(recipient1);
+        dac.claimDividend(proposalId, 0, recipient1, 3_000e6, proof1);
+
+        vm.prank(recipient2);
+        vm.expectRevert(DACErrorsLib.DividendPayoutExceeded.selector);
+        dac.claimDividend(proposalId, 1, recipient2, 2_000e6, proof2);
+
+        assertEq(usdc.balanceOf(dac.getAssetController()), controllerBefore - 3_000e6);
+        assertEq(usdc.balanceOf(recipient2), 0);
+    }
+
     function test_dividendPayout_revertsWhenDividendsDisabled() public {
         (DACCell dac,,) = _deployDAC(false, "DIV-OFF");
 

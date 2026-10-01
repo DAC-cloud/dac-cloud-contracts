@@ -43,7 +43,7 @@ struct GovernanceStrategyConfig {
     uint256 qualification;          // Qualification percent (0 to SCALE) of voting supply
     uint256 executionValidityDuration;
     uint256 oraclePublishDeadline;
-    uint256 fallbackWarmupDuration;
+    uint256 fallbackWarmupBlocks;    // Warmup length in blocks; the fallback snapshot is the warmup's last block
     uint256 fallbackDuration;
     bool blockingOnAllProposals;
     bool blockingOnHighQuorum;

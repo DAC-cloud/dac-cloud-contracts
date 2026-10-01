@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {DACEventsLib} from "../src/interfaces/DACEventsLib.sol";
+import {DACErrorsLib} from "../src/interfaces/DACErrorsLib.sol";
 import {ProposalParams} from "../src/interfaces/Structs.sol";
 import {GovernanceStrategyConfig, ProposalPhase} from "../src/interfaces/GovernanceStructs.sol";
 import {BasicGovernanceOracle} from "../src/kernel/governance/BasicGovernanceOracle.sol";
@@ -21,6 +22,8 @@ contract MockHybridUnderlyingToken is ERC20 {
 }
 
 contract HybridDACManagementProposalTest is Test {
+    uint256 internal constant WARMUP_BLOCKS = 10;
+
     MockHybridUnderlyingToken internal underlying;
     WrappedMainToken internal wrapped;
     BasicGovernanceOracle internal oracle;
@@ -81,25 +84,10 @@ contract HybridDACManagementProposalTest is Test {
 
         vm.roll(11);
 
-        proposal.initialize(
-            1,
-            address(this),
-            address(this),
-            address(wrapped),
-            address(oracle),
-            mockAssetController,
-            ProposalParams({
-                typ: bytes4(keccak256("TEST")),
-                target: address(0),
-                i: bytes32(0),
-                data: bytes("")
-            }),
-            _strategyConfig(),
-            false,
-            false
-        );
+        _init(1, bytes4(keccak256("TEST")), _strategyConfig(), false, false);
 
         assertEq(proposal.primarySnapshotBlock(), 10);
+        assertEq(proposal.fallbackSnapshotBlock(), 0);
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.AwaitingOracleSnapshot));
 
         bytes32 root = keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18)));
@@ -129,39 +117,30 @@ contract HybridDACManagementProposalTest is Test {
     function test_oracleMiss_transitionsThroughFallbackWarmupAndVoting() external {
         vm.roll(20);
 
-        proposal.initialize(
-            2,
-            address(this),
-            address(this),
-            address(wrapped),
-            address(oracle),
-            mockAssetController,
-            ProposalParams({
-                typ: bytes4(keccak256("TEST_FALLBACK")),
-                target: address(0),
-                i: bytes32(0),
-                data: bytes("")
-            }),
-            _strategyConfig(),
-            false,
-            false
-        );
+        _init(2, bytes4(keccak256("TEST_FALLBACK")), _strategyConfig(), false, false);
 
         vm.warp(block.timestamp + 2 days + 1);
         proposal.beginFallbackWarmup();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
+        // Snapshot fixed the moment fallback is triggered: last block of warmup.
+        assertEq(proposal.fallbackSnapshotBlock(), 20 + WARMUP_BLOCKS);
+        assertEq(proposal.phaseEndTime(), 0);
 
-        vm.roll(21);
+        // Holders can wrap in response to the proposal during warmup.
+        vm.roll(25);
         vm.prank(fallbackHolder);
         wrapped.wrap(80e18);
 
-        vm.warp(block.timestamp + 1 days + 1);
-        vm.roll(22);
+        // Not activatable until the snapshot block has passed.
+        vm.roll(20 + WARMUP_BLOCKS);
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        proposal.activateFallbackVoting();
+
+        vm.roll(21 + WARMUP_BLOCKS);
         proposal.activateFallbackVoting();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
-        assertEq(proposal.fallbackSnapshotBlock(), 21);
         assertEq(proposal.totalVotingPower(), 80e18);
 
         vm.prank(fallbackHolder);
@@ -175,35 +154,21 @@ contract HybridDACManagementProposalTest is Test {
     function test_wrappedOnlyBootstrap_startsInWarmupThenVotesWithWrappedToken() external {
         vm.roll(24);
 
-        proposal.initialize(
-            21,
-            address(this),
-            address(this),
-            address(wrapped),
-            address(oracle),
-            mockAssetController,
-            ProposalParams({
-                typ: bytes4(keccak256("TEST_WRAPPED_BOOTSTRAP")),
-                target: address(0),
-                i: bytes32(0),
-                data: bytes("")
-            }),
-            _wrappedOnlyStrategyConfig(),
-            true,
-            true
-        );
+        _init(21, bytes4(keccak256("TEST_WRAPPED_BOOTSTRAP")), _wrappedOnlyStrategyConfig(), true, true);
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
+        assertEq(proposal.fallbackSnapshotBlock(), 24 + WARMUP_BLOCKS);
 
+        vm.roll(30);
         vm.prank(fallbackHolder);
         wrapped.wrap(90e18);
 
-        vm.warp(block.timestamp + 1 days + 1);
-        vm.roll(25);
+        vm.roll(25 + WARMUP_BLOCKS);
         proposal.activateFallbackVoting();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
         assertEq(proposal.blockingEnabled(), true);
+        assertEq(proposal.totalVotingPower(), 90e18);
 
         vm.prank(fallbackHolder);
         proposal.vote(true);
@@ -212,54 +177,118 @@ contract HybridDACManagementProposalTest is Test {
         assertTrue(proposal.outcome());
     }
 
+    /// H-1 regression: the snapshot block is fixed when warmup begins, so an actor
+    /// cannot wrap right before activating and have that weight count. Whoever
+    /// activates, and whenever, the snapshot stays at the warmup's last block.
+    function test_fallbackSnapshot_fixedAtWarmupStart_wrapAfterSnapshotDoesNotCount() external {
+        vm.roll(40);
+        vm.prank(wrappedHolder);
+        wrapped.wrap(100e18);
+
+        vm.roll(41);
+        _init(41, bytes4(keccak256("TEST_LATE_WRAP")), _wrappedOnlyStrategyConfig(), false, false);
+        uint256 snapshot = 41 + WARMUP_BLOCKS;
+        assertEq(proposal.fallbackSnapshotBlock(), snapshot);
+
+        // Attacker waits for the snapshot block to pass, then wraps 9x the circulating
+        // supply and activates in the very next block.
+        vm.roll(snapshot + 1);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(900e18);
+
+        vm.roll(snapshot + 2);
+        vm.prank(fallbackHolder);
+        proposal.activateFallbackVoting();
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
+        assertEq(proposal.fallbackSnapshotBlock(), snapshot);
+        assertEq(proposal.totalVotingPower(), 100e18);
+
+        vm.prank(fallbackHolder);
+        vm.expectRevert(DACErrorsLib.NoVotingPower.selector);
+        proposal.vote(true);
+        assertFalse(proposal.isResolved());
+
+        vm.prank(wrappedHolder);
+        proposal.vote(true);
+        assertTrue(proposal.isResolved());
+        assertTrue(proposal.outcome());
+        assertEq(proposal.yesVotes(), 100e18);
+    }
+
+    /// Opportunistic activation through vote() uses the same fixed snapshot.
+    function test_fallbackVote_opportunisticActivationUsesFixedSnapshot() external {
+        vm.roll(60);
+        _init(60, bytes4(keccak256("TEST_OPPORTUNISTIC")), _wrappedOnlyStrategyConfig(), false, false);
+        uint256 snapshot = 60 + WARMUP_BLOCKS;
+
+        vm.roll(65);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(50e18);
+
+        // Before the snapshot block, vote() cannot activate.
+        vm.roll(snapshot);
+        vm.prank(fallbackHolder);
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        proposal.vote(true);
+
+        vm.roll(snapshot + 3);
+        vm.prank(fallbackHolder);
+        proposal.vote(true);
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.Resolved));
+        assertEq(proposal.totalVotingPower(), 50e18);
+        assertEq(proposal.yesVotes(), 50e18);
+    }
+
+    /// With no votable supply at the snapshot the proposal must not activate (it would
+    /// otherwise resolve vacuously with zero votes against a zero quorum).
+    function test_fallbackActivation_revertsWithoutVotableSupplyAtSnapshot() external {
+        vm.roll(50);
+        _init(50, bytes4(keccak256("TEST_ZERO_SUPPLY")), _wrappedOnlyStrategyConfig(), false, false);
+        uint256 snapshot = 50 + WARMUP_BLOCKS;
+
+        vm.roll(snapshot + 1);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(90e18); // too late: after the snapshot block
+
+        vm.expectRevert(DACErrorsLib.NoVotingPower.selector);
+        proposal.activateFallbackVoting();
+
+        vm.prank(fallbackHolder);
+        vm.expectRevert(DACErrorsLib.NoVotingPower.selector);
+        proposal.vote(true);
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
+        assertFalse(proposal.isResolved());
+    }
+
     function test_blockingFlags_enableHighQuorumBlocking() external {
-        vm.roll(26);
+        vm.roll(10);
 
-        proposal.initialize(
-            22,
-            address(this),
-            address(this),
-            address(wrapped),
-            address(oracle),
-            mockAssetController,
-            ProposalParams({
-                typ: bytes4(keccak256("TEST_BLOCKING_FLAGS")),
-                target: address(0),
-                i: bytes32(0),
-                data: bytes("")
-            }),
-            _strategyConfig(),
-            true,
-            true
-        );
+        vm.prank(wrappedHolder);
+        wrapped.wrap(100e18);
 
-        assertTrue(proposal.highQuorum());
-        assertTrue(proposal.blockingEnabled());
+        vm.roll(11);
+
+        _init(5, bytes4(keccak256("TEST_BLOCKING_ON")), _strategyConfigWithFlags(false, true, true), true, true);
+
+        assertEq(proposal.highQuorum(), true);
+        assertEq(proposal.blockingEnabled(), true);
     }
 
     function test_blockingFlags_canDisableHighQuorumBlocking() external {
-        vm.roll(27);
+        vm.roll(10);
 
-        proposal.initialize(
-            23,
-            address(this),
-            address(this),
-            address(wrapped),
-            address(oracle),
-            mockAssetController,
-            ProposalParams({
-                typ: bytes4(keccak256("TEST_BLOCKING_DISABLED")),
-                target: address(0),
-                i: bytes32(0),
-                data: bytes("")
-            }),
-            _strategyConfigWithFlags(false, false, true),
-            true,
-            false
-        );
+        vm.prank(wrappedHolder);
+        wrapped.wrap(100e18);
 
-        assertTrue(proposal.highQuorum());
-        assertFalse(proposal.blockingEnabled());
+        vm.roll(11);
+
+        _init(6, bytes4(keccak256("TEST_BLOCKING_OFF")), _strategyConfigWithFlags(false, false, true), true, false);
+
+        assertEq(proposal.highQuorum(), true);
+        assertEq(proposal.blockingEnabled(), false);
     }
 
     function test_oraclePublisherAccessControl() external {
@@ -290,23 +319,7 @@ contract HybridDACManagementProposalTest is Test {
 
         vm.roll(31);
 
-        proposal.initialize(
-            3,
-            address(this),
-            address(this),
-            address(wrapped),
-            address(oracle),
-            mockAssetController,
-            ProposalParams({
-                typ: bytes4(keccak256("TEST_EMERGENCY")),
-                target: address(0),
-                i: bytes32(0),
-                data: bytes("")
-            }),
-            _strategyConfig(),
-            false,
-            false
-        );
+        _init(3, bytes4(keccak256("TEST_EMERGENCY")), _strategyConfig(), false, false);
 
         vm.prank(publisher);
         oracle.publishSnapshot(address(this), 3, 30, keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18))), 200e18);
@@ -320,29 +333,64 @@ contract HybridDACManagementProposalTest is Test {
         vm.prank(publisher);
         oracle.deactivate(address(this));
 
+        vm.roll(33);
         proposal.triggerEmergencyFallback();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
         assertEq(proposal.yesVotes(), 0);
         assertEq(proposal.noVotes(), 0);
         assertEq(proposal.totalVotingPower(), 0);
+        // Fresh snapshot fixed at the emergency transition, not at creation or activation.
+        assertEq(proposal.fallbackSnapshotBlock(), 33 + WARMUP_BLOCKS);
+
+        // Wrapping during warmup counts; wrapping after the snapshot does not.
+        vm.roll(36);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(500e18);
+
+        vm.roll(33 + WARMUP_BLOCKS + 1);
+        vm.prank(fallbackHolder);
+        wrapped.wrap(400e18);
+
+        proposal.activateFallbackVoting();
+
+        assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
+        assertEq(proposal.totalVotingPower(), 600e18);
+
+        vm.prank(wrappedHolder);
+        proposal.voteWrapped(true);
+        assertFalse(proposal.isResolved());
+
+        vm.prank(fallbackHolder);
+        proposal.voteWrapped(true);
+        assertEq(proposal.yesVotes(), 600e18);
+        assertTrue(proposal.isResolved());
+        assertTrue(proposal.outcome());
+    }
+
+    function _init(
+        uint256 id,
+        bytes4 typ,
+        GovernanceStrategyConfig memory config,
+        bool highQuorum,
+        bool blockingEnabled
+    ) internal {
+        proposal.initialize(
+            id,
+            address(this),
+            address(this),
+            address(wrapped),
+            address(oracle),
+            mockAssetController,
+            ProposalParams({typ: typ, target: address(0), i: bytes32(0), data: bytes("")}),
+            config,
+            highQuorum,
+            blockingEnabled
+        );
     }
 
     function _strategyConfig() internal pure returns (GovernanceStrategyConfig memory config) {
-        config = GovernanceStrategyConfig({
-            quorumPercent: 5e17,
-            highQuorumPercent: 8e17,
-            blockingPercent: 2e17,
-            duration: 7 days,
-            qualification: 0,
-            executionValidityDuration: 1 days,
-            oraclePublishDeadline: 2 days,
-            fallbackWarmupDuration: 1 days,
-            fallbackDuration: 3 days,
-            blockingOnAllProposals: false,
-            blockingOnHighQuorum: true,
-            oraclePrimaryEnabled: true
-        });
+        config = _strategyConfigWithFlags(false, true, true);
     }
 
     function _wrappedOnlyStrategyConfig() internal pure returns (GovernanceStrategyConfig memory config) {
@@ -362,7 +410,7 @@ contract HybridDACManagementProposalTest is Test {
             qualification: 0,
             executionValidityDuration: 1 days,
             oraclePublishDeadline: oraclePrimaryEnabled ? 2 days : 0,
-            fallbackWarmupDuration: 1 days,
+            fallbackWarmupBlocks: WARMUP_BLOCKS,
             fallbackDuration: 3 days,
             blockingOnAllProposals: blockingOnAllProposals,
             blockingOnHighQuorum: blockingOnHighQuorum,

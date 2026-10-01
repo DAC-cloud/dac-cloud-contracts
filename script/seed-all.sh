@@ -43,6 +43,11 @@ warp() {
     cast rpc --rpc-url "$RPC" evm_mine > /dev/null 2>&1
 }
 
+mine() {
+    # Mine N blocks
+    cast rpc --rpc-url "$RPC" anvil_mine "$(printf '0x%x' "$1")" > /dev/null 2>&1
+}
+
 run_script() {
     local script_path="$1"
     local contract_name="$2"
@@ -145,7 +150,7 @@ warp 86400  # wait for oracle deadline to pass
 run_script script/scenarios/SeedExistingGovernanceBeginFallbackWarmup.s.sol SeedExistingGovernanceBeginFallbackWarmup
 
 step "Existing governance: activate fallback"
-warp 86400  # wait for warmup to end
+mine $(( ${EXISTING_DAC_FALLBACK_WARMUP_BLOCKS:-7200} + 1 ))  # warmup is block-based; pass the snapshot block
 run_script script/scenarios/SeedExistingGovernanceActivateFallback.s.sol SeedExistingGovernanceActivateFallback
 
 step "Existing governance: vote fallback"

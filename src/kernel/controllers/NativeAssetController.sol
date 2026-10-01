@@ -22,6 +22,7 @@ contract NativeAssetController is IAssetController, Initializable {
     struct DividendPayoutState {
         address token;
         uint256 totalPayout;
+        uint256 claimedPayout;
         bytes32 merkleRoot;
     }
 
@@ -153,6 +154,7 @@ contract NativeAssetController is IAssetController, Initializable {
         dividendPayouts[proposalId] = DividendPayoutState({
             token: token,
             totalPayout: totalPayout,
+            claimedPayout: 0,
             merkleRoot: merkleRoot
         });
         committedBalances[token] += totalPayout;
@@ -174,8 +176,15 @@ contract NativeAssetController is IAssetController, Initializable {
         require(!dividendClaimed[claimedKey], DACErrorsLib.DividendAlreadyClaimed(proposalId, receiver));
         require(MerkleProof.verify(proof, root, leaf), DACErrorsLib.InvalidMerkleProof());
 
+        // The merkle root is governance-supplied and its leaf sum cannot be
+        // verified on-chain. Cap cumulative claims at the committed amount so a
+        // malformed root can never draw on other commitments or free treasury.
+        DividendPayoutState storage payout = dividendPayouts[proposalId];
+        require(payout.claimedPayout + amount <= payout.totalPayout, DACErrorsLib.DividendPayoutExceeded());
+        payout.claimedPayout += amount;
+
         dividendClaimed[claimedKey] = true;
-        token = dividendPayouts[proposalId].token;
+        token = payout.token;
         committedBalances[token] = committedBalances[token] >= amount ? committedBalances[token] - amount : 0;
         treasuryBalances[token] = treasuryBalances[token] >= amount ? treasuryBalances[token] - amount : 0;
 
