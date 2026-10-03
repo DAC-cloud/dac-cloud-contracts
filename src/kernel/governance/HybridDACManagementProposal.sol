@@ -428,8 +428,13 @@ contract HybridDACManagementProposal is IVoting, IExecutableProposal, Reentrancy
     function _checkAndEmitResolution() internal {
         if (proposalResolved) return;
 
-        // Lazy fallback activation: once the snapshot block has passed, any state
-        // read finalizes the transition (and, with no electorate, the rejection).
+        // Lazy phase transitions: a missed oracle deadline starts warmup, and once the
+        // warmup snapshot block has passed any state read finalizes the activation (and,
+        // with no electorate, the rejection). Nothing gated on this proposal's resolution
+        // can be frozen by nobody calling the explicit transition functions.
+        if (phase == ProposalPhase.AwaitingOracleSnapshot && block.timestamp > oracleSnapshotDeadline) {
+            _beginFallbackWarmupInternal();
+        }
         if (phase == ProposalPhase.FallbackWarmup && block.number > fallbackSnapshotBlock) {
             _activateFallbackInternal();
             if (proposalResolved) return;

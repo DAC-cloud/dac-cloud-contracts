@@ -62,6 +62,8 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
         bool dividendsEnabled
     ) external onlyDACCell returns (uint256 id, address proposal) {
         require(_isKnownType(params.typ), DACErrorsLib.UnsupportedProposal());
+        // With no votable supply the proposal would pass vacuously (0 >= quorum 0).
+        require(totalVotingSupply > 0, DACErrorsLib.NoVotingPower());
 
         if (creator == dealManager) {
             require(

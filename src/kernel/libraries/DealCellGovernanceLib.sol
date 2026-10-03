@@ -74,13 +74,18 @@ library DealCellGovernanceLib {
             if (holders[i] == staker) {
                 newHolder = false;
             }
-            if (token.balanceOf(holders[i]) > 0) {
+            if (agentsLimit != 0 && token.balanceOf(holders[i]) > 0) {
                 activeHolders++;
             }
         }
 
+        // Anyone without a live stake (brand new, or a historical holder coming back)
+        // occupies a fresh seat and must fit under the limit.
+        if (agentsLimit != 0 && token.balanceOf(staker) == 0) {
+            require(activeHolders < agentsLimit, DACErrorsLib.AgentsLimitReached());
+        }
+
         if (newHolder) {
-            require(agentsLimit == 0 || activeHolders < agentsLimit, DACErrorsLib.AgentsLimitReached());
             holders.push(staker);
         }
     }
@@ -359,19 +364,21 @@ library DealCellGovernanceLib {
         }
 
         else {
-            // Adjusting rewards converted to extend percents. Divides by (limit - 1) so
-            // the rescaled percent rounds up and leaves dust unconvertible rather than
-            // over-converting; guarded so zero-reward deals (limit <= 1) do not underflow
-            // or divide by zero, and capped at 100%.
+            // Rescale the converted percent to the new limit, rounding UP: consumers
+            // treat `SCALE - rewardsConverted` as what is still convertible, and
+            // mul(limit, SCALE - pct) must never exceed limit - alreadyUnlocked. Rounding
+            // down would leave a few wei of over-ask that reverts every later conversion.
+            // Dust lost to the rounding stays unconvertible, never over-converted.
             tokenRewardsLimit = _tokenRewardsLimit + rewardsLimit;
 
-            if (tokenRewardsLimit <= 1) {
+            if (tokenRewardsLimit == 0) {
                 rewardsConverted = 0;
             } else {
                 rewardsConverted = MathLib.capAt100(
-                    MathLib.div(
+                    MathLib.mulDivUp(
                         MathLib.mulDiv(_tokenRewardsLimit, _rewardsConverted, MathLib.SCALE),
-                        tokenRewardsLimit - 1
+                        MathLib.SCALE,
+                        tokenRewardsLimit
                     )
                 );
             }

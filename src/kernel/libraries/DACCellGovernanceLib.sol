@@ -324,6 +324,28 @@ library DACCellGovernanceLib {
         mapping(address => DealState) storage dealState
     ) internal {
         address dealCell = deals[id];
+
+        // Clamp to what the deal can still convert. An evaluator over-asking must not
+        // revert the whole evaluation: that would leave agents slash-immune and the
+        // deal impossible to close through evaluation. The clamp is taken on both the
+        // percent scale (cell) and the amount scale (manager), rounding down, so the
+        // minted amount can never exceed rewardsLimit - rewardsUnlocked whatever the
+        // rounding history of the cell's percent.
+        uint256 remaining = MathLib.SCALE - MathLib.capAt100(IDealCell(dealCell).rewardsConvertedPct());
+        uint256 limit = dealState[dealCell].rewardsLimit;
+        if (limit > 0) {
+            uint256 remainingByAmount = MathLib.mulDiv(
+                limit - dealState[dealCell].rewardsUnlocked, MathLib.SCALE, limit
+            );
+            if (remainingByAmount < remaining) remaining = remainingByAmount;
+        }
+        if (transformationPercent > remaining) {
+            transformationPercent = remaining;
+        }
+        if (transformationPercent == 0) {
+            if (remaining == 0 && !IDealCell(dealCell).isClosed()) IDealCellAdapter(dealCell).closeDeal();
+            return;
+        }
         
         uint256 unlockedAmount = IDealCellAdapter(dealCell).markAsSuccess(transformationPercent);
 
@@ -404,7 +426,10 @@ library DACCellGovernanceLib {
             } else if (evaluations[i].action == 1) {    // convert
                 _performTransformation(id, MathLib.capAt100(evaluations[i].percent), deals, dealState);
             } else if (evaluations[i].action == 2) {    // extend
-                IDealCellAdapter(dealCell).extendDeadline(evaluations[i].extendTo);
+                // A non-increasing extension is a no-op, not a reason to strand the evaluation.
+                if (evaluations[i].extendTo > IDealCell(dealCell).dealDeadline()) {
+                    IDealCellAdapter(dealCell).extendDeadline(evaluations[i].extendTo);
+                }
             } else if (evaluations[i].action == 3) {    // close
                 IDealCellAdapter(dealCell).closeDeal();
             }

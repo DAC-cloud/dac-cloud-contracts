@@ -349,39 +349,79 @@ contract AuditPass202610Test is DACTestBase {
         assertTrue(IDealCell(handle.dealCell).isClosed());
     }
 
-    function test_extendDeadline_cannotShorten() public {
+    function test_evaluation_overAskIsClampedNotReverted() public {
+        DealHandle memory handle = _approvedMockDeal();
+
+        MockEvaluator(handle.evaluatorAddr).setResults(_single(1, MathLib.atScale(60)));
+        vm.prank(agent1);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+        assertEq(IDealCell(handle.dealCell).rewardsConvertedPct(), MathLib.atScale(60));
+
+        // Asks for 60% again with only 40% left: clamped, deal completes and closes.
+        vm.prank(agent1);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+
+        DealState memory state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertEq(state.rewardsUnlocked, 500e6);
+        assertEq(IDealCell(handle.dealCell).rewardsConvertedPct(), MathLib.SCALE);
+        assertTrue(IDealCell(handle.dealCell).isClosed());
+    }
+
+    function test_extendDeadline_shorteningIsIgnored() public {
         DealHandle memory handle = _approvedMockDeal();
         uint256 deadline = IDealCell(handle.dealCell).dealDeadline();
 
+        // A non-increasing extension must not strand the evaluation: it is a no-op.
         MockEvaluator(handle.evaluatorAddr).setResults(_single(2, 0, deadline - 1));
         vm.prank(agent1);
-        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
         DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+        assertEq(IDealCell(handle.dealCell).dealDeadline(), deadline);
     }
 
-    // ------------------------------------------------------------------ //
-    //  evaluationDeadline: earliest point a non-agent may evaluate         //
-    // ------------------------------------------------------------------ //
-
-    function test_holderCanEvaluateOnlyAfterEvaluationDeadline() public {
+    /// Regression: after a partial conversion and a later tranche, the rescaled percent
+    /// must not let an evaluator asking "everything left" over-ask by rounding dust.
+    function test_trancheAfterPartialConversion_remainingIsExactlyConvertible() public {
         DealHandle memory handle = _approvedMockDeal();
-        MockEvaluator(handle.evaluatorAddr).setResults(new EvaluationResult[](0));
 
-        uint256 evaluationDeadline = IDealCell(handle.dealCell).evaluationDeadline();
-        assertLt(evaluationDeadline, IDealCell(handle.dealCell).dealDeadline());
-
-        vm.warp(evaluationDeadline - 1);
-        vm.prank(founder);
-        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        // Convert an inexact third of the 500e6 rewards.
+        MockEvaluator(handle.evaluatorAddr).setResults(_single(1, MathLib.SCALE / 3));
+        vm.prank(agent1);
         DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+        uint256 unlockedBefore = IDealManagerAdapter(dealManager).state(handle.dealCell).rewardsUnlocked;
+        assertGt(unlockedBefore, 0);
 
-        // Agents are never gated by it.
+        // Second tranche adds 700e6 of rewards.
+        vm.warp(block.timestamp + 1);
+        uint256 pid = _createDealProposal(handle, agent1, ProposalParams({
+            typ: AbstractDealManagementType.REQUEST_TRANCHE,
+            target: address(usdc),
+            i: bytes32(uint256(1)),
+            data: abi.encode(uint256(700e6))
+        }));
+        _voteDeal(handle, pid, agent1);
+        _voteDeal(handle, pid, agent2);
+        vm.recordLogs();
+        Deal(handle.dealAddr).executeStakedAgentProposal(pid);
+        uint256 dacPid = _findTopic3(vm.getRecordedLogs(), keccak256("TrancheCreated(address,uint256,uint256,uint256)"));
+        vm.warp(block.timestamp + 1);
+        vm.startPrank(founder);
+        IVoting(dac.getProposalVoting(dacPid)).vote(true);
+        dac.executeDACProposal(dacPid);
+        vm.stopPrank();
+
+        DealState memory state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertEq(state.rewardsLimit, 1_200e6);
+
+        // Evaluator asks for everything: clamped to what is left, never a revert.
+        MockEvaluator(handle.evaluatorAddr).setResults(_single(1, MathLib.SCALE));
         vm.prank(agent1);
         DealManager(dealManager).evaluateDeal(handle.dealId, 0);
 
-        vm.warp(evaluationDeadline + 1);
-        vm.prank(founder);
-        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+        state = IDealManagerAdapter(dealManager).state(handle.dealCell);
+        assertLe(state.rewardsUnlocked, state.rewardsLimit);
+        assertGe(state.rewardsUnlocked, state.rewardsLimit - 2); // dust from rounding only
+        assertEq(IDealCell(handle.dealCell).rewardsConvertedPct(), MathLib.SCALE);
+        assertTrue(IDealCell(handle.dealCell).isClosed());
     }
 
     // ------------------------------------------------------------------ //

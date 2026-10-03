@@ -50,6 +50,13 @@ library MathLib {
     }
 
     /**
+     * @dev x * y / denominator rounded up, full 512-bit precision.
+     */
+    function mulDivUp(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256) {
+        return Math.mulDiv(x, y, denominator, Math.Rounding.Ceil);
+    }
+
+    /**
      * @dev amount * scaledPercent / SCALE with rounding up (useful for penalties)
      */
     function mulRoundUp(uint256 amount, uint256 scaledPercent) internal pure returns (uint256) {

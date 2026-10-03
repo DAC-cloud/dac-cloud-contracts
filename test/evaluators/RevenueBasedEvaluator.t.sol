@@ -568,6 +568,72 @@ contract RevenueBasedEvaluatorTest is Test {
         assertEq(evaluator.totalEvaluatedCycles(), 1);
     }
 
+    /// A long gap settles in 64-cycle batches; revenue is attributed pro rata so the
+    /// remainder cycles are not evaluated against zero revenue (false misses/slashes).
+    function test_longGap_attributesRevenueAcrossBatches() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 1 days,
+            revenueProjectionMode: 0,
+            revenueProjection: 100e6,
+            requirementCurveCoeffs: new int256[](1),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(1),
+            minCycleRevenuePercent: MathLib.atScale(50),
+            graceCycles: 0,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false
+        });
+        cfg.curveCoeffs[0] = 0;
+        cfg.curveCoeffs[1] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.SCALE); // flat: 100e6 per cycle
+
+        deployEvaluator(RevenueBasedEvaluator.Config({rewardShare: MathLib.atScale(100), schedule: cfg}));
+
+        // 100 cycles pass with exactly on-target revenue overall.
+        mockDealCell.setReturnedCapital(100 * 100e6);
+        vm.warp(block.timestamp + 100 days);
+
+        EvaluationResult[] memory first = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(evaluator.totalEvaluatedCycles(), 64);
+        for (uint256 i = 0; i < first.length; i++) assertTrue(first[i].action != 0, "slashed in first batch");
+
+        EvaluationResult[] memory second = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(evaluator.totalEvaluatedCycles(), 100);
+        for (uint256 i = 0; i < second.length; i++) assertTrue(second[i].action != 0, "slashed in second batch");
+        assertEq(evaluator.missedCycles(), 0);
+        assertEq(evaluator.returnsSnapshot(), 100 * 100e6);
+    }
+
+    function test_projectionModeZeroDerivedTarget_settlesWithoutResults() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 1,
+            revenueProjection: 1_000_000e6, // larger than invested capital: target floors to 0
+            requirementCurveCoeffs: new int256[](1),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(25),
+            graceCycles: 0,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false
+        });
+        cfg.curveCoeffs[1] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.SCALE);
+
+        deployEvaluator(RevenueBasedEvaluator.Config({rewardShare: MathLib.atScale(100), schedule: cfg}));
+        mockDealCell.setInvestedCapital(address(0x1111), 10_000e6);
+
+        vm.warp(block.timestamp + 30 days);
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(results.length, 0);
+        assertEq(evaluator.unlockedRewards(), 0);
+        assertEq(evaluator.totalEvaluatedCycles(), 1);
+    }
+
     function test_initialize_rejectsZeroDurationAndEmptyCurves() public {
         RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),

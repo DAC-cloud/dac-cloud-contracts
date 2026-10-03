@@ -52,6 +52,7 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             !_strategyConfig.oraclePrimaryEnabled || _governanceOracle != address(0),
             DACErrorsLib.NotAllowed()
         );
+        require(_governanceOracle == address(0) || _governanceOracle.code.length > 0, DACErrorsLib.NotAllowed());
 
         dacCell = _dacCell;
         wrappedMainToken = IERC20(_wrappedMainToken);

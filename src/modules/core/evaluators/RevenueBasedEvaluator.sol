@@ -109,18 +109,22 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         }
 
         // How many full periods passed
-        uint256 cycles = (current - lastChecked) / config.schedule.duration;
-        if (cycles == 0) {
+        uint256 elapsedCycles = (current - lastChecked) / config.schedule.duration;
+        if (elapsedCycles == 0) {
             return new EvaluationResult[](0); // nothing to evaluate yet
         }
-        if (cycles > MAX_CYCLES_PER_EVALUATION) {
-            cycles = MAX_CYCLES_PER_EVALUATION;
-        }
+        uint256 cycles = elapsedCycles > MAX_CYCLES_PER_EVALUATION ? MAX_CYCLES_PER_EVALUATION : elapsedCycles;
 
-        // Taking revenue snapshot
+        // Taking revenue snapshot. When only part of the elapsed cycles settle now, only
+        // the matching share of the new returns is attributed to them; the rest stays
+        // unsnapshotted for the cycles settled by the next evaluation, so no cycle is
+        // ever evaluated against revenue it already paid out or against zero revenue.
         uint256 totalCapitalReturned = IDealCell(cell).getReturnedCapital(config.schedule.token);
         uint256 returned = totalCapitalReturned - returnsSnapshot;
-        returnsSnapshot = totalCapitalReturned;
+        if (cycles < elapsedCycles) {
+            returned = MathLib.mulDiv(returned, cycles, elapsedCycles);
+        }
+        returnsSnapshot += returned;
 
         // Calculating revenue target
         uint256 baseExpectedRevenue = config.schedule.revenueProjection;
@@ -135,6 +139,13 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
             }
 
             baseExpectedRevenue = investedCapital / config.schedule.revenueProjection;
+        }
+        if (baseExpectedRevenue == 0) {
+            // A projection larger than the invested capital derives a zero target; that is
+            // a misconfiguration, not a free pass. Settle without results.
+            lastChecked = lastChecked + cycles * config.schedule.duration;
+            totalEvaluatedCycles += cycles;
+            return new EvaluationResult[](0);
         }
 
         uint256 rewardPercent = 0;
