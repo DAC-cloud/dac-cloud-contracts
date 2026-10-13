@@ -66,6 +66,10 @@ contract DACFactory is IDACFactory {
         address deferBirthRole
     ) external returns (address dacAddr, address mainAddr, address agentAddr) {
         require(config.mainTokenMaxSupply > config.founderAllocation);
+        // A DAC whose root capital call can never be fulfilled has no voters, ever.
+        require(config.founder != address(0));
+        require(config.founderAllocation > 0);
+        require(config.treasuryToken.code.length > 0);
 
         dacAddr = DACDeployment.predictDACAddress(
             salt,

@@ -465,6 +465,7 @@ _registerRelatedContract(
 );
 ```
 
+- **Lifecycle after close** -- a closed deal may still return assets to the DAC (`transferCapital`, and for `DACDeal` the child main token through `RETURN_PROFITS`), but it may not acquire new positions: `REQUEST_TRANCHE` and `DACDeal.REINVEST_PROFITS` are refused once the deal is closed. Rewards unlocked before close stay claimable regardless of the module's `isActive()`.
 - **`controlled = true`** -- the related contract is registered with the DealCell's asset controller. Use this for contracts that hold or manage capital on behalf of the deal: its own deployments (a treasury, a vault) or pre-existing custody contracts whose main-token balance must not count in governance (a Uniswap pool, a Morpho market). Controlled addresses are excluded from votable supply and cannot delegate, so the kernel bounds what a module may register:
   - at most `DealManager.MAX_MODULE_CONTROLLED_ADDRESSES` (3) addresses per deal, on top of the `DealCell` and `Deal` the kernel registers itself;
   - contract accounts only: EOAs, including EIP-7702 delegated EOAs, revert with `ControlledAddressNotContract`;

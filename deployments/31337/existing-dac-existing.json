@@ -1,0 +1,19 @@
+{
+  "agentToken": "0x638f0f65Ba5e4d70401e9deea7aA0e8BeE68b6F8",
+  "assetController": "0x9472EF1614f103Ae8f714cCeeF4B438D353Ce1Fa",
+  "blockNumber": 85,
+  "broadcaster": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "chainId": 31337,
+  "dac": "0xd0F2052fAdCa70De7f82785A62C6Ef4fb1E9b825",
+  "dacFactory": "0x4C4a2f8c81640e47606d3fd77B353E87Ba015584",
+  "dealManager": "0x2230a4941F1521f3AECf14B2d955b5f850B171d1",
+  "dividendsEnabled": false,
+  "founder": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "governanceOracle": "0x304f769D386c0c787674588D52448EEe6d550b9f",
+  "label": "existing",
+  "mainToken": "0xd79Df1927718b3212FA6E126Ec4Ad2b3Ee1263D9",
+  "treasurySeedAmount": "100000000000000000000000",
+  "underlyingToken": "0x8198f5d8F8CfFE8f9C413d98a0A55aEB8ab9FbB7",
+  "usedMockUnderlyingToken": true,
+  "wrapAmount": "250000000000000000000000"
+}

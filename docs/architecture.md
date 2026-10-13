@@ -546,6 +546,10 @@ The home-side staked-agent proposals are:
 - `HOST_CLAIM_REWARD` -- claim main-token incentives the agent-deal earned in a host deal.
 - `HOST_UNSTAKE` -- exit a host deal and recover the host agent tokens.
 - `HOST_INVITE` -- invite an agent into a whitelist-only host deal the agent-deal originated (it is that deal's sole initial inviter).
+
+### 5.6 Challenging deal proposals
+
+A `CAST_VETO_DEAL` challenge holds the challenged deal proposal until the DAC vote resolves and occupies that proposal's single challenge slot. Opening one uses the same proposal-creation `qualification` as every other type, floored at `GovernanceLimits.MIN_VETO_QUALIFICATION` (0.1% of votable supply) so that a DAC which leaves `qualification` at zero cannot have its deals stalled for one wei. The threshold is sized for a normal active holder, not for a blocking minority: below it a holder can still vote on a challenge someone else opened.
 - `RETURN_ASSET_TO_DAC` -- route earned host incentives (and any other idle foreign assets) back to the home treasury. The home main token is excluded from this path to avoid interfering with main-token obligation accounting.
 
 Every host action takes a host deal cell and is validated against the bound host DAC's deal registry (the same `DealManager.state(...).id != 0` trust anchor used by `AgentToken`), so an agent-deal can only ever interact with deals belonging to its one bound host DAC. As with the rest of the core module, host interactions are typed kernel-interface calls on validated host contracts rather than arbitrary external calls.

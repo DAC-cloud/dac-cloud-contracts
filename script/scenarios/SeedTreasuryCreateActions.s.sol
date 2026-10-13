@@ -31,7 +31,8 @@ contract SeedTreasuryCreateActions is TreasuryFlowBase {
                 typ: CoreDealManagementType.APPROVE_PERMIT2_SPEND,
                 target: seed.treasuryToken,
                 i: 0,
-                data: abi.encode(seed.recipient, config.permit2SpendAmount, uint48(block.timestamp + 7 days))
+                // Permit2 allowances must outlive the vote (default duration 7 days) or creation reverts.
+                data: abi.encode(seed.recipient, config.permit2SpendAmount, uint48(block.timestamp + 30 days))
             })
         );
 

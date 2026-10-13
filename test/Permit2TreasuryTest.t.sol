@@ -199,6 +199,22 @@ contract Permit2TreasuryTest is Test {
         assertEq(token.balanceOf(address(treasury)), 9_700);
     }
 
+    /// Revoking an agent must also kill any Permit2 allowance it was granted via
+    /// approveSpend; otherwise it keeps pulling until the expiration.
+    function test_revokeAgent_zeroesPermit2Allowance() public {
+        vm.prank(treasuryDeal);
+        treasury.approveSpend(address(token), agent, 250, uint48(block.timestamp + 30 days));
+
+        vm.prank(treasuryDeal);
+        treasury.revokeAgent(agent, address(token), address(0));
+
+        (address approvedToken, address spender, uint160 amount, uint48 expiration) = permit2.lastApproveCall();
+        assertEq(approvedToken, address(token));
+        assertEq(spender, agent);
+        assertEq(amount, 0);
+        assertEq(expiration, 0);
+    }
+
     function test_approveReceive_and_revokeAgent_updateReceiveAllowance() public {
         vm.prank(treasuryDeal);
         treasury.approveReceive(agent, source, address(token), 600);

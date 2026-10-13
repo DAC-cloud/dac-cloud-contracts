@@ -81,6 +81,7 @@ Current responsibilities:
 - determine recoverability / active lifecycle state
 - interact with the asset controller for reward and main-asset accounting
 - validate the proposer-supplied deal-proposal factory against the module (`dealAcceptsGovernanceFactory`); reject deals whose factory the module does not vouch for
+- reward claims (`mintMain`) and `onDealClosed` are gated on deal-cell identity only, never on the module's `isActive()`: a module going dormant cannot freeze rewards already unlocked or the close that releases the DAC's reservations
 - gate module-registered controlled addresses: at most `MAX_MODULE_CONTROLLED_ADDRESSES` (3) per deal beyond the kernel-registered `DealCell` and `Deal`; contract accounts only (no EOAs, no EIP-7702 delegated EOAs) that have never delegated
 
 ### `src/kernel/DealCell.sol`
@@ -346,7 +347,7 @@ Existing-token DAC wrapper.
 
 Features:
 
-- 1:1 wrap / unwrap against an underlying ERC-20
+- 1:1 wrap / unwrap against an underlying ERC-20 (reentrancy guarded)
 - `ERC20Votes`
 - auto-self-delegation on first self-wrap (third-party `wrapTo` recipients delegate themselves)
 - move/delegate notifications to the asset controller
@@ -505,7 +506,7 @@ Milestone-driven evaluator with:
 - extension support
 - close milestones
 
-Configuration is validated at deployment (non-empty curves, positive `expectedReturn`, oracle present whenever two tokens are compared, non-zero growth snapshot) and zero denominators evaluate to zero progress, so a misconfigured milestone can never make `evaluateDeal` revert forever. When `fundingToken` is set, `expectedReturn` is the scaled share of invested capital expected back (`1e18` = 100%): returning the bare principal is not a completed milestone unless the milestone says so. Unlocks are clamped to what the deal can still convert.
+Configuration is validated at deployment (non-empty curves, positive `expectedReturn`, oracle present whenever two tokens are compared, non-zero growth snapshot) and zero denominators evaluate to zero progress, so a misconfigured milestone can never make `evaluateDeal` revert forever. Only capital the kernel recorded as returned counts; a raw balance on the DealCell never does. When `fundingToken` is set, `expectedReturn` is the scaled share of invested capital expected back (`1e18` = 100%). With `excludePrincipal` the capital invested in the accounting token is subtracted first and `expectedReturn` becomes the expected profit share, so returning the principal itself contributes nothing. Unlocks are clamped to what the deal can still convert.
 
 ### `src/modules/core/evaluators/RevenueBasedEvaluator.sol`
 
@@ -516,7 +517,7 @@ Recurring revenue evaluator with:
 - missed-cycle penalties
 - optional close behavior
 
-Configuration is validated at deployment (positive duration and projection, non-empty curves, percents within scale). A zero requirement counts as met, a projection-mode deal with nothing invested settles its cycles without results, and at most `MAX_CYCLES_PER_EVALUATION` cycles settle per call (the rest carry over), so evaluation can never revert forever or run out of gas after a long gap. Unlocks are clamped to what the deal can still convert.
+Configuration is validated at deployment (positive duration and projection, non-empty curves, percents within scale). A zero requirement from the curve counts as met, while a derived target of zero or nothing invested settles the cycles without results. At most `MAX_CYCLES_PER_EVALUATION` cycles settle per call with revenue attributed pro rata, the rest carrying over, so evaluation can never revert forever, run out of gas after a long gap, or evaluate carried-over cycles against zero revenue. With `excludePrincipal` only returns above the capital invested in the accounting token count as revenue. Unlocks are clamped to what the deal can still convert.
 
 ### Evaluator factories
 

@@ -160,7 +160,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18; // 100% of rewardPercentage
         milestones[0].penaltyCurve[0] = 1e18;
@@ -196,7 +197,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -231,7 +233,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: MathLib.atScale(80),
-            extension: 7 days
+            extension: 7 days,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -264,7 +267,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
         milestones[0].penaltyCurve[0] = int256(MathLib.atScale(30)); // 30% slash on miss
@@ -304,7 +308,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[1] = Milestone({
             milestoneType: 0,
@@ -318,7 +323,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
         milestones[1].rewardCurve[0] = 1e18;
@@ -362,7 +368,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: MathLib.atScale(80),
-            extension: 7 days
+            extension: 7 days,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -404,7 +411,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -443,7 +451,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1), // zero reward on a miss
             penaltyCurve: new int256[](1), // zero penalty on a miss
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
 
         MilestoneBasedEvaluator.Config memory cfg = MilestoneBasedEvaluator.Config({
@@ -476,7 +485,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].penaltyCurve[0] = 1e18;
 
@@ -490,6 +500,42 @@ contract MilestoneBasedEvaluatorTest is Test {
         assertEq(results.length, 1);
         assertEq(results[0].action, 0); // full miss: penalty curve applies
         assertEq(results[0].percent, MathLib.SCALE);
+    }
+
+    /// excludePrincipal: only returns above the invested principal count, and
+    /// expectedReturn is then the expected profit share.
+    function test_excludePrincipal_countsOnlyReturnsAbovePrincipal() public {
+        Milestone[] memory milestones = new Milestone[](1);
+        milestones[0] = Milestone({
+            milestoneType: 0,
+            token: address(usdc),
+            oracle: address(0),
+            valuationMode: 0,
+            fundingToken: address(usdc),
+            expectedReturn: 2e17, // 20% profit on top of the principal
+            timestamp: block.timestamp + 30 days,
+            rewardPercentage: MathLib.atScale(25),
+            rewardCurve: new int256[](1),
+            penaltyCurve: new int256[](1),
+            minPercentGrace: 0,
+            extension: 0,
+            excludePrincipal: true
+        });
+        deployEvaluator(MilestoneBasedEvaluator.Config({rewardShare: MathLib.atScale(100), milestones: milestones}));
+        mockDealCell.setInvestedCapital(address(usdc), 10_000e6);
+
+        // Principal back in full, no profit: zero progress, nothing unlocks before deadline.
+        mockDealCell.setReturnedCapital(10_000e6);
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(results.length, 0);
+        assertFalse(evaluator.evaluated(0));
+
+        // Principal plus 20% profit: milestone met.
+        mockDealCell.setReturnedCapital(12_000e6);
+        results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(results.length, 1);
+        assertEq(results[0].action, 1);
+        assertEq(results[0].percent, MathLib.atScale(25));
     }
 
     function test_initialize_rejectsMisconfiguredMilestones() public {
@@ -506,7 +552,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](0), // empty curve
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         vm.expectRevert(MilestoneBasedEvaluator.InvalidConfig.selector);
         deployEvaluator(MilestoneBasedEvaluator.Config({rewardShare: MathLib.atScale(100), milestones: milestones}));
@@ -536,7 +583,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -575,7 +623,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -612,7 +661,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
 
@@ -655,7 +705,8 @@ contract MilestoneBasedEvaluatorTest is Test {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18; // 100% of rewardPercentage
         milestones[0].penaltyCurve[0] = 1e18;

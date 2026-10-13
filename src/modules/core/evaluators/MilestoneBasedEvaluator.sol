@@ -224,9 +224,15 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
     function calculateProgress(Milestone memory m) internal view returns (uint256 progress) {
         if (m.valuationMode == 0) {
-            // Volume returns mode
+            // Volume returns mode. Only capital the kernel recorded as returned counts:
+            // the DealCell never holds balances at rest, so a raw balance there could
+            // only be a donation (a cheap way to fake progress).
             uint256 totalReturnsVolume = IDealCell(cell).getReturnedCapital(m.token);
-            totalReturnsVolume += IERC20(m.token).balanceOf(cell);
+            if (m.excludePrincipal) {
+                // Returning the principal itself is not a return on it.
+                uint256 principal = IDealCell(cell).getInvestedCapital(m.token);
+                totalReturnsVolume = totalReturnsVolume > principal ? totalReturnsVolume - principal : 0;
+            }
 
             if (m.oracle != address(0) && m.fundingToken != m.token) {
                 uint256 price = getOraclePrice(m.oracle, m.token);

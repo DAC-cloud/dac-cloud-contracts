@@ -275,7 +275,8 @@ contract DealGovernanceFlowTest is DACTestBase {
             graceCycles: 1,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         schedule.requirementCurveCoeffs[0] = int256(MathLib.atScale(100));
         schedule.requirementCurveCoeffs[1] = 0;
@@ -660,7 +661,7 @@ contract DealGovernanceFlowTest is DACTestBase {
                 typ: CoreDealManagementType.APPROVE_PERMIT2_SPEND,
                 target: address(zeroFirstToken),
                 i: 0,
-                data: abi.encode(spender1, uint160(2_000), uint48(block.timestamp + 1 days))
+                data: abi.encode(spender1, uint160(2_000), uint48(block.timestamp + 30 days))
             })
         );
         vm.stopPrank();
@@ -676,7 +677,7 @@ contract DealGovernanceFlowTest is DACTestBase {
                 typ: CoreDealManagementType.APPROVE_PERMIT2_SPEND,
                 target: address(zeroFirstToken),
                 i: 0,
-                data: abi.encode(spender2, uint160(3_000), uint48(block.timestamp + 2 days))
+                data: abi.encode(spender2, uint160(3_000), uint48(block.timestamp + 30 days))
             })
         );
         vm.stopPrank();
@@ -719,7 +720,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         address treasuryAddr = TreasuryDeal(handle.dealAddr).managedEntity();
         address spender = makeAddr("permit2-spender");
         uint160 amount = 2_750;
-        uint48 expiration = uint48(block.timestamp + 7 days);
+        uint48 expiration = uint48(block.timestamp + 30 days);
 
         vm.startPrank(agent1);
         uint256 proposalId = Deal(handle.dealAddr).createStakedAgentProposal(
@@ -982,7 +983,8 @@ contract DealGovernanceFlowTest is DACTestBase {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
         milestones[0].penaltyCurve[0] = 1e18;

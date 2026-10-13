@@ -109,7 +109,7 @@ contract DACDeployTest is Test {
             defaultQuorum: MathLib.atScale(50),
             founder: user,
             founderAllocation: 200_000_000e18,
-            treasuryToken: address(0),
+            treasuryToken: address(new MockUnderlyingToken()), // the factory rejects a codeless treasury token
             founderCommitment: 20_000,
             dividendsEnabled: false
         });

@@ -135,6 +135,10 @@ contract Permit2Treasury is ReentrancyGuard, IClock, Initializable {
         delete(agentAllowance[calldataHash]);
         delete(approvedAgents[calldataHash]);
 
+        // A Permit2 allowance granted to this address by `approveSpend` must die with
+        // the revocation too, otherwise the spender keeps pulling until expiration.
+        permit2.approve(token, agent, 0, 0);
+
         emit AgentRevoked(agent, token, counterparty);
     }
 

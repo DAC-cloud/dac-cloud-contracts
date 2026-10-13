@@ -159,7 +159,7 @@ The deployment flow is split into two layers:
 - `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
-- `EXISTING_DAC_FALLBACK_WARMUP_BLOCKS` (blocks, not seconds: the fallback snapshot is the warmup's last block)
+- `EXISTING_DAC_FALLBACK_WARMUP_BLOCKS` (blocks, not seconds: the fallback snapshot is the warmup's last block; 7200 is about 4 hours on Base, 43200 about a day)
 - `EXISTING_DAC_FALLBACK_DURATION`
 
 ### Existing governance flow config
@@ -566,3 +566,7 @@ This requires an Anvil instance on `127.0.0.1:8545`. The script handles Permit2 
 4. `forge build --sizes`
 5. Validate deployment and scenario scripts on constrained local Anvil (or run `./script/seed-all.sh`)
 6. Use the generated manifests as fixtures for indexer, SDK, and frontend work
+
+## Toolchain pins
+
+`foundry.toml` pins `solc_version = "0.8.33"` and `evm_version = "prague"` (Base mainnet is Prague-equivalent), and CI pins the Foundry release. Verified bytecode is only reproducible with these pins, and `DACCell` sits close to the EIP-170 size limit, so do not change them casually. OpenZeppelin libraries are pinned by submodule commit. Three public libraries (`DACCellGovernanceLib`, `DealCellGovernanceLib`, `DACDeployment`) are deployed separately and linked into `DealManager`, `DealCell` and `DACFactory`; verification needs their addresses.

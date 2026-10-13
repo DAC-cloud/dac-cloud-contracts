@@ -102,6 +102,18 @@ contract NativeGovernanceSchema is IGovernanceSchema, Initializable {
                 require(IDealManager(dealManager).isRecoverable(dealId), DACErrorsLib.DealNotRecoverable());
             }
 
+            if (params.typ == DACManagementProposalType.CAST_VETO_DEAL) {
+                // Same proposal-creation qualification as any other type, floored so a
+                // zero `qualification` cannot be turned into one-wei challenge griefing.
+                uint256 vetoQualification = votingConfig.qualification > GovernanceLimits.MIN_VETO_QUALIFICATION
+                    ? votingConfig.qualification
+                    : GovernanceLimits.MIN_VETO_QUALIFICATION;
+                require(
+                    mainToken.getVotes(creator) >= MathLib.mul(IDealManager(dealManager).totalReleasedVotable(), vetoQualification),
+                    DACErrorsLib.InsufficientBalance()
+                );
+            }
+
             if (params.typ == DACManagementProposalType.DIVIDEND_PAYOUT) {
                 require(dividendsEnabled, DACErrorsLib.DividendsNotEnabled());
             }

@@ -456,7 +456,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         emit DACEventsLib.DividendClaimed(proposalId, token, receiver, amount);
     }
 
-    function recoverERC20(address token) external nonReentrant onlyHolderOrManager {
+    // Permissionless on purpose: it only moves tokens already sitting on this cell
+    // into the DAC's own treasury and records them. Deals of a parent DAC rely on
+    // it to credit forwarded rewards without holding this DAC's token.
+    function recoverERC20(address token) external nonReentrant {
         uint256 recovered = IERC20(token).balanceOf(address(this));
         require(recovered > 0, DACErrorsLib.NotEnoughBalance());
 

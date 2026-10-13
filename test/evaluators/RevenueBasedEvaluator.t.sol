@@ -144,7 +144,8 @@ contract RevenueBasedEvaluatorTest is Test {
                 graceCycles: 3,
                 penaltyPerMiss: MathLib.atScale(5),
                 evaluationStart: 0,
-                autoClose: false
+                autoClose: false,
+                excludePrincipal: false
             })
         });
         cfg.schedule.curveCoeffs[0] = 0;
@@ -187,7 +188,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
@@ -228,7 +230,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0, // no grace, 2 periods clearly missed
             penaltyPerMiss: MathLib.atScale(10),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
@@ -268,7 +271,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: true
+            autoClose: true,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
@@ -307,7 +311,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 1e18;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
@@ -345,7 +350,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18; // linear unlock
@@ -388,7 +394,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 1,
             penaltyPerMiss: MathLib.atScale(10),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -426,7 +433,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 1,
             penaltyPerMiss: MathLib.atScale(10),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -469,7 +477,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: 0,
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -508,7 +517,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -545,7 +555,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -583,7 +594,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -619,7 +631,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[1] = 1e18;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.SCALE);
@@ -632,6 +645,46 @@ contract RevenueBasedEvaluatorTest is Test {
         assertEq(results.length, 0);
         assertEq(evaluator.unlockedRewards(), 0);
         assertEq(evaluator.totalEvaluatedCycles(), 1);
+    }
+
+    /// excludePrincipal: returned principal is not revenue; only the excess counts.
+    function test_excludePrincipal_principalReturnIsNotRevenue() public {
+        RevenueSchedule memory cfg = RevenueSchedule({
+            token: address(0x1111),
+            duration: 30 days,
+            revenueProjectionMode: 0,
+            revenueProjection: 1_000e6,
+            requirementCurveCoeffs: new int256[](1),
+            curveCoeffs: new int256[](2),
+            maxCycleUnlockPercent: MathLib.atScale(10),
+            minCycleRevenuePercent: MathLib.atScale(50),
+            graceCycles: 0,
+            penaltyPerMiss: MathLib.atScale(5),
+            evaluationStart: 0,
+            autoClose: false,
+            excludePrincipal: true
+        });
+        cfg.curveCoeffs[1] = 1e18;
+        cfg.requirementCurveCoeffs[0] = int256(MathLib.SCALE);
+
+        deployEvaluator(RevenueBasedEvaluator.Config({rewardShare: MathLib.atScale(100), schedule: cfg}));
+        mockDealCell.setInvestedCapital(address(0x1111), 10_000e6);
+
+        // Cycle 1: exactly the principal comes back -> zero revenue -> miss + penalty.
+        mockDealCell.setReturnedCapital(10_000e6);
+        vm.warp(block.timestamp + 30 days);
+        EvaluationResult[] memory results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(evaluator.unlockedRewards(), 0);
+        assertEq(evaluator.missedCycles(), 1);
+        assertEq(results.length, 1);
+        assertEq(results[0].action, 0);
+
+        // Cycle 2: 1_000e6 above principal -> target met -> full cycle unlock.
+        mockDealCell.setReturnedCapital(11_000e6);
+        vm.warp(block.timestamp + 30 days);
+        results = evaluator.evaluateDeal(DEAL_ID, address(mockDealCell), DEAL_ADDR, address(0));
+        assertEq(evaluator.missedCycles(), 0);
+        assertEq(evaluator.unlockedRewards(), MathLib.atScale(10));
     }
 
     function test_initialize_rejectsZeroDurationAndEmptyCurves() public {
@@ -647,7 +700,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         vm.expectRevert(RevenueBasedEvaluator.InvalidConfig.selector);
         deployEvaluator(RevenueBasedEvaluator.Config({rewardShare: MathLib.atScale(100), schedule: cfg}));
@@ -671,7 +725,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: 0,
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 1e18;
@@ -707,7 +762,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 0,
             penaltyPerMiss: 0,
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = int256(MathLib.atScale(10));  // a
         cfg.curveCoeffs[1] = int256(MathLib.atScale(20));  // b
@@ -750,7 +806,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0;
         cfg.curveCoeffs[1] = 0;
@@ -797,7 +854,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 0; cfg.curveCoeffs[2] = 1e18; cfg.curveCoeffs[3] = 1e18;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
@@ -842,7 +900,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = 0; cfg.curveCoeffs[1] = 1e18; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 0;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;
@@ -888,7 +947,8 @@ contract RevenueBasedEvaluatorTest is Test {
             graceCycles: 3,
             penaltyPerMiss: MathLib.atScale(5),
             evaluationStart: 0,
-            autoClose: false
+            autoClose: false,
+            excludePrincipal: false
         });
         cfg.curveCoeffs[0] = -1 * int256(MathLib.atScale(50)); cfg.curveCoeffs[1] = 1e18; cfg.curveCoeffs[2] = 0; cfg.curveCoeffs[3] = 0;
         cfg.requirementCurveCoeffs[0] = int256(MathLib.atScale(100)); cfg.requirementCurveCoeffs[1] = 1e15;

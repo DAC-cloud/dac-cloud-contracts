@@ -42,6 +42,11 @@ enum AgentTokenMintAction {
 library GovernanceLimits {
     uint256 internal constant MAX_DURATION = 365 days;
     uint256 internal constant MAX_WARMUP_BLOCKS = 5_000_000;
+    // A CAST_VETO_DEAL challenge holds a deal proposal for a whole DAC vote and
+    // occupies its single challenge slot, so opening one needs at least a normal
+    // active holder's stake even when the DAC's own `qualification` is zero.
+    // Scaled percent of votable supply: 1e15 = 0.1%.
+    uint256 internal constant MIN_VETO_QUALIFICATION = 1e15;
 }
 
 struct GovernanceStrategyConfig {

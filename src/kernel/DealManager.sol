@@ -137,7 +137,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         uint256 evaluatorId, 
         address to, 
         uint256 amount
-    ) external onlyDealCell nonReentrant {
+    ) external onlyRegisteredDealCell nonReentrant {
         DACCellGovernanceLib.mintMain(
             deal, 
             evaluatorId,
@@ -289,7 +289,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         );
     }
 
-    function onDealClosed(uint256 dealId) external onlyDealCell {
+    function onDealClosed(uint256 dealId) external onlyRegisteredDealCell {
         require(msg.sender == deals[dealId], DACErrorsLib.NotAuthorized());
         // Kernel-boundary guard: unused reward reservations are released exactly once
         // per deal, whatever a module does inside its own cell.
@@ -376,6 +376,14 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     modifier onlyDealCell() {
         _onlyDealCell(msg.sender);
+        _;
+    }
+
+    // Identity only, no module-activity check: a module going dormant must not be
+    // able to freeze reward claims already unlocked or the close that releases the
+    // DAC's reward reservations. Those are obligations the DAC already carries.
+    modifier onlyRegisteredDealCell() {
+        require(dealState[msg.sender].id != 0, DACErrorsLib.InvalidDeal(msg.sender));
         _;
     }
 

@@ -120,7 +120,13 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         // unsnapshotted for the cycles settled by the next evaluation, so no cycle is
         // ever evaluated against revenue it already paid out or against zero revenue.
         uint256 totalCapitalReturned = IDealCell(cell).getReturnedCapital(config.schedule.token);
-        uint256 returned = totalCapitalReturned - returnsSnapshot;
+        if (config.schedule.excludePrincipal) {
+            // Returning the principal itself is not revenue. A later tranche raises the
+            // principal, so the net figure can step down; never underflow the snapshot.
+            uint256 principal = IDealCell(cell).getInvestedCapital(config.schedule.token);
+            totalCapitalReturned = totalCapitalReturned > principal ? totalCapitalReturned - principal : 0;
+        }
+        uint256 returned = totalCapitalReturned > returnsSnapshot ? totalCapitalReturned - returnsSnapshot : 0;
         if (cycles < elapsedCycles) {
             returned = MathLib.mulDiv(returned, cycles, elapsedCycles);
         }

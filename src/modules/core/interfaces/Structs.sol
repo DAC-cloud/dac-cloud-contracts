@@ -43,6 +43,7 @@ struct Milestone {
     int256[] penaltyCurve;
     uint256 minPercentGrace;            // return % allowing to extend deadline (only for `close` milestones)
     uint256 extension;                  // duration to extend deadline
+    bool excludePrincipal;              // holdings mode: count only returns above the capital invested in `token`
 }
 
 struct RevenueSchedule {
@@ -58,4 +59,5 @@ struct RevenueSchedule {
     uint256 penaltyPerMiss;             // small penalty % per missed cycle
     uint256 evaluationStart;            // timestamp for starting evaluation, if 0 - starting at deal start
     bool autoClose;                     // close the deal after full evaluator goal reached
+    bool excludePrincipal;              // count only returns above the capital invested in `token` as revenue
 }

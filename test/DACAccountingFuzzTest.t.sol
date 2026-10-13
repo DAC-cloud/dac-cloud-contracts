@@ -172,7 +172,8 @@ contract DACAccountingFuzzTest is DACTestBase {
             rewardCurve: new int256[](1),
             penaltyCurve: new int256[](1),
             minPercentGrace: 0,
-            extension: 0
+            extension: 0,
+            excludePrincipal: false
         });
         milestones[0].rewardCurve[0] = 1e18;
         milestones[0].penaltyCurve[0] = 1e18;

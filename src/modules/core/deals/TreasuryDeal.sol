@@ -98,6 +98,17 @@ contract TreasuryDeal is Deal {
         }
     }
 
+    function _beforeCreateProposal(ProposalParams calldata params) internal virtual override {
+        if (params.typ == CoreDealManagementType.APPROVE_PERMIT2_SPEND) {
+            // The allowance must still be alive once the vote has run its course.
+            (,, uint48 expiration) = abi.decode(params.data, (address, uint160, uint48));
+            require(
+                expiration > block.timestamp + votingConfig().duration,
+                DACErrorsLib.PermitExpirationTooShort()
+            );
+        }
+    }
+
     function _executeModuleManagementProposal(DealManagementProposal proposal) internal virtual override {
         bytes4 typ = proposal.typ();
 
@@ -118,6 +129,8 @@ contract TreasuryDeal is Deal {
                 (address, uint160, uint48)
             );
             
+            // Permit2 treats expiration 0 as "expires now" and rejects past timestamps.
+            require(expiration > block.timestamp, DACErrorsLib.PermitExpirationTooShort());
             treasury.approveSpend(token, spender, amount, expiration);
 
             emit PermitApproved(proposal.target(), amount);
@@ -195,10 +208,16 @@ contract TreasuryDeal is Deal {
         // but pigs need to always use proposals to manage it.
 
         if (IDealCell(dealCell).allowEarlyReturns()) {
-            require(
-                block.timestamp > IDealCell(dealCell).dealDeadline(), 
-                DACErrorsLib.CapitalWithdrawNotSupported()
-            );
+            // A closed deal with every agent gone has nothing left to manage; the DAC's
+            // clawback must not become harder because early returns were switched on.
+            bool closedAndExited = IDealCell(dealCell).isClosed()
+                && IERC20(IDealCell(dealCell).stakeToken()).totalSupply() == 0;
+            if (!closedAndExited) {
+                require(
+                    block.timestamp > IDealCell(dealCell).dealDeadline(), 
+                    DACErrorsLib.CapitalWithdrawNotSupported()
+                );
+            }
         }
 
         // Iterate through all funding tokens and return every balance

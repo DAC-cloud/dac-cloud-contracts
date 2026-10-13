@@ -94,6 +94,7 @@ library DACErrorsLib {
     error UnsupportedProposal();
 
     error EarlyReturnsNotAllowed();
+    error PermitExpirationTooShort();
 
     error CapitalWithdrawNotSupported();
 

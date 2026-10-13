@@ -87,6 +87,8 @@ contract DACDeal is Deal {
 
         if (params.dealTarget == address(0)) {
             (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
+            // A zero equity target makes the root capital call unfulfillable.
+            require(dacDeal.managedEquity > 0, DACErrorsLib.ConfigMismatchParams());
             (address dacFactory, address deployer, bytes32 salt, DACConfig memory config) = abi.decode(dacDeal.config, (address, address, bytes32, DACConfig));
 
             require(config.founderAllocation == dacDeal.managedEquity, DACErrorsLib.ConfigMismatchParams());
@@ -118,6 +120,7 @@ contract DACDeal is Deal {
         (DACDealConfig memory dacDeal) = abi.decode(params.dealConfig, (DACDealConfig));
 
         if (params.dealTarget != address(0)) {
+            require(dacDeal.managedEquity > 0, DACErrorsLib.ConfigMismatchParams());
             managedEntity = params.dealTarget;
 
             dacCellDNA = DACCellDNA({
@@ -243,6 +246,10 @@ contract DACDeal is Deal {
         }
 
         else if (params.typ == CoreDealManagementType.REINVEST_PROFITS) {
+            // Once closed, every child token belongs to the home treasury; nothing may be
+            // reinvested into child equity the deal can no longer manage.
+            require(!IDealCell(dealCell).isClosed(), DACErrorsLib.DealIsClosed());
+
             // Checking a reinvest profit proposal
             address token = params.target;
             (uint256 fundingAmount, bytes32 capitalCallHash) = abi.decode(params.data, (uint256, bytes32));
@@ -309,6 +316,8 @@ contract DACDeal is Deal {
         }
         
         else if (typ == CoreDealManagementType.REINVEST_PROFITS) {
+            require(!IDealCell(dealCell).isClosed(), DACErrorsLib.DealIsClosed());
+
             address token = proposal.target();
             (uint256 amount, bytes32 callHash) = abi.decode(proposal.data(), (uint256, bytes32));
 
@@ -324,7 +333,12 @@ contract DACDeal is Deal {
             address token = proposal.target();
             (uint256 amount) = abi.decode(proposal.data(), (uint256));
 
-            require(token != IDACCell(managedEntity).getMainToken(), DACErrorsLib.NotAllowed());
+            // Child equity stays with the deal while it runs (it is the deal's voting
+            // stake in the child); after close any of it that still arrives goes home.
+            require(
+                token != IDACCell(managedEntity).getMainToken() || IDealCell(dealCell).isClosed(),
+                DACErrorsLib.NotAllowed()
+            );
 
             IERC20(token).forceApprove(dealCell, amount);
             IDealCellAdapter(dealCell).transferCapital(token, amount);
