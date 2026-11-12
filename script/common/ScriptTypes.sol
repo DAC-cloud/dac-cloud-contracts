@@ -94,7 +94,7 @@ struct ExistingDACSeedConfig {
     uint256 qualification;
     uint256 executionValidityDuration;
     uint256 oraclePublishDeadline;
-    uint256 fallbackWarmupBlocks;
+    uint256 fallbackWarmupDuration;
     uint256 fallbackDuration;
     bool blockingOnAllProposals;
     bool blockingOnHighQuorum;
@@ -161,7 +161,7 @@ struct ExistingGovernanceFlowSeed {
     address governanceOracle;
     uint256 primaryProposalId;
     address primaryProposal;
-    uint256 primarySnapshotBlock;
+    uint256 primarySnapshotTime;
     bytes32 primaryMerkleRoot;
     uint256 primaryUnderlyingAmount;
     bool primaryPublished;
@@ -170,7 +170,7 @@ struct ExistingGovernanceFlowSeed {
     bool primaryExecuted;
     uint256 fallbackProposalId;
     address fallbackProposal;
-    uint256 fallbackSnapshotBlock;
+    uint256 fallbackSnapshotTime;
     bool fallbackWarmupStarted;
     bool fallbackActivated;
     bool fallbackVoted;
@@ -272,11 +272,11 @@ struct ExistingTreasuryFlowSeed {
     address treasury;
     address evaluator;
     uint256 mintAgentProposalId;
-    uint256 mintAgentSnapshotBlock;
+    uint256 mintAgentSnapshotTime;
     bytes32 mintAgentMerkleRoot;
     uint256 mintAgentUnderlyingAmount;
     uint256 dacProposalId;
-    uint256 approveDealSnapshotBlock;
+    uint256 approveDealSnapshotTime;
     bytes32 approveDealMerkleRoot;
     uint256 approveDealUnderlyingAmount;
     bool mintAgentPublished;

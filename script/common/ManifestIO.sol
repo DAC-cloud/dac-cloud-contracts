@@ -248,7 +248,7 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeAddress(root, "governanceOracle", seed.governanceOracle);
         vm.serializeUint(root, "primaryProposalId", seed.primaryProposalId);
         vm.serializeAddress(root, "primaryProposal", seed.primaryProposal);
-        vm.serializeUint(root, "primarySnapshotBlock", seed.primarySnapshotBlock);
+        vm.serializeUint(root, "primarySnapshotTime", seed.primarySnapshotTime);
         vm.serializeBytes32(root, "primaryMerkleRoot", seed.primaryMerkleRoot);
         vm.serializeUint(root, "primaryUnderlyingAmount", seed.primaryUnderlyingAmount);
         vm.serializeBool(root, "primaryPublished", seed.primaryPublished);
@@ -257,7 +257,7 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeBool(root, "primaryExecuted", seed.primaryExecuted);
         vm.serializeUint(root, "fallbackProposalId", seed.fallbackProposalId);
         vm.serializeAddress(root, "fallbackProposal", seed.fallbackProposal);
-        vm.serializeUint(root, "fallbackSnapshotBlock", seed.fallbackSnapshotBlock);
+        vm.serializeUint(root, "fallbackSnapshotTime", seed.fallbackSnapshotTime);
         vm.serializeBool(root, "fallbackWarmupStarted", seed.fallbackWarmupStarted);
         vm.serializeBool(root, "fallbackActivated", seed.fallbackActivated);
         vm.serializeBool(root, "fallbackVoted", seed.fallbackVoted);
@@ -287,7 +287,7 @@ abstract contract ManifestIO is ScriptConfig {
         seed.governanceOracle = json.readAddress(".governanceOracle");
         seed.primaryProposalId = json.readUint(".primaryProposalId");
         seed.primaryProposal = json.readAddress(".primaryProposal");
-        seed.primarySnapshotBlock = json.readUint(".primarySnapshotBlock");
+        seed.primarySnapshotTime = json.readUint(".primarySnapshotTime");
         seed.primaryMerkleRoot = json.readBytes32(".primaryMerkleRoot");
         seed.primaryUnderlyingAmount = json.readUint(".primaryUnderlyingAmount");
         seed.primaryPublished = json.readBool(".primaryPublished");
@@ -296,7 +296,7 @@ abstract contract ManifestIO is ScriptConfig {
         seed.primaryExecuted = json.readBool(".primaryExecuted");
         seed.fallbackProposalId = json.readUint(".fallbackProposalId");
         seed.fallbackProposal = json.readAddress(".fallbackProposal");
-        seed.fallbackSnapshotBlock = json.readUint(".fallbackSnapshotBlock");
+        seed.fallbackSnapshotTime = json.readUint(".fallbackSnapshotTime");
         seed.fallbackWarmupStarted = json.readBool(".fallbackWarmupStarted");
         seed.fallbackActivated = json.readBool(".fallbackActivated");
         seed.fallbackVoted = json.readBool(".fallbackVoted");
@@ -400,11 +400,11 @@ abstract contract ManifestIO is ScriptConfig {
         vm.serializeAddress(root, "treasury", seed.treasury);
         vm.serializeAddress(root, "evaluator", seed.evaluator);
         vm.serializeUint(root, "mintAgentProposalId", seed.mintAgentProposalId);
-        vm.serializeUint(root, "mintAgentSnapshotBlock", seed.mintAgentSnapshotBlock);
+        vm.serializeUint(root, "mintAgentSnapshotTime", seed.mintAgentSnapshotTime);
         vm.serializeBytes32(root, "mintAgentMerkleRoot", seed.mintAgentMerkleRoot);
         vm.serializeUint(root, "mintAgentUnderlyingAmount", seed.mintAgentUnderlyingAmount);
         vm.serializeUint(root, "dacProposalId", seed.dacProposalId);
-        vm.serializeUint(root, "approveDealSnapshotBlock", seed.approveDealSnapshotBlock);
+        vm.serializeUint(root, "approveDealSnapshotTime", seed.approveDealSnapshotTime);
         vm.serializeBytes32(root, "approveDealMerkleRoot", seed.approveDealMerkleRoot);
         vm.serializeUint(root, "approveDealUnderlyingAmount", seed.approveDealUnderlyingAmount);
         vm.serializeBool(root, "mintAgentPublished", seed.mintAgentPublished);
@@ -441,11 +441,11 @@ abstract contract ManifestIO is ScriptConfig {
         seed.treasury = json.readAddress(".treasury");
         seed.evaluator = json.readAddress(".evaluator");
         seed.mintAgentProposalId = json.readUint(".mintAgentProposalId");
-        seed.mintAgentSnapshotBlock = json.readUint(".mintAgentSnapshotBlock");
+        seed.mintAgentSnapshotTime = json.readUint(".mintAgentSnapshotTime");
         seed.mintAgentMerkleRoot = json.readBytes32(".mintAgentMerkleRoot");
         seed.mintAgentUnderlyingAmount = json.readUint(".mintAgentUnderlyingAmount");
         seed.dacProposalId = json.readUint(".dacProposalId");
-        seed.approveDealSnapshotBlock = json.readUint(".approveDealSnapshotBlock");
+        seed.approveDealSnapshotTime = json.readUint(".approveDealSnapshotTime");
         seed.approveDealMerkleRoot = json.readBytes32(".approveDealMerkleRoot");
         seed.approveDealUnderlyingAmount = json.readUint(".approveDealUnderlyingAmount");
         seed.mintAgentPublished = json.readBool(".mintAgentPublished");

@@ -231,9 +231,9 @@ contract H01HybridHarness is Test {
         // Wrapped token mock that supports the IVotes calls the proposal makes
         H01WrappedToken wrapped = new H01WrappedToken();
 
-        vm.roll(block.number + 5);
-        wrapped.setPastVotes(voter, 100e18, block.number - 1);
-        wrapped.setPastTotalSupply(block.number - 1, 100e18);
+        vm.warp(block.timestamp + 5);
+        wrapped.setPastVotes(voter, 100e18, block.timestamp - 1);
+        wrapped.setPastTotalSupply(block.timestamp - 1, 100e18);
 
         proposal = HybridDACManagementProposal(
             address(new TestUUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
@@ -263,12 +263,12 @@ contract H01HybridHarness is Test {
         );
 
         // Bootstrap mode starts in FallbackWarmup with the snapshot fixed at the
-        // warmup's last block; give the voter weight there, roll past it into
+        // warmup's last second; give the voter weight there, warp past it into
         // FallbackVoting, then cast a fully-passing vote.
-        uint256 snapshot = proposal.fallbackSnapshotBlock();
+        uint256 snapshot = proposal.fallbackSnapshotTime();
         wrapped.setPastVotes(voter, 100e18, snapshot);
         wrapped.setPastTotalSupply(snapshot, 100e18);
-        vm.roll(snapshot + 1);
+        vm.warp(snapshot + 1);
         proposal.activateFallbackVoting();
 
         vm.prank(voter);
@@ -289,7 +289,7 @@ contract H01HybridHarness is Test {
             qualification: 0,
             executionValidityDuration: 1 days,
             oraclePublishDeadline: 0,
-            fallbackWarmupBlocks: 5,
+            fallbackWarmupDuration: 5,
             fallbackDuration: 1 days,
             blockingOnAllProposals: false,
             blockingOnHighQuorum: false,
@@ -304,25 +304,25 @@ contract H01UnderlyingToken is ERC20 {
 }
 
 // Minimal mock that supports the IVotes calls HybridDACManagementProposal
-// makes during voting + snapshotting. Setting past values per block lets the
+// makes during voting + snapshotting. Setting past values per timepoint lets the
 // harness drive the proposal through Resolved/yes deterministically.
 contract H01WrappedToken {
     mapping(address => mapping(uint256 => uint256)) internal _pastVotes;
     mapping(uint256 => uint256) internal _pastSupply;
 
-    function setPastVotes(address account, uint256 amount, uint256 blockNum) external {
-        _pastVotes[account][blockNum] = amount;
+    function setPastVotes(address account, uint256 amount, uint256 timepoint) external {
+        _pastVotes[account][timepoint] = amount;
     }
 
-    function setPastTotalSupply(uint256 blockNum, uint256 amount) external {
-        _pastSupply[blockNum] = amount;
+    function setPastTotalSupply(uint256 timepoint, uint256 amount) external {
+        _pastSupply[timepoint] = amount;
     }
 
-    function getPastVotes(address account, uint256 blockNum) external view returns (uint256) {
-        return _pastVotes[account][blockNum];
+    function getPastVotes(address account, uint256 timepoint) external view returns (uint256) {
+        return _pastVotes[account][timepoint];
     }
 
-    function getPastTotalSupply(uint256 blockNum) external view returns (uint256) {
-        return _pastSupply[blockNum];
+    function getPastTotalSupply(uint256 timepoint) external view returns (uint256) {
+        return _pastSupply[timepoint];
     }
 }

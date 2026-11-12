@@ -72,7 +72,7 @@ contract SeedExistingTokenDAC is ManifestIO {
                 qualification: config.qualification,
                 executionValidityDuration: config.executionValidityDuration,
                 oraclePublishDeadline: config.oraclePublishDeadline,
-                fallbackWarmupBlocks: config.fallbackWarmupBlocks,
+                fallbackWarmupDuration: config.fallbackWarmupDuration,
                 fallbackDuration: config.fallbackDuration,
                 blockingOnAllProposals: config.blockingOnAllProposals,
                 blockingOnHighQuorum: config.blockingOnHighQuorum,

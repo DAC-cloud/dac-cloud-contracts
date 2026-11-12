@@ -32,12 +32,12 @@ abstract contract ScenarioGovernanceBase is ManifestIO {
         address governanceOracle,
         address dac,
         uint256 proposalId,
-        uint256 snapshotBlock,
+        uint256 snapshotTime,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     ) internal {
         IBasicGovernanceOracle(governanceOracle).publishSnapshot(
-            dac, proposalId, snapshotBlock, merkleRoot, totalUnderlyingVotingPower
+            dac, proposalId, snapshotTime, merkleRoot, totalUnderlyingVotingPower
         );
     }
 

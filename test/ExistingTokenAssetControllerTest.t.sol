@@ -137,6 +137,35 @@ contract ExistingTokenAssetControllerTest is Test {
         wrapped.delegate(holder);
     }
 
+    /// Controlled-balance checkpoints are keyed by timestamp, the same ERC-6372 clock
+    /// the wrapped token uses, so a hybrid proposal can subtract them from
+    /// `getPastTotalSupply(snapshotTime)` without unit conversion.
+    function test_pastControlledBalance_isCheckpointedByTimestamp() external {
+        assertEq(wrapped.CLOCK_MODE(), "mode=timestamp");
+        uint256 base = wrapped.totalSupply() - controller.totalReleasedVotable();
+
+        vm.warp(1_000);
+        vm.prank(dealManager);
+        controller.registerControlledAddress(recipient);
+
+        vm.prank(holder);
+        assertTrue(wrapped.transfer(recipient, 20e18));
+
+        vm.warp(2_000);
+        vm.prank(holder);
+        assertTrue(wrapped.transfer(recipient, 5e18));
+
+        vm.warp(3_000);
+        assertEq(controller.getPastControlledBalance(999), base);
+        assertEq(controller.getPastControlledBalance(1_000), base + 20e18);
+        assertEq(controller.getPastControlledBalance(1_999), base + 20e18);
+        assertEq(controller.getPastControlledBalance(2_000), base + 25e18);
+        assertEq(
+            wrapped.getPastTotalSupply(2_000) - controller.getPastControlledBalance(2_000),
+            75e18
+        );
+    }
+
     function test_capitalCall_sellsWrappedTreasuryReserves() external {
         vm.prank(dac);
         bytes32 callHash = controller.createCapitalCall(7, address(usdc), holder, 50e18, 5_000e6);

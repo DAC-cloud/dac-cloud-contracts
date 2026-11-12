@@ -272,7 +272,7 @@ If the oracle does not publish in time, the proposal transitions into fallback:
 
 Fallback is wrapped-token-only and starts from a clean vote state after warmup.
 
-The primary phase snapshots at proposal creation. The fallback phase snapshots at the last block of warmup: warmup is measured in blocks (`fallbackWarmupBlocks`) and the snapshot block is fixed and public the moment fallback is triggered, by oracle miss, emergency, or creation in wrapped-only mode. Holders can therefore wrap and delegate in response to a proposal during warmup, while no single actor can choose when the snapshot is taken. Voting activates once the snapshot block has passed; any state read after that block finalizes the transition lazily. A phase whose votable supply at its snapshot is zero resolves as rejected: nobody could vote, and a dormant proposal would freeze anything gated on its resolution, such as a deal proposal held by a `CAST_VETO_DEAL` challenge. Quorum and blocking thresholds round up, so a dust-level supply cannot pass a proposal with no votes.
+Every snapshot in the protocol is a timestamp: `MainToken`, `StakedAgent` and `WrappedMainToken` all run ERC-6372 clocks in `mode=timestamp`, and the asset controller's controlled-balance checkpoints share that clock. The primary phase snapshots at the second before proposal creation. The fallback phase snapshots at the last second of warmup: warmup is measured in seconds (`fallbackWarmupDuration`) and the snapshot time is fixed and public the moment fallback is triggered, by oracle miss, emergency, or creation in wrapped-only mode. Holders can therefore wrap and delegate in response to a proposal during warmup, while no single actor can choose when the snapshot is taken. Voting activates once the snapshot time has passed; any state read after it finalizes the transition lazily. A phase whose votable supply at its snapshot is zero resolves as rejected: nobody could vote, and a dormant proposal would freeze anything gated on its resolution, such as a deal proposal held by a `CAST_VETO_DEAL` challenge. Quorum and blocking thresholds round up, so a dust-level supply cannot pass a proposal with no votes.
 
 ### 5.3 Hybrid Strategy Tweaks
 
@@ -303,7 +303,7 @@ Important properties:
 
 - oracle snapshots are namespaced by `(dac, proposalId)` so a single deployment can support an arbitrary number of DACs without proposal-id collisions
 - each snapshot includes:
-  - `snapshotBlock`
+  - `snapshotTime` (a timestamp; the Merkle tree reflects underlying balances as of the last block whose timestamp is at or below it)
   - `merkleRoot`
   - `totalUnderlyingVotingPower`
   - `publishedAt`

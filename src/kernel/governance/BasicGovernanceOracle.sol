@@ -72,19 +72,19 @@ contract BasicGovernanceOracle is IBasicGovernanceOracle, Initializable, AccessC
     function publishSnapshot(
         address dac,
         uint256 proposalId,
-        uint256 snapshotBlock,
+        uint256 snapshotTime,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     ) external onlyRole(PUBLISHER_ROLE) {
         require(dac != address(0), DACErrorsLib.NotAllowed());
         require(!deactivated[dac], DACErrorsLib.NotAllowed());
         require(proposalId > 0, DACErrorsLib.NotAllowed());
-        require(snapshotBlock > 0, DACErrorsLib.NotAllowed());
+        require(snapshotTime > 0, DACErrorsLib.NotAllowed());
         require(merkleRoot != bytes32(0), DACErrorsLib.InvalidMerkleProof());
         require(snapshots[dac][proposalId].merkleRoot == bytes32(0), DACErrorsLib.AlreadyInitialized());
 
         snapshots[dac][proposalId] = OracleSnapshot({
-            snapshotBlock: snapshotBlock,
+            snapshotTime: snapshotTime,
             merkleRoot: merkleRoot,
             totalUnderlyingVotingPower: totalUnderlyingVotingPower,
             publishedAt: block.timestamp
@@ -93,7 +93,7 @@ contract BasicGovernanceOracle is IBasicGovernanceOracle, Initializable, AccessC
         emit DACEventsLib.OracleSnapshotPublished(
             dac,
             proposalId,
-            snapshotBlock,
+            snapshotTime,
             merkleRoot,
             totalUnderlyingVotingPower
         );

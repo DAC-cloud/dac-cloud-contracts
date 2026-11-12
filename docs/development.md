@@ -159,7 +159,7 @@ The deployment flow is split into two layers:
 - `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
-- `EXISTING_DAC_FALLBACK_WARMUP_BLOCKS` (blocks, not seconds: the fallback snapshot is the warmup's last block; 7200 is about 4 hours on Base, 43200 about a day)
+- `EXISTING_DAC_FALLBACK_WARMUP_DURATION` (seconds; the fallback snapshot is the warmup's last second; default 14400, four hours)
 - `EXISTING_DAC_FALLBACK_DURATION`
 
 ### Existing governance flow config
@@ -378,7 +378,7 @@ Useful environment variables for this mode:
 - `EXISTING_DAC_QUALIFICATION` (percent-based, scaled: 1e18 = 100%)
 - `EXISTING_DAC_EXECUTION_VALIDITY`
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
-- `EXISTING_DAC_FALLBACK_WARMUP_BLOCKS`
+- `EXISTING_DAC_FALLBACK_WARMUP_DURATION`
 - `EXISTING_DAC_FALLBACK_DURATION`
 
 Run:
@@ -534,7 +534,7 @@ This flow seeds a `DACDeal` lifecycle covering:
 
 ## 11. Local Timestamp Caveat
 
-Proposal voting in this repository uses timestamp-based snapshots through ERC-6372 / ERC-5805-compatible vote checkpoints.
+Every proposal in this repository, native, hybrid and deal-level, uses timestamp-based snapshots through ERC-6372 / ERC-5805-compatible vote checkpoints. No governance parameter is denominated in blocks, so configuration carries over unchanged between chains with different block times.
 
 On fast local Anvil runs, creating a proposal and voting it immediately can land in the same timestamp and trigger future-lookup snapshot failures.
 

@@ -35,13 +35,13 @@ enum AgentTokenMintAction {
     DISTRIBUTOR_DISABLE
 }
 
-/// Upper bounds for time/block config fields. Consumers add these to
-/// block.timestamp / block.number with checked arithmetic, so an unbounded value
-/// (or one absurdly large) would make every later proposal creation or
-/// activation revert, bricking governance with no proposal left to fix it.
+/// Upper bounds for time config fields. Every duration in the protocol is in
+/// seconds; consumers add them to block.timestamp with checked arithmetic, so an
+/// unbounded value (or one absurdly large) would make every later proposal
+/// creation or activation revert, bricking governance with no proposal left to
+/// fix it.
 library GovernanceLimits {
     uint256 internal constant MAX_DURATION = 365 days;
-    uint256 internal constant MAX_WARMUP_BLOCKS = 5_000_000;
     // A CAST_VETO_DEAL challenge holds a deal proposal for a whole DAC vote and
     // occupies its single challenge slot, so opening one needs at least a normal
     // active holder's stake even when the DAC's own `qualification` is zero.
@@ -57,7 +57,7 @@ struct GovernanceStrategyConfig {
     uint256 qualification;          // Qualification percent (0 to SCALE) of voting supply
     uint256 executionValidityDuration;
     uint256 oraclePublishDeadline;
-    uint256 fallbackWarmupBlocks;    // Warmup length in blocks; the fallback snapshot is the warmup's last block
+    uint256 fallbackWarmupDuration;  // Warmup length in seconds; the fallback snapshot is the warmup's last second
     uint256 fallbackDuration;
     bool blockingOnAllProposals;
     bool blockingOnHighQuorum;
@@ -82,8 +82,10 @@ struct ExistingTokenConfig {
     string wrappedSymbol;
 }
 
+/// `snapshotTime` is a timestamp: the Merkle tree reflects the underlying token
+/// balances as of the last block whose timestamp is <= snapshotTime.
 struct OracleSnapshot {
-    uint256 snapshotBlock;
+    uint256 snapshotTime;
     bytes32 merkleRoot;
     uint256 totalUnderlyingVotingPower;
     uint256 publishedAt;

@@ -259,8 +259,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.blockingPercent > 0 || (!config.blockingOnAllProposals && !config.blockingOnHighQuorum), DACErrorsLib.InvalidVotingConfig());
         require(config.oraclePublishDeadline > 0 || !config.oraclePrimaryEnabled, DACErrorsLib.InvalidVotingConfig());
         require(config.oraclePublishDeadline <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
-        require(config.fallbackWarmupBlocks > 0, DACErrorsLib.InvalidVotingConfig());
-        require(config.fallbackWarmupBlocks <= GovernanceLimits.MAX_WARMUP_BLOCKS, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackWarmupDuration > 0, DACErrorsLib.InvalidVotingConfig());
+        require(config.fallbackWarmupDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         // Oracle-primary mode requires a non-zero oracle to already be plugged in

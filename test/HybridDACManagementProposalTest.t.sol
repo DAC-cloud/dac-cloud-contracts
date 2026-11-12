@@ -22,7 +22,7 @@ contract MockHybridUnderlyingToken is ERC20 {
 }
 
 contract HybridDACManagementProposalTest is Test {
-    uint256 internal constant WARMUP_BLOCKS = 10;
+    uint256 internal constant WARMUP_DURATION = 10;
 
     MockHybridUnderlyingToken internal underlying;
     WrappedMainToken internal wrapped;
@@ -63,7 +63,7 @@ contract HybridDACManagementProposalTest is Test {
             address(new TestUUPSProxy(address(new HybridDACManagementProposal()), bytes("")))
         );
 
-        // Mock asset controller: no controlled balances (returns 0 for any block)
+        // Mock asset controller: no controlled balances (returns 0 for any timepoint)
         vm.mockCall(mockAssetController, abi.encodeWithSelector(bytes4(keccak256("getPastControlledBalance(uint256)"))), abi.encode(uint256(0)));
 
         underlying.mint(wrappedHolder, 1_000e18);
@@ -76,18 +76,23 @@ contract HybridDACManagementProposalTest is Test {
         underlying.approve(address(wrapped), type(uint256).max);
     }
 
+    function test_wrappedToken_usesTimestampClock() external view {
+        assertEq(wrapped.CLOCK_MODE(), "mode=timestamp");
+        assertEq(wrapped.clock(), uint48(block.timestamp));
+    }
+
     function test_primaryVoting_combinesWrappedAndMerkleVotes() external {
-        vm.roll(10);
+        vm.warp(10);
 
         vm.prank(wrappedHolder);
         wrapped.wrap(100e18);
 
-        vm.roll(11);
+        vm.warp(11);
 
         _init(1, bytes4(keccak256("TEST")), _strategyConfig(), false, false);
 
-        assertEq(proposal.primarySnapshotBlock(), 10);
-        assertEq(proposal.fallbackSnapshotBlock(), 0);
+        assertEq(proposal.primarySnapshotTime(), 10);
+        assertEq(proposal.fallbackSnapshotTime(), 0);
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.AwaitingOracleSnapshot));
 
         bytes32 root = keccak256(abi.encodePacked(uint256(0), underlyingHolder, uint256(200e18)));
@@ -115,29 +120,30 @@ contract HybridDACManagementProposalTest is Test {
     }
 
     function test_oracleMiss_transitionsThroughFallbackWarmupAndVoting() external {
-        vm.roll(20);
+        vm.warp(20);
 
         _init(2, bytes4(keccak256("TEST_FALLBACK")), _strategyConfig(), false, false);
 
         vm.warp(block.timestamp + 2 days + 1);
         proposal.beginFallbackWarmup();
+        uint256 warmupStart = block.timestamp;
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
-        // Snapshot fixed the moment fallback is triggered: last block of warmup.
-        assertEq(proposal.fallbackSnapshotBlock(), 20 + WARMUP_BLOCKS);
+        // Snapshot fixed the moment fallback is triggered: last second of warmup.
+        assertEq(proposal.fallbackSnapshotTime(), warmupStart + WARMUP_DURATION);
         assertEq(proposal.phaseEndTime(), 0);
 
         // Holders can wrap in response to the proposal during warmup.
-        vm.roll(25);
+        vm.warp(warmupStart + 5);
         vm.prank(fallbackHolder);
         wrapped.wrap(80e18);
 
-        // Not activatable until the snapshot block has passed.
-        vm.roll(20 + WARMUP_BLOCKS);
+        // Not activatable until the snapshot time has passed.
+        vm.warp(warmupStart + WARMUP_DURATION);
         vm.expectRevert(DACErrorsLib.NotAllowed.selector);
         proposal.activateFallbackVoting();
 
-        vm.roll(21 + WARMUP_BLOCKS);
+        vm.warp(warmupStart + WARMUP_DURATION + 1);
         proposal.activateFallbackVoting();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
@@ -152,18 +158,18 @@ contract HybridDACManagementProposalTest is Test {
     }
 
     function test_wrappedOnlyBootstrap_startsInWarmupThenVotesWithWrappedToken() external {
-        vm.roll(24);
+        vm.warp(24);
 
         _init(21, bytes4(keccak256("TEST_WRAPPED_BOOTSTRAP")), _wrappedOnlyStrategyConfig(), true, true);
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
-        assertEq(proposal.fallbackSnapshotBlock(), 24 + WARMUP_BLOCKS);
+        assertEq(proposal.fallbackSnapshotTime(), 24 + WARMUP_DURATION);
 
-        vm.roll(30);
+        vm.warp(30);
         vm.prank(fallbackHolder);
         wrapped.wrap(90e18);
 
-        vm.roll(25 + WARMUP_BLOCKS);
+        vm.warp(25 + WARMUP_DURATION);
         proposal.activateFallbackVoting();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
@@ -177,31 +183,31 @@ contract HybridDACManagementProposalTest is Test {
         assertTrue(proposal.outcome());
     }
 
-    /// H-1 regression: the snapshot block is fixed when warmup begins, so an actor
+    /// H-1 regression: the snapshot time is fixed when warmup begins, so an actor
     /// cannot wrap right before activating and have that weight count. Whoever
-    /// activates, and whenever, the snapshot stays at the warmup's last block.
+    /// activates, and whenever, the snapshot stays at the warmup's last second.
     function test_fallbackSnapshot_fixedAtWarmupStart_wrapAfterSnapshotDoesNotCount() external {
-        vm.roll(40);
+        vm.warp(40);
         vm.prank(wrappedHolder);
         wrapped.wrap(100e18);
 
-        vm.roll(41);
+        vm.warp(41);
         _init(41, bytes4(keccak256("TEST_LATE_WRAP")), _wrappedOnlyStrategyConfig(), false, false);
-        uint256 snapshot = 41 + WARMUP_BLOCKS;
-        assertEq(proposal.fallbackSnapshotBlock(), snapshot);
+        uint256 snapshot = 41 + WARMUP_DURATION;
+        assertEq(proposal.fallbackSnapshotTime(), snapshot);
 
-        // Attacker waits for the snapshot block to pass, then wraps 9x the circulating
-        // supply and activates in the very next block.
-        vm.roll(snapshot + 1);
+        // Attacker waits for the snapshot time to pass, then wraps 9x the circulating
+        // supply and activates in the very next second.
+        vm.warp(snapshot + 1);
         vm.prank(fallbackHolder);
         wrapped.wrap(900e18);
 
-        vm.roll(snapshot + 2);
+        vm.warp(snapshot + 2);
         vm.prank(fallbackHolder);
         proposal.activateFallbackVoting();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackVoting));
-        assertEq(proposal.fallbackSnapshotBlock(), snapshot);
+        assertEq(proposal.fallbackSnapshotTime(), snapshot);
         assertEq(proposal.totalVotingPower(), 100e18);
 
         vm.prank(fallbackHolder);
@@ -218,21 +224,21 @@ contract HybridDACManagementProposalTest is Test {
 
     /// Opportunistic activation through vote() uses the same fixed snapshot.
     function test_fallbackVote_opportunisticActivationUsesFixedSnapshot() external {
-        vm.roll(60);
+        vm.warp(60);
         _init(60, bytes4(keccak256("TEST_OPPORTUNISTIC")), _wrappedOnlyStrategyConfig(), false, false);
-        uint256 snapshot = 60 + WARMUP_BLOCKS;
+        uint256 snapshot = 60 + WARMUP_DURATION;
 
-        vm.roll(65);
+        vm.warp(65);
         vm.prank(fallbackHolder);
         wrapped.wrap(50e18);
 
-        // Before the snapshot block, vote() cannot activate.
-        vm.roll(snapshot);
+        // Before the snapshot time has passed, vote() cannot activate.
+        vm.warp(snapshot);
         vm.prank(fallbackHolder);
         vm.expectRevert(DACErrorsLib.NotAllowed.selector);
         proposal.vote(true);
 
-        vm.roll(snapshot + 3);
+        vm.warp(snapshot + 3);
         vm.prank(fallbackHolder);
         proposal.vote(true);
 
@@ -245,13 +251,13 @@ contract HybridDACManagementProposalTest is Test {
     /// as rejected instead of passing vacuously (0 >= quorum 0) or staying dormant
     /// forever (which would freeze anything gated on its resolution, e.g. a veto hold).
     function test_fallbackActivation_withoutVotableSupplyResolvesRejected() external {
-        vm.roll(50);
+        vm.warp(50);
         _init(50, bytes4(keccak256("TEST_ZERO_SUPPLY")), _wrappedOnlyStrategyConfig(), false, false);
-        uint256 snapshot = 50 + WARMUP_BLOCKS;
+        uint256 snapshot = 50 + WARMUP_DURATION;
 
-        vm.roll(snapshot + 1);
+        vm.warp(snapshot + 1);
         vm.prank(fallbackHolder);
-        wrapped.wrap(90e18); // too late: after the snapshot block
+        wrapped.wrap(90e18); // too late: after the snapshot time
 
         // Any state read finalizes the rejection lazily.
         assertTrue(proposal.isResolved());
@@ -266,14 +272,14 @@ contract HybridDACManagementProposalTest is Test {
 
     /// Dust-level supply must not pass with zero votes: quorum rounds up.
     function test_fallbackQuorum_roundsUpForDustSupply() external {
-        vm.roll(70);
+        vm.warp(70);
         vm.prank(fallbackHolder);
         wrapped.wrap(3); // 3 wei votable
 
-        vm.roll(71);
+        vm.warp(71);
         _init(71, bytes4(keccak256("TEST_DUST")), _wrappedOnlyStrategyConfig(), false, false);
 
-        vm.roll(71 + WARMUP_BLOCKS + 1);
+        vm.warp(71 + WARMUP_DURATION + 1);
         proposal.activateFallbackVoting();
 
         assertEq(proposal.totalVotingPower(), 3);
@@ -288,11 +294,11 @@ contract HybridDACManagementProposalTest is Test {
 
     /// outcome() has no answer before a voting phase exists.
     function test_outcome_revertsBeforeActivation() external {
-        vm.roll(80);
+        vm.warp(80);
         vm.prank(fallbackHolder);
         wrapped.wrap(10e18);
 
-        vm.roll(81);
+        vm.warp(81);
         _init(81, bytes4(keccak256("TEST_PRE_OUTCOME")), _wrappedOnlyStrategyConfig(), false, false);
 
         vm.expectRevert(DACErrorsLib.NotResolved.selector);
@@ -301,11 +307,11 @@ contract HybridDACManagementProposalTest is Test {
 
     /// An expired-by-time primary vote is finalized, not wiped, by an emergency fallback.
     function test_emergencyFallback_finalizesExpiredPrimaryVote() external {
-        vm.roll(90);
+        vm.warp(90);
         vm.prank(wrappedHolder);
         wrapped.wrap(100e18);
 
-        vm.roll(91);
+        vm.warp(91);
         _init(91, bytes4(keccak256("TEST_EXPIRED_PRIMARY")), _strategyConfig(), false, false);
 
         vm.prank(publisher);
@@ -328,12 +334,12 @@ contract HybridDACManagementProposalTest is Test {
     }
 
     function test_blockingFlags_enableHighQuorumBlocking() external {
-        vm.roll(10);
+        vm.warp(10);
 
         vm.prank(wrappedHolder);
         wrapped.wrap(100e18);
 
-        vm.roll(11);
+        vm.warp(11);
 
         _init(5, bytes4(keccak256("TEST_BLOCKING_ON")), _strategyConfigWithFlags(false, true, true), true, true);
 
@@ -342,12 +348,12 @@ contract HybridDACManagementProposalTest is Test {
     }
 
     function test_blockingFlags_canDisableHighQuorumBlocking() external {
-        vm.roll(10);
+        vm.warp(10);
 
         vm.prank(wrappedHolder);
         wrapped.wrap(100e18);
 
-        vm.roll(11);
+        vm.warp(11);
 
         _init(6, bytes4(keccak256("TEST_BLOCKING_OFF")), _strategyConfigWithFlags(false, false, true), true, false);
 
@@ -376,12 +382,12 @@ contract HybridDACManagementProposalTest is Test {
     }
 
     function test_oracleDeactivation_resetsPrimaryFlowIntoFallbackWarmup() external {
-        vm.roll(30);
+        vm.warp(30);
 
         vm.prank(wrappedHolder);
         wrapped.wrap(100e18);
 
-        vm.roll(31);
+        vm.warp(31);
 
         _init(3, bytes4(keccak256("TEST_EMERGENCY")), _strategyConfig(), false, false);
 
@@ -397,7 +403,7 @@ contract HybridDACManagementProposalTest is Test {
         vm.prank(publisher);
         oracle.deactivate(address(this));
 
-        vm.roll(33);
+        vm.warp(33);
         proposal.triggerEmergencyFallback();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
@@ -405,14 +411,14 @@ contract HybridDACManagementProposalTest is Test {
         assertEq(proposal.noVotes(), 0);
         assertEq(proposal.totalVotingPower(), 0);
         // Fresh snapshot fixed at the emergency transition, not at creation or activation.
-        assertEq(proposal.fallbackSnapshotBlock(), 33 + WARMUP_BLOCKS);
+        assertEq(proposal.fallbackSnapshotTime(), 33 + WARMUP_DURATION);
 
         // Wrapping during warmup counts; wrapping after the snapshot does not.
-        vm.roll(36);
+        vm.warp(36);
         vm.prank(fallbackHolder);
         wrapped.wrap(500e18);
 
-        vm.roll(33 + WARMUP_BLOCKS + 1);
+        vm.warp(33 + WARMUP_DURATION + 1);
         vm.prank(fallbackHolder);
         wrapped.wrap(400e18);
 
@@ -474,7 +480,7 @@ contract HybridDACManagementProposalTest is Test {
             qualification: 0,
             executionValidityDuration: 1 days,
             oraclePublishDeadline: oraclePrimaryEnabled ? 2 days : 0,
-            fallbackWarmupBlocks: WARMUP_BLOCKS,
+            fallbackWarmupDuration: WARMUP_DURATION,
             fallbackDuration: 3 days,
             blockingOnAllProposals: blockingOnAllProposals,
             blockingOnHighQuorum: blockingOnHighQuorum,

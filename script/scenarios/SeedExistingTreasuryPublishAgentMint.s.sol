@@ -12,7 +12,7 @@ contract SeedExistingTreasuryPublishAgentMint is ExistingTreasuryFlowBase {
 
         if (seed.mintAgentProposalId == 0) revert ExistingTreasuryFlowNotPrepared();
 
-        seed.mintAgentSnapshotBlock = _proposal(seed.dac, seed.mintAgentProposalId).primarySnapshotBlock();
+        seed.mintAgentSnapshotTime = _proposal(seed.dac, seed.mintAgentProposalId).primarySnapshotTime();
         seed.mintAgentUnderlyingAmount = _resolveMerkleAmountForExistingTreasury(seed, config);
         seed.mintAgentMerkleRoot = _singleLeafRoot(config.merkleIndex, seed.founder, seed.mintAgentUnderlyingAmount);
 
@@ -21,7 +21,7 @@ contract SeedExistingTreasuryPublishAgentMint is ExistingTreasuryFlowBase {
             seed.governanceOracle,
             seed.dac,
             seed.mintAgentProposalId,
-            seed.mintAgentSnapshotBlock,
+            seed.mintAgentSnapshotTime,
             seed.mintAgentMerkleRoot,
             seed.mintAgentUnderlyingAmount
         );
@@ -36,7 +36,7 @@ contract SeedExistingTreasuryPublishAgentMint is ExistingTreasuryFlowBase {
         console2.log("Existing treasury flow agent mint published");
         console2.log("  label:", seed.label);
         console2.log("  proposalId:", seed.mintAgentProposalId);
-        console2.log("  snapshotBlock:", seed.mintAgentSnapshotBlock);
+        console2.log("  snapshotTime:", seed.mintAgentSnapshotTime);
         console2.log("  manifest:", manifestPath);
     }
 }

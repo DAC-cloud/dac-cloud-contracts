@@ -12,7 +12,7 @@ contract SeedExistingTreasuryPublishApproveDeal is ExistingTreasuryFlowBase {
 
         if (seed.dacProposalId == 0) revert ExistingTreasuryFlowNotPrepared();
 
-        seed.approveDealSnapshotBlock = _proposal(seed.dac, seed.dacProposalId).primarySnapshotBlock();
+        seed.approveDealSnapshotTime = _proposal(seed.dac, seed.dacProposalId).primarySnapshotTime();
         seed.approveDealUnderlyingAmount = _resolveMerkleAmountForExistingTreasury(seed, config);
         seed.approveDealMerkleRoot = _singleLeafRoot(config.merkleIndex, seed.founder, seed.approveDealUnderlyingAmount);
 
@@ -21,7 +21,7 @@ contract SeedExistingTreasuryPublishApproveDeal is ExistingTreasuryFlowBase {
             seed.governanceOracle,
             seed.dac,
             seed.dacProposalId,
-            seed.approveDealSnapshotBlock,
+            seed.approveDealSnapshotTime,
             seed.approveDealMerkleRoot,
             seed.approveDealUnderlyingAmount
         );
@@ -36,7 +36,7 @@ contract SeedExistingTreasuryPublishApproveDeal is ExistingTreasuryFlowBase {
         console2.log("Existing treasury flow deal approval published");
         console2.log("  label:", seed.label);
         console2.log("  proposalId:", seed.dacProposalId);
-        console2.log("  snapshotBlock:", seed.approveDealSnapshotBlock);
+        console2.log("  snapshotTime:", seed.approveDealSnapshotTime);
         console2.log("  manifest:", manifestPath);
     }
 }

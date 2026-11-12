@@ -11,7 +11,7 @@ contract SeedExistingGovernancePublishPrimary is ExistingGovernanceFlowBase {
         seed = loadExistingGovernanceFlowManifest(config.label);
         if (seed.primaryProposalId == 0 || seed.primaryProposal == address(0)) revert PrimaryProposalNotPrepared();
 
-        seed.primarySnapshotBlock = _proposal(seed.dac, seed.primaryProposalId).primarySnapshotBlock();
+        seed.primarySnapshotTime = _proposal(seed.dac, seed.primaryProposalId).primarySnapshotTime();
         seed.primaryUnderlyingAmount = _resolveMerkleAmount(seed, config);
         seed.primaryMerkleRoot = _singleLeafRoot(config.merkleIndex, seed.founder, seed.primaryUnderlyingAmount);
 
@@ -20,7 +20,7 @@ contract SeedExistingGovernancePublishPrimary is ExistingGovernanceFlowBase {
             seed.governanceOracle,
             seed.dac,
             seed.primaryProposalId,
-            seed.primarySnapshotBlock,
+            seed.primarySnapshotTime,
             seed.primaryMerkleRoot,
             seed.primaryUnderlyingAmount
         );

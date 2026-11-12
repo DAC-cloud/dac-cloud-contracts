@@ -15,7 +15,7 @@ contract SeedExistingGovernanceCreatePrimary is ExistingGovernanceFlowBase {
         vm.startBroadcast(founderKey());
         seed.primaryProposalId = _createDACProposal(seed.dac, _mintAgentProposal(seed.recipient, config.agentMintAmount));
         seed.primaryProposal = DACCell(seed.dac).getProposalVoting(seed.primaryProposalId);
-        seed.primarySnapshotBlock = _proposal(seed.dac, seed.primaryProposalId).primarySnapshotBlock();
+        seed.primarySnapshotTime = _proposal(seed.dac, seed.primaryProposalId).primarySnapshotTime();
         seed.blockNumber = block.number;
         vm.stopBroadcast();
 
@@ -25,7 +25,7 @@ contract SeedExistingGovernanceCreatePrimary is ExistingGovernanceFlowBase {
         console2.log("  existing DAC label:", existing.label);
         console2.log("  proposalId:", seed.primaryProposalId);
         console2.log("  proposal:", seed.primaryProposal);
-        console2.log("  snapshotBlock:", seed.primarySnapshotBlock);
+        console2.log("  snapshotTime:", seed.primarySnapshotTime);
         console2.log("  manifest:", manifestPath);
     }
 }

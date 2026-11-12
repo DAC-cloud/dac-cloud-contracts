@@ -151,7 +151,7 @@ Existing-token DAC governance policy.
 Uses:
 
 - `WrappedMainToken` delegated votes for qualification
-- `GovernanceStrategyConfig` for oracle/fallback behavior (durations capped by `GovernanceLimits.MAX_DURATION`, warmup by `GovernanceLimits.MAX_WARMUP_BLOCKS`, so a passed config can never brick proposal creation)
+- `GovernanceStrategyConfig` for oracle/fallback behavior (every duration, warmup included, is in seconds and capped by `GovernanceLimits.MAX_DURATION`, so a passed config can never brick proposal creation)
 - `GovernanceOracle` address management (a non-zero oracle must be a contract)
 
 Handles:
@@ -160,7 +160,7 @@ Handles:
 - oracle-based governance strategy validation
 - wrapped-only bootstrap mode when `oraclePrimaryEnabled == false`
 - blocking behavior toggles for all proposals / high-quorum proposals
-- fallback warmup (in blocks), fallback duration and execution-validity configuration
+- fallback warmup, fallback duration and execution-validity configuration, all in seconds
 - capability-aware proposal support via the asset controller
 
 ### `src/kernel/governance/BasicGovernanceOracle.sol`

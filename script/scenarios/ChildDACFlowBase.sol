@@ -95,12 +95,12 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
         }
 
         address proposalAddress = IDACCell(seed.dac).getProposalVoting(proposalId);
-        uint256 snapshotBlock = HybridDACManagementProposal(proposalAddress).primarySnapshotBlock();
+        uint256 snapshotTime = HybridDACManagementProposal(proposalAddress).primarySnapshotTime();
         uint256 amount = IERC20(seed.underlyingToken).balanceOf(seed.founder);
         if (amount == 0) revert ZeroUnderlyingVotingPower();
         bytes32 merkleRoot = _singleLeafRoot(0, seed.founder, amount);
 
-        _publishDACOracleSnapshot(seed.governanceOracle, seed.dac, proposalId, snapshotBlock, merkleRoot, amount);
+        _publishDACOracleSnapshot(seed.governanceOracle, seed.dac, proposalId, snapshotTime, merkleRoot, amount);
         _activatePrimaryDACProposal(seed.dac, proposalId);
         _voteDACProposal(seed.dac, proposalId, true);
 

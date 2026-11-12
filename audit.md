@@ -75,7 +75,7 @@ The codebase otherwise demonstrates disciplined access control. Every controller
 | Contract | Role |
 |---|---|
 | `MainToken.sol` | Native `ERC20Votes` governance token (timestamp clock) |
-| `WrappedMainToken.sol` | Wrap of existing token, `ERC20Votes` (block-number clock) |
+| `WrappedMainToken.sol` | Wrap of existing token, `ERC20Votes` (timestamp clock) |
 | `AgentToken.sol` | Bound-balance agent identity token with distributor flow |
 | `StakedAgent.sol` | Per-deal non-transferable `ERC20Votes` (timestamp clock) |
 

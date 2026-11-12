@@ -146,7 +146,7 @@ library DACEventsLib {
     event ProposalPhaseTransition(
         uint256 indexed id,
         uint8 indexed phase,
-        uint256 snapshotBlock,
+        uint256 snapshotTime,
         uint256 startTime,
         uint256 endTime,
         uint256 totalPower,
@@ -156,7 +156,7 @@ library DACEventsLib {
     event OracleSnapshotPublished(
         address indexed dac,
         uint256 indexed id,
-        uint256 snapshotBlock,
+        uint256 snapshotTime,
         bytes32 merkleRoot,
         uint256 totalUnderlyingVotingPower
     );

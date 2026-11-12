@@ -117,6 +117,17 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
         super._delegate(from, to);
     }
 
+    // ERC-6372 clock in timestamp mode, like every other vote token in the
+    // protocol. Governance snapshots and the asset controller's controlled-balance
+    // checkpoints are keyed by the same clock.
+    function clock() public view virtual override returns (uint48) {
+        return uint48(block.timestamp);
+    }
+
+    function CLOCK_MODE() public pure virtual override returns (string memory) {
+        return "mode=timestamp";
+    }
+
     function nonces(address owner) public view override(ERC20PermitUpgradeable, NoncesUpgradeable) returns (uint256) {
         return super.nonces(owner);
     }

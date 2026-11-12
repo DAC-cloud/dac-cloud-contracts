@@ -264,7 +264,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         uint256 existingBalance = IERC20(address(mainToken)).balanceOf(controlled);
         if (existingBalance > 0) {
             controlledWrappedBalance += existingBalance;
-            _controlledBalanceCheckpoints.push(uint48(block.number), uint208(controlledWrappedBalance));
+            _controlledBalanceCheckpoints.push(uint48(block.timestamp), uint208(controlledWrappedBalance));
         }
     }
 
@@ -319,7 +319,7 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         }
 
         if (changed) {
-            _controlledBalanceCheckpoints.push(uint48(block.number), uint208(controlledWrappedBalance));
+            _controlledBalanceCheckpoints.push(uint48(block.timestamp), uint208(controlledWrappedBalance));
         }
     }
 
@@ -336,8 +336,10 @@ contract ExistingTokenAssetController is IAssetController, Initializable {
         return IERC20(address(mainToken)).totalSupply() - controlledWrappedBalance;
     }
 
-    function getPastControlledBalance(uint256 blockNumber) external view returns (uint256) {
-        return _controlledBalanceCheckpoints.upperLookupRecent(uint48(blockNumber));
+    // Checkpoints share the wrapped token's `mode=timestamp` clock, so a timepoint
+    // here is the same timepoint passed to `getPastVotes` / `getPastTotalSupply`.
+    function getPastControlledBalance(uint256 timepoint) external view returns (uint256) {
+        return _controlledBalanceCheckpoints.upperLookupRecent(uint48(timepoint));
     }
 
     function mainTokenObligations() external view returns (uint256) {

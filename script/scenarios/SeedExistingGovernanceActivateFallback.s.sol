@@ -13,7 +13,7 @@ contract SeedExistingGovernanceActivateFallback is ExistingGovernanceFlowBase {
 
         vm.startBroadcast(founderKey());
         _activateFallbackDACProposal(seed.dac, seed.fallbackProposalId);
-        seed.fallbackSnapshotBlock = _proposal(seed.dac, seed.fallbackProposalId).fallbackSnapshotBlock();
+        seed.fallbackSnapshotTime = _proposal(seed.dac, seed.fallbackProposalId).fallbackSnapshotTime();
         seed.fallbackActivated = true;
         seed.blockNumber = block.number;
         vm.stopBroadcast();
@@ -22,7 +22,7 @@ contract SeedExistingGovernanceActivateFallback is ExistingGovernanceFlowBase {
 
         console2.log("Existing governance fallback voting activated");
         console2.log("  proposalId:", seed.fallbackProposalId);
-        console2.log("  snapshotBlock:", seed.fallbackSnapshotBlock);
+        console2.log("  snapshotTime:", seed.fallbackSnapshotTime);
         console2.log("  manifest:", manifestPath);
     }
 }
