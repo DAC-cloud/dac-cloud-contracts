@@ -3,8 +3,11 @@ src = "src"
 out = "out"
 libs = ["lib"]
 # Pinned so verified bytecode is reproducible and DACCell stays under the EIP-170 limit.
-solc_version = "0.8.33"
-evm_version = "prague"
+solc_version = "0.8.38"
+# The lowest EVM target the sources build for (the OpenZeppelin dependency uses MCOPY), so
+# the contracts deploy on every Cancun-level chain. Targeting a later fork changes nothing
+# in the generated code.
+evm_version = "cancun"
 optimizer = true
 optimizer_runs = 1
 fs_permissions = [

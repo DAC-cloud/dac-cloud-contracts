@@ -16,15 +16,26 @@ import {AbstractDealManagementType} from "../governance/AbstractDealManagementPr
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 import {MathLib} from "./MathLib.sol";
+import {VotingConfigLib} from "./VotingConfigLib.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 import {GovernanceLimits} from "../../interfaces/GovernanceStructs.sol";
 
 interface IDealCellGovernanceAdapter {
     function invite(address invitee, bool grantInviteRight) external;
+    function sweepFundingToken(address token) external;
 }
 
 library DealCellGovernanceLib {
     using SafeERC20 for IERC20;
+
+    // Capital return handles funding tokens one by one. Each token gets at most this much
+    // gas, so a token that reverts or burns gas costs itself its turn and nothing else:
+    // the others still return, and the call can be repeated for whatever was skipped.
+    // A plain ERC-20 uses about a sixth of the stipend; a token that burns all of it at
+    // every step costs about 2.4M gas in total, so six such tokens in one deal still
+    // leave a capital return inside a 2^24 gas transaction.
+    uint256 internal constant FUNDING_TOKEN_GAS = 1_000_000;
+    uint256 internal constant FUNDING_TOKEN_PROBE_GAS = 100_000;
 
     function whitelistHolders(
         address[] storage holders
@@ -45,13 +56,15 @@ library DealCellGovernanceLib {
         StakedAgent token,
         address[] storage holders,
         uint256 agentsLimit,
-        uint256 minimalStake
+        uint256 minimalStake,
+        bool capped
     ) public {
+        require(amount > 0, DACErrorsLib.ZeroStake());
         require(minimalStake == 0 || amount >= minimalStake, DACErrorsLib.InsufficientStake());
 
         deal.beforeEveryStake(staker, amount);
 
-        _admitHolder(staker, token, holders, agentsLimit);
+        _admitHolder(staker, token, holders, agentsLimit, capped);
         
         token.mint(staker, amount);
         
@@ -66,7 +79,8 @@ library DealCellGovernanceLib {
         address staker,
         StakedAgent token,
         address[] storage holders,
-        uint256 agentsLimit
+        uint256 agentsLimit,
+        bool capped
     ) internal {
         bool newHolder = true;
         uint256 activeHolders = 0;
@@ -86,6 +100,10 @@ library DealCellGovernanceLib {
         }
 
         if (newHolder) {
+            // The list is walked by every slash and reward allocation, so its length is
+            // bounded by the kernel whatever the deal's own `agentsLimit` says. A
+            // governance-appointed liquidator is exempt: nothing iterates a closed deal.
+            require(!capped || holders.length < GovernanceLimits.MAX_DEAL_HOLDERS, DACErrorsLib.HoldersLimitReached());
             holders.push(staker);
         }
     }
@@ -102,6 +120,7 @@ library DealCellGovernanceLib {
         uint256 agentsLimit,
         uint256 minimalStake
     ) public {
+        require(amount > 0, DACErrorsLib.ZeroStake());
         require(minimalStake == 0 || amount >= minimalStake, DACErrorsLib.InsufficientStake());
 
         require(
@@ -113,7 +132,7 @@ library DealCellGovernanceLib {
 
         deal.beforeEveryStake(staker, amount);
 
-        _admitHolder(staker, token, holders, agentsLimit);
+        _admitHolder(staker, token, holders, agentsLimit, true);
         
         token.mint(staker, amount);
         
@@ -234,8 +253,13 @@ library DealCellGovernanceLib {
                     DACErrorsLib.NotStakedAgent()
                 );
 
+                // Same past timepoint the proposal will read its weights and base at.
                 require(
-                    IVotes(IDealCell(dealCell).stakeToken()).getVotes(msg.sender) > MathLib.mul(IERC20(IDealCell(dealCell).stakeToken()).totalSupply(), votingConfig.qualification),
+                    IVotes(IDealCell(dealCell).stakeToken()).getPastVotes(msg.sender, block.timestamp - 1)
+                        > MathLib.mul(
+                            IVotes(IDealCell(dealCell).stakeToken()).getPastTotalSupply(block.timestamp - 1),
+                            votingConfig.qualification
+                        ),
                     DACErrorsLib.NotEnoughBalance()
                 );
             }
@@ -259,21 +283,7 @@ library DealCellGovernanceLib {
         }
 
         if (params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG) {
-            VotingConfig memory _votingConfig = abi.decode(params.data, (VotingConfig));
-            
-            require(_votingConfig.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.duration > 0, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.duration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.executionValidityDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-            require(_votingConfig.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-            require(
-                _votingConfig.qualification <= MathLib.SCALE / 2,
-                DACErrorsLib.InvalidVotingConfig()
-            );
+            VotingConfigLib.validate(abi.decode(params.data, (VotingConfig)));
         }
 
         isBase =(
@@ -443,6 +453,8 @@ library DealCellGovernanceLib {
         deal.afterClaimMainToken(msg.sender, amount);
     }
 
+    // Runs in the Deal's context: lets the cell pull whatever funding tokens the deal
+    // holds. Best effort per token; one that cannot be read or approved is left out.
     function prepareWithdrawal(
         address dealCell
     ) public {
@@ -451,11 +463,29 @@ library DealCellGovernanceLib {
         for (uint256 i = 0; i < _fundingTokens.length; i++) {
             address _fundingToken = _fundingTokens[i];
 
-            uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
+            // Up to four capped calls per token; their stipends are guaranteed.
+            require(gasleft() > 4 * FUNDING_TOKEN_PROBE_GAS * 64 / 63 + 20_000, DACErrorsLib.InsufficientGas());
+
+            (bool ok, bytes memory ret) = _fundingToken.staticcall{gas: FUNDING_TOKEN_PROBE_GAS}(
+                abi.encodeCall(IERC20.balanceOf, (address(this)))
+            );
+            if (!ok || ret.length < 32) continue;
+
+            uint256 balance = uint256(bytes32(ret));
             if (balance == 0) continue;
 
-            IERC20(_fundingToken).forceApprove(dealCell, balance);
+            if (!_tryApprove(_fundingToken, dealCell, balance)) {
+                // Tokens that only accept a new allowance from zero.
+                if (_tryApprove(_fundingToken, dealCell, 0)) _tryApprove(_fundingToken, dealCell, balance);
+            }
         }
+    }
+
+    function _tryApprove(address token, address spender, uint256 amount) private returns (bool) {
+        (bool ok, bytes memory ret) = token.call{gas: FUNDING_TOKEN_PROBE_GAS}(
+            abi.encodeCall(IERC20.approve, (spender, amount))
+        );
+        return ok && (ret.length == 0 || (ret.length >= 32 && uint256(bytes32(ret)) == 1));
     }
 
     function transferCapital(
@@ -495,8 +525,7 @@ library DealCellGovernanceLib {
         StakedAgent token,
         IDeal deal,
         IDealCell self,
-        address[] storage _fundingTokens,
-        mapping(address => uint256) storage returnedCapital
+        address[] storage _fundingTokens
     ) public {
         if (msg.sender == IDACCellAdapter(dacCell).getDealManager()) {
             if (block.timestamp < _dealDeadline) {
@@ -515,22 +544,41 @@ library DealCellGovernanceLib {
         
         deal.beforeWithdrawCapital();
 
-        // Iterate through all funding tokens and return every balance
+        // Return every funding token, each in its own isolated call. A token that cannot
+        // move right now (frozen, paused, hostile) is reported and skipped; the rest still
+        // go home, and the whole call can be repeated later.
         for (uint256 i = 0; i < _fundingTokens.length; i++) {
             address _fundingToken = _fundingTokens[i];
 
-            uint256 dealAllowance = IERC20(_fundingToken).allowance(address(deal), address(this));
-            if (dealAllowance > 0) {
-                IERC20(_fundingToken).safeTransferFrom(address(deal), address(this), dealAllowance);
+            // The stipend is guaranteed, so only the token itself can make its turn fail.
+            require(gasleft() > FUNDING_TOKEN_GAS * 64 / 63 + 20_000, DACErrorsLib.InsufficientGas());
+            try IDealCellGovernanceAdapter(address(this)).sweepFundingToken{gas: FUNDING_TOKEN_GAS}(_fundingToken) {}
+            catch {
+                emit DACEventsLib.CapitalReturnFailed(dacCell, id, address(deal), _fundingToken);
             }
-
-            uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
-            if (balance == 0) continue;
-
-            transferCapital(id, address(deal), _fundingToken, balance, dacCell, returnedCapital);
         }
 
         deal.afterWithdrawCapital();
+    }
+
+    // One funding token: pull what the deal approved, then send the cell's whole balance
+    // of it to the DAC treasury. Reverts on any failure; the caller isolates it.
+    function sweepFundingToken(
+        uint256 id,
+        address deal,
+        address _fundingToken,
+        address dacCell,
+        mapping(address => uint256) storage returnedCapital
+    ) public {
+        uint256 dealAllowance = IERC20(_fundingToken).allowance(deal, address(this));
+        if (dealAllowance > 0) {
+            IERC20(_fundingToken).safeTransferFrom(deal, address(this), dealAllowance);
+        }
+
+        uint256 balance = IERC20(_fundingToken).balanceOf(address(this));
+        if (balance == 0) return;
+
+        transferCapital(id, deal, _fundingToken, balance, dacCell, returnedCapital);
     }
 
     function markAsSuccess(
@@ -581,6 +629,7 @@ library DealCellGovernanceLib {
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
             uint256 holderSlash = MathLib.mul(token.balanceOf(h), slashPercent);
+            if (holderSlash == 0) continue;
             token.burn(h, holderSlash);
 
             slashAmount += holderSlash;
@@ -601,7 +650,8 @@ library DealCellGovernanceLib {
 
         for (uint256 i = 0; i < holders.length; i++) {
             address h = holders[i];
-            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), stakerRewardBase, totalStake); // pro-rata on original stake
+            uint256 holderShare = MathLib.mulDiv(token.balanceOf(h), stakerRewardBase, totalStake); // pro-rata on the stake held at this evaluation
+            if (holderShare == 0) continue;
             claimableRewards[h] += holderShare;
             rewardAmount += holderShare;
         }

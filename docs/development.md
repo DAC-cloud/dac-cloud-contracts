@@ -4,7 +4,7 @@ Updated: April 7, 2026
 
 This guide covers local development, test commands, deployment scripts, and manifest-driven scenario seeding.
 
-For contract topology, see [architecture.md](architecture.md). For indexer / SDK integration-oriented protocol surfaces, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md).
+For contract topology, see [architecture.md](architecture.md). For indexer / SDK integration-oriented protocol surfaces, see [indexer-sdk-handoff.md](indexer-sdk-handoff.md) and [indexer-sdk-handoff-2026-11-hardening.md](indexer-sdk-handoff-2026-11-hardening.md).
 
 ## 1. Tooling
 
@@ -35,6 +35,23 @@ Run tests:
 ```bash
 forge test
 ```
+
+`forge test` includes the review regression tests in `test/audit/pass-2026-11/` and a short smoke run of the stateful invariant suite in `test/invariant/`. The full invariant campaign and the gas measurements behind the limits in [audit.md](../audit.md) are run on demand:
+
+```bash
+# full invariant campaign (about six minutes)
+INV_CAMPAIGN=true FOUNDRY_INVARIANT_RUNS=200 FOUNDRY_INVARIANT_DEPTH=250 \
+  FOUNDRY_INVARIANT_FAIL_ON_REVERT=true FOUNDRY_FUZZ_SEED=0x01 \
+  forge test --match-contract NativeInvariantsCampaign
+
+# every fuzz test at 20,000 runs
+FOUNDRY_FUZZ_RUNS=20000 forge test --no-match-path 'test/invariant/*'
+
+# evaluation gas at a given holder and result count
+N_HOLDERS=100 K_RESULTS=10 forge test --match-path 'test/audit/pass-2026-11/GasCeilings.t.sol' --isolate -vv
+```
+
+A proposal reads votes at the second before its creation and opens for voting the second after it. Tests and scripts therefore let a second pass (`vm.warp(block.timestamp + 1)`, or a mined block on a local chain) between issuing or delegating tokens and creating a proposal, and again between creating a proposal and voting on it.
 
 Generate coverage:
 
@@ -161,6 +178,8 @@ The deployment flow is split into two layers:
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
 - `EXISTING_DAC_FALLBACK_WARMUP_DURATION` (seconds; the fallback snapshot is the warmup's last second; default 14400, four hours)
 - `EXISTING_DAC_FALLBACK_DURATION`
+- `EXISTING_DAC_VOTE_RETENTION_PERCENT` (scaled: 1e18 = 100%; share of a wrapped vote's weight that must still be delegated to the voter when it votes; default 0, off)
+- `EXISTING_DAC_VOTE_LOCK_DURATION` (seconds the retained share stays vote-locked after the vote; default 0)
 
 ### Existing governance flow config
 
@@ -212,6 +231,7 @@ The deployment flow is split into two layers:
 - `CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT`
 - `CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT`
 - `CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT`
+- `CHILD_FLOW_CAPITAL_CALL_VALIDITY`
 - `CHILD_FLOW_REINVEST_AMOUNT`
 - `CHILD_FLOW_RETURN_PROFIT_AMOUNT`
 
@@ -380,6 +400,8 @@ Useful environment variables for this mode:
 - `EXISTING_DAC_ORACLE_PUBLISH_DEADLINE`
 - `EXISTING_DAC_FALLBACK_WARMUP_DURATION`
 - `EXISTING_DAC_FALLBACK_DURATION`
+- `EXISTING_DAC_VOTE_RETENTION_PERCENT` (scaled: 1e18 = 100%; share of a wrapped vote's weight that must still be delegated to the voter when it votes; default 0, off)
+- `EXISTING_DAC_VOTE_LOCK_DURATION` (seconds the retained share stays vote-locked after the vote; default 0)
 
 Run:
 
@@ -569,4 +591,4 @@ This requires an Anvil instance on `127.0.0.1:8545`. The script handles Permit2 
 
 ## Toolchain pins
 
-`foundry.toml` pins `solc_version = "0.8.33"` and `evm_version = "prague"` (Base mainnet is Prague-equivalent), and CI pins the Foundry release. Verified bytecode is only reproducible with these pins, and `DACCell` sits close to the EIP-170 size limit, so do not change them casually. Dependencies are git submodules pinned to release tags (OpenZeppelin Contracts and Contracts Upgradeable v5.7.0, forge-std v1.17.0); `foundry.lock` records the same tags, and `git submodule update --init --recursive` on a fresh clone reproduces the exact tree. Never commit inside `lib/` — a local-only commit there makes the pin unfetchable for everyone else. Three public libraries (`DACCellGovernanceLib`, `DealCellGovernanceLib`, `DACDeployment`) are deployed separately and linked into `DealManager`, `DealCell` and `DACFactory`; verification needs their addresses.
+`foundry.toml` pins `solc_version = "0.8.38"` and `evm_version = "cancun"`, and CI pins the Foundry release. Cancun is the lowest EVM target the sources build for (the OpenZeppelin dependency uses `MCOPY`), so the same bytecode deploys on every Cancun-level chain; targeting a later fork generates the same code. Verified bytecode is only reproducible with these pins, and `DACCell` sits close to the EIP-170 size limit, so do not change them casually. Dependencies are git submodules pinned to release tags (OpenZeppelin Contracts and Contracts Upgradeable v5.7.0, forge-std v1.17.0); `foundry.lock` records the same tags, and `git submodule update --init --recursive` on a fresh clone reproduces the exact tree. Never commit inside `lib/` — a local-only commit there makes the pin unfetchable for everyone else. Three public libraries (`DACCellGovernanceLib`, `DealCellGovernanceLib`, `DACDeployment`) are deployed separately and linked into `DealManager`, `DealCell` and `DACFactory`; verification needs their addresses.

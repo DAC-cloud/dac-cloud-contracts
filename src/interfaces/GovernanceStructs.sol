@@ -47,6 +47,17 @@ library GovernanceLimits {
     // active holder's stake even when the DAC's own `qualification` is zero.
     // Scaled percent of votable supply: 1e15 = 0.1%.
     uint256 internal constant MIN_VETO_QUALIFICATION = 1e15;
+    // Sanity floor for quorum, high quorum and a non-zero blocking percent (1e15 = 0.1%).
+    // Percents are scaled by 1e18; anything below this floor can only be a unit mistake.
+    uint256 internal constant MIN_PERCENT = 1e15;
+    // Hard cap on the holder list of one deal (every address that ever staked into it).
+    // Slashing and reward allocation walk that list inside a single evaluation, and a
+    // transaction is capped at 2^24 gas on Base: at 100 holders an evaluation carrying up
+    // to ten slash/convert results still fits. See audit.md for the envelope.
+    uint256 internal constant MAX_DEAL_HOLDERS = 100;
+    // A dividend payout can be claimed for this long. After that anyone can release what
+    // was not claimed back to the free treasury.
+    uint256 internal constant DIVIDEND_CLAIM_WINDOW = 365 days;
 }
 
 struct GovernanceStrategyConfig {
@@ -62,6 +73,12 @@ struct GovernanceStrategyConfig {
     bool blockingOnAllProposals;
     bool blockingOnHighQuorum;
     bool oraclePrimaryEnabled;
+    // Wrapped votes only. Share (0 to SCALE) of a vote's snapshot weight that must still be
+    // delegated to the voter when it votes, and that then stays locked (no unwrap, transfer
+    // or re-delegation below it) for `voteLockDuration` seconds. Zero share: no requirement.
+    // The longer the lock, the longer voting capital stays exposed to the outcome it voted for.
+    uint256 voteRetentionPercent;
+    uint256 voteLockDuration;
 }
 
 struct DealCreationConfig {

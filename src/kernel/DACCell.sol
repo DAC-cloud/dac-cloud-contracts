@@ -238,7 +238,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             treasuryToken,
             recipient,
             amount,
-            cashAmount
+            cashAmount,
+            0
         );
 
         emit DACEventsLib.CapitalCallCreated(
@@ -248,6 +249,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             treasuryToken,
             amount,
             cashAmount,
+            0,
             0
         );
     }
@@ -302,6 +304,10 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     function recordBootstrapTreasuryDeposit(address token, uint256 amount, address depositor) external {
         require(msg.sender == deployer, DACErrorsLib.NotAuthorized());
         require(cellStarted, DACErrorsLib.NotInitialized());
+        // Shares its one-shot flag with the root capital call: a cell is bootstrapped by
+        // exactly one of the two.
+        require(!rootCapitalCallInitialized, DACErrorsLib.AlreadyInitialized());
+        rootCapitalCallInitialized = true;
         require(amount > 0, DACErrorsLib.NotAllowed());
         require(depositor != address(0), DACErrorsLib.NotAllowed());
 
@@ -324,12 +330,7 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         returns (uint256 id)
     {
         address proposal;
-        (id, proposal) = IGovernanceSchema(governanceSchema).createProposal(
-            msg.sender,
-            params,
-            IDealManager(dealManager).totalReleasedVotable(),
-            dividendsEnabled
-        );
+        (id, proposal) = IGovernanceSchema(governanceSchema).createProposal(msg.sender, params, dividendsEnabled);
 
         if (params.typ == DACManagementProposalType.CAST_VETO_DEAL) {
             DACCellGovernanceLib.registerVetoChallenge(
@@ -456,6 +457,13 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
         emit DACEventsLib.DividendClaimed(proposalId, token, receiver, amount);
     }
 
+    /// Releases the unclaimed remainder of a dividend payout back to the free treasury once
+    /// its claim window has closed. Open to anyone: nothing leaves the treasury.
+    function sweepDividend(uint256 proposalId) external {
+        (address token, uint256 amount) = IAssetController(assetController).sweepDividend(proposalId);
+        emit DACEventsLib.DividendSwept(proposalId, token, amount);
+    }
+
     // Permissionless on purpose: it only moves tokens already sitting on this cell
     // into the DAC's own treasury and records them. Deals of a parent DAC rely on
     // it to credit forwarded rewards without holding this DAC's token.
@@ -547,13 +555,15 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
     }
 
     function _executeCapitalCall(uint256 id, IManagementProposal prop) internal {
-        (address treasuryToken, uint256 cashAmount) = abi.decode(prop.data(), (address, uint256));
+        (address treasuryToken, uint256 cashAmount, uint256 expiry) =
+            abi.decode(prop.data(), (address, uint256, uint256));
         bytes32 callHash = IAssetController(assetController).createCapitalCall(
             id,
             treasuryToken,
             prop.target(),
             uint256(prop.i()),
-            cashAmount
+            cashAmount,
+            expiry
         );
         emit DACEventsLib.CapitalCallCreated(
             id,
@@ -562,7 +572,8 @@ contract DACCell is IDACCell, IDACCellAdapter, ReentrancyGuard, Initializable {
             treasuryToken,
             uint256(prop.i()),
             cashAmount,
-            id
+            id,
+            expiry
         );
     }
 

@@ -59,6 +59,8 @@ contract MockDealCell is IDealCell {
     function allowDACVeto() external pure returns (bool) { return false; }
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external pure returns (bool) { return true; }
+    function approvedAt() external pure returns (uint256) { return 0; }
+    function holdersCount() external pure returns (uint256) { return 0; }
     function isClosed() external pure returns (bool) { return false; }
     function approveDeadline() external pure returns (uint256) { return 0; }
     function evaluationDeadline() external pure returns (uint256) { return 0; }
@@ -791,8 +793,8 @@ contract RevenueBasedEvaluatorTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function testFuzz_curveUnlock(uint256 revenue, uint256 cycles) public {
-        vm.assume(revenue <= 100_000e6);
-        vm.assume(cycles >= 1 && cycles <= 10);
+        revenue = bound(revenue, 0, 100_000e6);
+        cycles = bound(cycles, 1, 10);
 
         RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),
@@ -839,8 +841,7 @@ contract RevenueBasedEvaluatorTest is Test {
     }
 
     function testFuzz_minUnlockAlwaysApplied(uint256 revenue) public {
-        vm.assume(revenue > 10e6); // below curve
-        vm.assume(revenue < 5_000e6);
+        revenue = bound(revenue, 10e6 + 1, 5_000e6 - 1); // below curve
 
         RevenueSchedule memory cfg = RevenueSchedule({
             token: address(0x1111),

@@ -92,6 +92,8 @@ contract MockDACCellForLib {
 
 contract MockDealForLib is IDeal {
     ProposalParams public lastProposal;
+
+    function getCell() external pure returns (address) { return address(0); }
     uint256 public proposalCalls;
     uint256 public beforeWithdrawCalls;
     uint256 public afterWithdrawCalls;
@@ -285,8 +287,7 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
             stakeTokenContract,
             IDeal(address(dealContract)),
             IDealCell(address(this)),
-            fundingTokensList,
-            returnedCapital
+            fundingTokensList
         );
     }
 
@@ -306,6 +307,12 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
 
     function callWhitelistHolders() external {
         DealCellGovernanceLib.whitelistHolders(holders);
+    }
+
+    // Mirrors DealCell.sweepFundingToken: the library isolates each funding token in a self-call.
+    function sweepFundingToken(address token) external {
+        require(msg.sender == address(this), "self only");
+        DealCellGovernanceLib.sweepFundingToken(1, address(dealContract), token, dacCell, returnedCapital);
     }
 
     function invite(address, bool) external {
@@ -332,6 +339,8 @@ contract DealCellGovernanceHarness is IDealCellGovernanceAdapter {
     function allowDACVeto() external view returns (bool) { return vetoEnabled; }
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external view returns (bool) { return approved; }
+    function approvedAt() external view returns (uint256) { return approved ? 1 : 0; }
+    function holdersCount() external view returns (uint256) { return holders.length; }
     function isClosed() external view returns (bool) { return closed; }
     function approveDeadline() external view returns (uint256) { return approveDeadlineValue; }
     function dealDeadline() external view returns (uint256) { return dealDeadlineValue; }
@@ -452,6 +461,8 @@ contract DealCellGovernanceLibBranchTest is Test {
         address stakeToken = harness.stakeToken();
         vm.prank(agent);
         StakedAgent(stakeToken).delegate(agent);
+        // Qualification reads votes at the previous second.
+        vm.warp(block.timestamp + 1);
 
         ProposalParams memory params = ProposalParams({
             typ: AbstractDealManagementType.REQUEST_TRANCHE,
@@ -470,6 +481,8 @@ contract DealCellGovernanceLibBranchTest is Test {
         address stakeToken = harness.stakeToken();
         vm.prank(agent);
         StakedAgent(stakeToken).delegate(agent);
+        // Qualification reads votes at the previous second.
+        vm.warp(block.timestamp + 1);
 
         VotingConfig memory invalidConfig = VotingConfig({
             quorumPercent: MathLib.SCALE + 1,

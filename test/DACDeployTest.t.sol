@@ -157,7 +157,9 @@ contract DACDeployTest is Test {
                 fallbackDuration: 3 days,
                 blockingOnAllProposals: false,
                 blockingOnHighQuorum: true,
-                oraclePrimaryEnabled: true
+                oraclePrimaryEnabled: true,
+                voteRetentionPercent: 0,
+                voteLockDuration: 0
             })
         });
 
@@ -185,6 +187,9 @@ contract DACDeployTest is Test {
 
         vm.prank(user);
         wrapped.wrap(100e18);
+
+        // Proposal qualification reads votes at the previous second.
+        vm.warp(block.timestamp + 1);
 
         vm.prank(user);
         uint256 proposalId = existingDac.createManagementProposal(

@@ -20,7 +20,8 @@ interface IAssetController {
         address treasuryToken,
         address recipient,
         uint256 amount,
-        uint256 cashAmount
+        uint256 cashAmount,
+        uint256 expiry
     ) external returns (bytes32 callHash);
 
     function fulfillCapitalCall(CapitalCall calldata call)
@@ -61,6 +62,18 @@ interface IAssetController {
 
     function totalReleasedVotable() external view returns (uint256);
     function getPastControlledBalance(uint256 timepoint) external view returns (uint256);
+    /// Votable main-token supply as of the end of second `timepoint` (strictly in the past).
+    /// Proposals read both vote weights and their quorum base at one such timepoint.
+    function getPastVotableSupply(uint256 timepoint) external view returns (uint256);
+
+    /// Last second a capital call can be fulfilled; zero for a call that does not expire.
+    function getCapitalCallExpiry(bytes32 callHash) external view returns (uint256);
+
+    /// Last second a dividend payout can be claimed.
+    function dividendClaimDeadline(uint256 proposalId) external view returns (uint256);
+
+    /// After the claim window: releases the unclaimed remainder of a payout back to the free treasury.
+    function sweepDividend(uint256 proposalId) external returns (address token, uint256 unclaimed);
     function mainTokenObligations() external view returns (uint256);
     function treasuryHolder() external view returns (address);
     function supportsCapability(AssetCapability capability) external view returns (bool);

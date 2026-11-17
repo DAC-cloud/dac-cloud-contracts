@@ -9,10 +9,12 @@ import {ERC20PermitUpgradeable} from "@openzeppelin/contracts-upgradeable/token/
 import {ERC20VotesUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
+import {IDACCell} from "../../interfaces/IDACCell.sol";
+import {VoteLock} from "./VoteLock.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
-contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, ReentrancyGuard {
+contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, ReentrancyGuard, VoteLock {
     using SafeERC20 for IERC20;
 
     IERC20 public underlying;
@@ -37,6 +39,7 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
 
     function setController(address _controller) external onlyAdmin {
         require(_controller != address(0), DACErrorsLib.NotAllowed());
+        require(controller == address(0), DACErrorsLib.AlreadyInitialized());
         controller = _controller;
     }
 
@@ -110,11 +113,24 @@ contract WrappedMainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20Vote
     function _update(address from, address to, uint256 amount) internal override(ERC20Upgradeable, ERC20VotesUpgradeable) {
         super._update(from, to, amount);
         _afterTokenTransfer(from, to, amount);
+        // A transfer, unwrap or burn lowers the votes of the sender's delegate.
+        if (from != address(0)) _enforceVoteLock(delegates(from));
     }
 
     function _delegate(address from, address to) internal override {
         _beforeDelegate(from, to);
+        address previous = delegates(from);
         super._delegate(from, to);
+        _enforceVoteLock(previous);
+    }
+
+    // Vote locks are set by the DAC's governance schema, resolved through the DAC cell.
+    function _voteLockAuthority() internal view override returns (address) {
+        return IDACCell(admin).getGovernanceSchema();
+    }
+
+    function _currentVotes(address account) internal view override returns (uint256) {
+        return getVotes(account);
     }
 
     // ERC-6372 clock in timestamp mode, like every other vote token in the

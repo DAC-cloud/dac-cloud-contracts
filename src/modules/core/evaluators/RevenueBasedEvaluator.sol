@@ -40,6 +40,9 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
     uint256 public totalEvaluatedCycles;
     uint256 public missedCycles;
 
+    // Set once the schedule start has been moved up to the deal's approval time.
+    bool private anchored;
+
     constructor() {
         _disableInitializers();
     }
@@ -70,6 +73,9 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         require(config.schedule.minCycleRevenuePercent <= MathLib.SCALE, InvalidConfig());
         require(config.schedule.penaltyPerMiss <= MathLib.SCALE, InvalidConfig());
 
+        // Provisional start: the explicit `evaluationStart`, or now. The first evaluation
+        // moves it up to the deal's approval time if that is later, so no cycle is ever
+        // counted while the DAC was still voting on the deal.
         uint256 start = config.schedule.evaluationStart == 0 ? block.timestamp : config.schedule.evaluationStart;
         lastChecked = start;
     }
@@ -99,6 +105,13 @@ contract RevenueBasedEvaluator is IEvaluator, Initializable {
         // Mutates `lastChecked`, `unlockedRewards`, `totalEvaluatedCycles`, `missedCycles`, `returnsSnapshot`.
         // Must only be entered via the kernel so kernel observes returned actions.
         require(msg.sender == IDACCell(dac).getDealManager(), DACErrorsLib.NotAuthorized());
+
+        if (!anchored) {
+            // The kernel only evaluates approved deals, so `approvedAt` is set.
+            uint256 approvedAt = IDealCell(cell).approvedAt();
+            if (approvedAt > lastChecked) lastChecked = approvedAt;
+            anchored = true;
+        }
 
         uint256 current = block.timestamp;
 

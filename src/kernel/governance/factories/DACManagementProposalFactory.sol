@@ -37,7 +37,10 @@ contract DACManagementProposalFactory is IDACManagementFactory {
             proposalParams.typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
             proposalParams.typ == DACManagementProposalType.ADD_MODULE ||
             proposalParams.typ == DACManagementProposalType.REMOVE_MODULE ||
-            proposalParams.typ == DACManagementProposalType.TOGGLE_DIVIDENDS
+            proposalParams.typ == DACManagementProposalType.TOGGLE_DIVIDENDS ||
+            // Issues votable tokens (or sells treasury tokens) to any recipient at any price:
+            // at least as sensitive as MINT_MAIN_TOKENS, which only fills the treasury.
+            proposalParams.typ == DACManagementProposalType.CAPITAL_CALL
         ) {
             quorum = MathLib.mulRoundUp(totalVotingSupply, votingConfig.highQuorumPercent);
         }

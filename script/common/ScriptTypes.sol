@@ -99,6 +99,8 @@ struct ExistingDACSeedConfig {
     bool blockingOnAllProposals;
     bool blockingOnHighQuorum;
     bool oraclePrimaryEnabled;
+    uint256 voteRetentionPercent;
+    uint256 voteLockDuration;
 }
 
 struct BasicDACSeed {
@@ -219,6 +221,7 @@ struct ChildDACFlowSeedConfig {
     uint256 childMintAgentAmount;
     uint256 childCapitalCallTokenAmount;
     uint256 childCapitalCallCashAmount;
+    uint256 childCapitalCallValidity;
     uint256 reinvestAmount;
     uint256 returnProfitAmount;
 }

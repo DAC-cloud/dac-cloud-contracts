@@ -14,7 +14,12 @@ import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 import {DACManagementProposalType} from "./DACManagementProposals.sol";
 import {HybridDACManagementProposalFactory} from "./factories/HybridDACManagementProposalFactory.sol";
 import {MathLib} from "../libraries/MathLib.sol";
+import {VotingConfigLib} from "../libraries/VotingConfigLib.sol";
 import {IVotes} from "../../lib/IVotes.sol";
+
+interface IVoteLockToken {
+    function lockVotes(address account, uint256 amount, uint256 until) external;
+}
 
 contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     address public dacCell;
@@ -28,6 +33,8 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     DealCreationConfig private dealCreationConfig;
     uint256 private nextId;
     mapping(uint256 => address) private proposals;
+    // Proposals deployed by this schema: the only callers allowed to relay a vote lock.
+    mapping(address => bool) public isProposal;
 
     constructor() {
         _disableInitializers();
@@ -68,10 +75,12 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
     function createProposal(
         address creator,
         ProposalParams calldata params,
-        uint256,
         bool dividendsEnabled
     ) external onlyDACCell returns (uint256 id, address proposal) {
         require(_isKnownType(params.typ), DACErrorsLib.UnsupportedProposal());
+
+        // Votes the creator must keep locked for the life of the proposal.
+        uint256 creatorHold;
 
         if (creator == dealManager) {
             require(
@@ -88,10 +97,14 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
                 DACErrorsLib.NotAuthorized()
             );
 
-            require(
-                IVotes(address(wrappedMainToken)).getVotes(creator) > MathLib.mul(IDealManager(dealManager).totalReleasedVotable(), strategyConfig.qualification),
-                DACErrorsLib.InsufficientBalance()
-            );
+            // Qualification is measured on past wrapped votes against the past wrapped
+            // votable supply, so a balance wrapped and unwrapped inside the creating
+            // transaction does not qualify.
+            uint256 snapshot = block.timestamp - 1;
+            uint256 votableSupply = IAssetController(assetController).getPastVotableSupply(snapshot);
+            uint256 creatorVotes = IVotes(address(wrappedMainToken)).getPastVotes(creator, snapshot);
+            creatorHold = MathLib.mul(votableSupply, strategyConfig.qualification);
+            require(creatorVotes > creatorHold, DACErrorsLib.InsufficientBalance());
 
             if (params.typ == DACManagementProposalType.ADD_EVALUATOR) {
                 (uint256 dealId, address evalModule,) = abi.decode(params.data, (uint256, address, bytes));
@@ -116,14 +129,20 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
                 uint256 vetoQualification = strategyConfig.qualification > GovernanceLimits.MIN_VETO_QUALIFICATION
                     ? strategyConfig.qualification
                     : GovernanceLimits.MIN_VETO_QUALIFICATION;
-                require(
-                    IVotes(address(wrappedMainToken)).getVotes(creator) >= MathLib.mul(IDealManager(dealManager).totalReleasedVotable(), vetoQualification),
-                    DACErrorsLib.InsufficientBalance()
-                );
+                uint256 vetoHold = MathLib.mul(votableSupply, vetoQualification);
+                require(creatorVotes >= vetoHold, DACErrorsLib.InsufficientBalance());
+                if (vetoHold > creatorHold) creatorHold = vetoHold;
             }
 
             if (params.typ == DACManagementProposalType.DIVIDEND_PAYOUT) {
                 require(dividendsEnabled, DACErrorsLib.DividendsNotEnabled());
+            }
+
+            if (params.typ == DACManagementProposalType.CAPITAL_CALL) {
+                // Every governance capital call states its own expiry. A deliberate
+                // long-dated option is allowed; an open-ended one is not.
+                (,, uint256 expiry) = abi.decode(params.data, (address, uint256, uint256));
+                require(expiry > block.timestamp, DACErrorsLib.CapitalCallExpired());
             }
 
             if (params.typ == DACManagementProposalType.UPDATE_VOTING_CONFIG) {
@@ -160,6 +179,29 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         );
 
         proposals[id] = proposal;
+        isProposal[proposal] = true;
+
+        // Whoever opens a proposal keeps the qualifying votes at stake until its voting can
+        // no longer be running.
+        if (creatorHold > 0) {
+            IVoteLockToken(address(wrappedMainToken)).lockVotes(creator, creatorHold, _latestVotingEnd());
+        }
+    }
+
+    /// Relays a vote lock from one of this schema's proposals to the wrapped token.
+    function lockVotes(address account, uint256 amount, uint256 until) external {
+        require(isProposal[msg.sender], DACErrorsLib.NotAuthorized());
+        IVoteLockToken(address(wrappedMainToken)).lockVotes(account, amount, until);
+    }
+
+    // Latest moment a proposal created now can still be in voting on its scheduled path.
+    function _latestVotingEnd() internal view returns (uint256) {
+        uint256 fallbackPath = strategyConfig.fallbackWarmupDuration + strategyConfig.fallbackDuration;
+        if (!strategyConfig.oraclePrimaryEnabled) {
+            return block.timestamp + fallbackPath;
+        }
+        uint256 longest = strategyConfig.duration > fallbackPath ? strategyConfig.duration : fallbackPath;
+        return block.timestamp + strategyConfig.oraclePublishDeadline + longest;
     }
 
     function consumeApprovedProposal(uint256 id, bool requiredOutcome)
@@ -263,25 +305,22 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
         require(config.fallbackWarmupDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration > 0, DACErrorsLib.InvalidVotingConfig());
         require(config.fallbackDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
+        // Vote retention: the share of a wrapped vote's weight that must still be delegated
+        // to the voter when it votes, and for how long after the vote it stays locked. Zero
+        // share switches the mechanism off. A share with a zero lock only has to be present
+        // in the block of the vote; a lock with no share would lock nothing and is rejected.
+        require(config.voteRetentionPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
+        require(config.voteLockDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
+        require(
+            config.voteLockDuration == 0 || config.voteRetentionPercent > 0,
+            DACErrorsLib.InvalidVotingConfig()
+        );
         // Oracle-primary mode requires a non-zero oracle to already be plugged in
         require(!config.oraclePrimaryEnabled || governanceOracle != address(0), DACErrorsLib.InvalidVotingConfig());
     }
 
-    function _validateVotingConfig(VotingConfig memory config) internal view {
-        require(config.quorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
-        require(config.highQuorumPercent > 0, DACErrorsLib.InvalidVotingConfig());
-        require(config.duration > 0, DACErrorsLib.InvalidVotingConfig());
-        require(config.executionValidityDuration > 0, DACErrorsLib.InvalidVotingConfig());
-        require(config.duration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
-        require(config.executionValidityDuration <= GovernanceLimits.MAX_DURATION, DACErrorsLib.InvalidVotingConfig());
-        require(config.quorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-        require(config.blockingPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-        require(config.highQuorumPercent <= MathLib.SCALE, DACErrorsLib.InvalidVotingConfig());
-
-        require(
-            config.qualification <= MathLib.SCALE / 2,
-            DACErrorsLib.InvalidVotingConfig()
-        );
+    function _validateVotingConfig(VotingConfig memory config) internal pure {
+        VotingConfigLib.validate(config);
     }
 
     function _isKnownType(bytes4 typ) internal pure returns (bool) {
@@ -337,7 +376,9 @@ contract HybridGovernanceSchema is IGovernanceSchema, Initializable {
             typ == DACManagementProposalType.DIVIDEND_PAYOUT ||
             typ == DACManagementProposalType.ADD_MODULE ||
             typ == DACManagementProposalType.REMOVE_MODULE ||
-            typ == DACManagementProposalType.TOGGLE_DIVIDENDS
+            typ == DACManagementProposalType.TOGGLE_DIVIDENDS ||
+            // Sells treasury tokens to any recipient at any price.
+            typ == DACManagementProposalType.CAPITAL_CALL
         );
     }
 

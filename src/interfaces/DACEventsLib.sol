@@ -71,7 +71,8 @@ library DACEventsLib {
         address treasuryToken,
         uint256 tokenAmount,
         uint256 cashAmount,
-        uint256 nonce
+        uint256 nonce,
+        uint256 expiry          // last second the call can be fulfilled; zero for the root call, which does not expire
     );
     event CapitalCallFulfilled(
         address indexed payer,
@@ -279,4 +280,20 @@ library DACEventsLib {
 
     event Wrapped(address indexed caller, address indexed recipient, uint256 amount);
     event Unwrapped(address indexed caller, address indexed recipient, uint256 amount);
+
+    // Governance-token vote locks (proposal creation and, where configured, voting)
+
+    event VotesLocked(address indexed account, uint256 amount, uint256 until);
+
+    // Capital return: a funding token that could not be moved is skipped, the rest still returns
+
+    event CapitalReturnFailed(address indexed dac, uint256 indexed id, address indexed deal, address token);
+
+    // A deal's close hook failed or ran out of its gas stipend; the deal closed regardless
+
+    event DealCloseHookFailed(address indexed dac, uint256 indexed id, address indexed deal);
+
+    // Unclaimed remainder of a dividend payout released back to the free treasury
+
+    event DividendSwept(uint256 indexed payoutId, address indexed token, uint256 amount);
 }

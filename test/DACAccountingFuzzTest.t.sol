@@ -114,7 +114,7 @@ contract DACAccountingFuzzTest is DACTestBase {
                 typ: DACManagementProposalType.CAPITAL_CALL,
                 target: recipient,
                 i: bytes32(tokenAmount),
-                data: abi.encode(address(usdc), cashAmount)
+                data: abi.encode(address(usdc), cashAmount, block.timestamp + 30 days)
             })
         );
 

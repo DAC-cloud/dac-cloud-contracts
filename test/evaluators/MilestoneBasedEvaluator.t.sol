@@ -76,6 +76,8 @@ contract MockDealCell is IDealCell {
     function allowDACVeto() external pure returns (bool) { return false; }
     function isValidDeal() external pure returns (bool) { return true; }
     function isApproved() external pure returns (bool) { return true; }
+    function approvedAt() external pure returns (uint256) { return 0; }
+    function holdersCount() external pure returns (uint256) { return 0; }
     function isClosed() external pure returns (bool) { return false; }
     function approveDeadline() external pure returns (uint256) { return 0; }
     function evaluationDeadline() external pure returns (uint256) { return 0; }

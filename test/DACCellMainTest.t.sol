@@ -151,6 +151,9 @@ contract DACCellMainTest is Test {
 
         vm.stopPrank();
 
+        // Proposals read votes at the previous second: let the issuance above settle.
+        vm.warp(block.timestamp + 1);
+
         assertEq(mainToken.balanceOf(founder), 200_000_000e18, "Incorrect main token balance after capital call");
     }
 

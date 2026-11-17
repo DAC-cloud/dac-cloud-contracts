@@ -126,10 +126,11 @@ contract HybridDACManagementProposalTest is Test {
 
         vm.warp(block.timestamp + 2 days + 1);
         proposal.beginFallbackWarmup();
-        uint256 warmupStart = block.timestamp;
+        // The schedule follows the configured durations, not the poking transaction:
+        // warmup runs from the oracle deadline, whenever the transition is recorded.
+        uint256 warmupStart = proposal.oracleSnapshotDeadline();
 
         assertEq(uint8(proposal.phase()), uint8(ProposalPhase.FallbackWarmup));
-        // Snapshot fixed the moment fallback is triggered: last second of warmup.
         assertEq(proposal.fallbackSnapshotTime(), warmupStart + WARMUP_DURATION);
         assertEq(proposal.phaseEndTime(), 0);
 
@@ -484,7 +485,9 @@ contract HybridDACManagementProposalTest is Test {
             fallbackDuration: 3 days,
             blockingOnAllProposals: blockingOnAllProposals,
             blockingOnHighQuorum: blockingOnHighQuorum,
-            oraclePrimaryEnabled: oraclePrimaryEnabled
+            oraclePrimaryEnabled: oraclePrimaryEnabled,
+            voteRetentionPercent: 0,
+            voteLockDuration: 0
         });
     }
 }

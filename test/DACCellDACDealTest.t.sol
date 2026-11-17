@@ -178,6 +178,9 @@ contract DACCellDealTest is Test {
 
         vm.stopPrank();
 
+        // Proposals read votes at the previous second: let the issuance above settle.
+        vm.warp(block.timestamp + 1);
+
         assertEq(mainToken.balanceOf(founder), 200_000_000e18, "Incorrect main token balance after capital call");
 
         vm.startPrank(founder);
@@ -231,7 +234,7 @@ contract DACCellDealTest is Test {
             name: "DAC L2",
             description: "future of finance",
             mainTokenMaxSupply: 1_000_000,
-            defaultQuorum: 50,
+            defaultQuorum: MathLib.atScale(50),
             founder: founder, // will be replaced
             founderAllocation: 100_000,
             treasuryToken: address(usdc),

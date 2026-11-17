@@ -19,6 +19,9 @@ import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 
 contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
+    // Gas the module's close hook is guaranteed and limited to.
+    uint256 internal constant CLOSE_HOOK_GAS = 1_000_000;
+
     address private factory;
 
     address public manager;
@@ -92,6 +95,10 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
     // Governance
     VotingConfig private _votingConfig;
+
+    // When the DAC approved the deal (first funding settled). Evaluators count their
+    // schedules and take their baselines from here, not from the proposal's creation.
+    uint256 public approvedAt;
 
     constructor() {
         _disableInitializers();
@@ -199,12 +206,13 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             token,
             holders,
             enforceLimits ? _agentsLimit : 0,
-            enforceLimits ? _minimalStake : 0
+            enforceLimits ? _minimalStake : 0,
+            enforceLimits
         );
     }
 
     function onAgentTokenStaked(address staker, uint256 amount) external {
-        require(msg.sender == agentTokenAddr || msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+        require(msg.sender == agentTokenAddr, DACErrorsLib.NotAuthorized());
 
         // if the deal is approved no more direct stakes allowed
         require(!approved, DACErrorsLib.DealAlreadyApproved());
@@ -250,6 +258,7 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
         if (!approved) {
             approved = true;
+            approvedAt = block.timestamp;
         
             emit DACEventsLib.DealActivated(dacCell, id, address(deal), token.totalSupply());
         }
@@ -308,9 +317,19 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
             token,
             deal,
             this,
-            _fundingTokens,
-            returnedCapital
+            _fundingTokens
         );
+    }
+
+    function holdersCount() external view returns (uint256) {
+        return holders.length;
+    }
+
+    // Self-call target of `withdrawCapital`: one funding token per isolated call.
+    function sweepFundingToken(address _token) external {
+        require(msg.sender == address(this), DACErrorsLib.NotAuthorized());
+
+        DealCellGovernanceLib.sweepFundingToken(id, address(deal), _token, dacCell, returnedCapital);
     }
 
     function markAsSuccess(uint256 rewardPercent) external onlyDealManager returns (uint256 currentReward) {
@@ -365,7 +384,15 @@ contract DealCell is IDealCell, ReentrancyGuard, Initializable {
         }
 
         if (!closed) {
-            deal.beforeClose();
+            // The close hook belongs to the module; closing belongs to the kernel. The hook
+            // gets a guaranteed stipend (so a caller cannot starve it) and its failure is
+            // reported, not propagated: no module, and no asset it holds, can stop a deal
+            // from closing or shield its stakers from the evaluation that closes it.
+            require(gasleft() > CLOSE_HOOK_GAS * 64 / 63 + 20_000, DACErrorsLib.InsufficientGas());
+            try deal.beforeClose{gas: CLOSE_HOOK_GAS}() {}
+            catch {
+                emit DACEventsLib.DealCloseHookFailed(dacCell, id, address(deal));
+            }
 
             closed = true;
             

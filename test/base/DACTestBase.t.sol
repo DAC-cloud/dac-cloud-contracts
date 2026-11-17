@@ -163,6 +163,9 @@ abstract contract DACTestBase is Test {
         mainToken.delegate(founder);
 
         vm.stopPrank();
+
+        // Proposals read votes at the second before their creation.
+        vm.warp(block.timestamp + 1);
     }
 
     function onboardAgent(address agent) internal {
@@ -286,7 +289,7 @@ abstract contract DACTestBase is Test {
             name: "DAC L2",
             description: "future of finance",
             mainTokenMaxSupply: 1_000_000,
-            defaultQuorum: 50,
+            defaultQuorum: MathLib.atScale(50),
             founder: founder, // will be replaced
             founderAllocation: 100_000,
             treasuryToken: address(usdc),

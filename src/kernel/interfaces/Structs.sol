@@ -20,6 +20,7 @@ struct DealState {
 struct CapitalCallState {
     CapitalCall call;
     bool fulfilled;
+    uint256 expiry; // last second the call can be fulfilled; zero = does not expire
 }
 
 struct KernelFactories {

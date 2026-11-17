@@ -6,6 +6,9 @@ import {DealParams, VotingConfig, ProposalParams} from "./Structs.sol";
 interface IDeal {
     function getProposal(uint256 proposalId) external view returns (address);
 
+    /// The DealCell this deal is bound to. The kernel checks it before registering the deal.
+    function getCell() external view returns (address);
+
     function createStakedAgentProposal(ProposalParams calldata params) external returns (uint256 proposalId);
 
     // Hooks

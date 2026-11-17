@@ -687,7 +687,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         _voteDealProposal(handle.dealAddr, proposalId2, agent2, true);
         Deal(handle.dealAddr).executeStakedAgentProposal(proposalId2);
 
-        assertEq(zeroFirstToken.allowance(treasuryAddr, permit2), type(uint160).max);
+        assertEq(zeroFirstToken.allowance(treasuryAddr, permit2), type(uint256).max);
     }
 
     function test_approveDirectSpend_transfersTreasuryFunds() public {
@@ -749,7 +749,7 @@ contract DealGovernanceFlowTest is DACTestBase {
         );
         Deal(handle.dealAddr).executeStakedAgentProposal(proposalId);
 
-        assertEq(usdc.allowance(treasuryAddr, permit2), uint256(type(uint160).max));
+        assertEq(usdc.allowance(treasuryAddr, permit2), type(uint256).max);
     }
 
     function test_approveAgentSpend_allowsAgentToExecuteSpend() public {
@@ -1122,7 +1122,7 @@ contract DealGovernanceFlowTest is DACTestBase {
             typ: DACManagementProposalType.CAPITAL_CALL,
             target: handle.dealAddr,
             i: bytes32(tokenAmount),
-            data: abi.encode(address(usdc), cashAmount)
+            data: abi.encode(address(usdc), cashAmount, block.timestamp + 30 days)
         });
 
         (uint256 childProposalId, uint256 voteProposalId) = _createChildProposalViaParent(handle, childProposal);
@@ -1157,7 +1157,7 @@ contract DealGovernanceFlowTest is DACTestBase {
 
     function _findCapitalCallHash(Vm.Log[] memory logs) internal pure returns (bytes32 callHash) {
         bytes32 eventSig =
-            keccak256("CapitalCallCreated(uint256,address,bytes32,address,uint256,uint256,uint256)");
+            keccak256("CapitalCallCreated(uint256,address,bytes32,address,uint256,uint256,uint256,uint256)");
 
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == eventSig) {

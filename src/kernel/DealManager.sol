@@ -101,7 +101,15 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
             dealState
         );
 
-        require(dealAddr.code.length > 0, DACErrorsLib.InvalidDealAddress());
+        // The module names its Deal. Before that address is excluded from the electorate
+        // it must be a contract bound to this very cell that has never delegated: the same
+        // rule a module is held to for the addresses it registers itself.
+        require(_isContractAccount(dealAddr), DACErrorsLib.InvalidDealAddress());
+        require(IDeal(dealAddr).getCell() == dealCell, DACErrorsLib.InvalidDealAddress());
+        require(
+            IVotes(address(mainToken)).delegates(dealAddr) == address(0),
+            DACErrorsLib.ControlledAddressHasVotingPower()
+        );
         IAssetController(assetController).registerControlledAddress(dealCell);
         IAssetController(assetController).registerControlledAddress(dealAddr);
 
@@ -267,12 +275,14 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
 
     }
 
-    function evaluateDeal(uint256 id, uint256 evaluatorId) external onlyAgentOrHolder nonReentrant {
+    // Who may evaluate, and when, is decided per deal: see DACCellGovernanceLib.evaluateDeal.
+    function evaluateDeal(uint256 id, uint256 evaluatorId) external nonReentrant {
         DACCellGovernanceLib.evaluateDeal(
             dacCell,
             id,
             evaluatorId,
             agentToken,
+            mainToken,
             deals,
             dealState
         );
@@ -369,11 +379,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         _;
     }
 
-    modifier onlyAgentOrHolder() {
-        _onlyAgentOrHolder();
-        _;
-    }
-
     modifier onlyDealCell() {
         _onlyDealCell(msg.sender);
         _;
@@ -411,16 +416,6 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
         );
     }
 
-    function _onlyAgentOrHolder() internal view {
-        require(
-            (
-                mainToken.balanceOf(msg.sender) > 0 ||
-                agentToken.qualifiedBalanceOf(msg.sender) > 0
-            ), 
-            DACErrorsLib.NotAuthorized()
-        );
-    }
-
     // Contract account: has code, and that code is not an EIP-7702 delegation
     // designator (0xef0100 || address), which marks a delegated EOA.
     function _isContractAccount(address account) internal view returns (bool) {
@@ -431,6 +426,7 @@ contract DealManager is IDealManager, IDealManagerAdapter, ReentrancyGuard, Init
     }
 
     function _onlyDealCell(address dealCell) internal view {
+        require(dealState[dealCell].id != 0, DACErrorsLib.InvalidDeal(dealCell));
         require(
             IModuleFactory(dealState[dealCell].module).isActive(), 
             DACErrorsLib.InvalidDeal(dealCell)

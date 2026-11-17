@@ -192,7 +192,7 @@ contract AccountingRegressionTest is DACTestBase {
             typ: DACManagementProposalType.CAPITAL_CALL,
             target: h.dealAddr,
             i: bytes32(uint256(50_000)),
-            data: abi.encode(address(usdc), uint256(5_000))
+            data: abi.encode(address(usdc), uint256(5_000), block.timestamp + 30 days)
         });
         vm.recordLogs();
         _passDealProposal(h, ProposalParams({
@@ -354,7 +354,7 @@ contract AccountingRegressionTest is DACTestBase {
     function _dacDealParams(address agent, uint256 poolPct) internal view returns (DealParams memory params) {
         DACConfig memory childDACConfig = DACConfig({
             symbol: "DAC-L2", name: "DAC L2", description: "", mainTokenMaxSupply: 1_000_000,
-            defaultQuorum: 50, founder: founder, founderAllocation: 100_000,
+            defaultQuorum: MathLib.atScale(50), founder: founder, founderAllocation: 100_000,
             treasuryToken: address(usdc), founderCommitment: 10_000, dividendsEnabled: false
         });
         bytes32 salt = keccak256(abi.encode("DAC-L2-poc", block.timestamp));

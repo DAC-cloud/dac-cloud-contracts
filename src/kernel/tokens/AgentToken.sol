@@ -45,11 +45,12 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
         address _assetController
     ) external {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+        require(dealManager == address(0), DACErrorsLib.AlreadyInitialized());
 
         dealManager = _dealManager;
         assetController = _assetController;
 
-        _grantRole(MINTER_ROLE, _dealManager);
+        // The DealManager burns slashed stake; it never mints.
         _grantRole(BURNER_ROLE, _dealManager);
     }
 
@@ -60,6 +61,8 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
     }
 
     function stakeToDeal(address dealCell, uint256 amount) external {
+        // A stake of zero would add the caller to the deal's holder list for free.
+        require(amount > 0, DACErrorsLib.ZeroStake());
         require(qualifiedBalanceOf(msg.sender) >= amount, DACErrorsLib.NotTransferable());
         require(
             IDealManagerAdapter(dealManager).state(dealCell).id != 0, 
@@ -76,6 +79,7 @@ contract AgentToken is IAgentToken, ERC20Upgradeable, AccessControlUpgradeable {
 
     function forceStakeToDeal(address staker, address dealCell, uint256 amount) external {
         require(msg.sender == dealManager, DACErrorsLib.NotAuthorized());
+        require(amount > 0, DACErrorsLib.ZeroStake());
         require(qualifiedBalanceOf(staker) >= amount, DACErrorsLib.NotTransferable());
         require(
             IDealManagerAdapter(dealManager).state(dealCell).id != 0,

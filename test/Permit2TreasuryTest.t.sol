@@ -174,7 +174,7 @@ contract Permit2TreasuryTest is Test {
         vm.prank(treasuryDeal);
         treasury.approveSpend(address(token), destination, 250, uint48(block.timestamp + 2 days));
 
-        assertEq(token.allowance(address(treasury), address(permit2)), uint256(type(uint160).max));
+        assertEq(token.allowance(address(treasury), address(permit2)), type(uint256).max);
 
         (
             address approvedToken,

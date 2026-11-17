@@ -293,7 +293,9 @@ contract H01HybridHarness is Test {
             fallbackDuration: 1 days,
             blockingOnAllProposals: false,
             blockingOnHighQuorum: false,
-            oraclePrimaryEnabled: false
+            oraclePrimaryEnabled: false,
+            voteRetentionPercent: 0,
+            voteLockDuration: 0
         });
     }
 }

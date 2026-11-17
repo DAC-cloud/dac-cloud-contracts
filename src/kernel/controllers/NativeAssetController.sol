@@ -3,20 +3,23 @@ pragma solidity ^0.8.20;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IVotes} from "../../lib/IVotes.sol";
 import {IAssetController} from "../../interfaces/IAssetController.sol";
 import {CapitalCall} from "../../interfaces/Structs.sol";
-import {AssetCapability} from "../../interfaces/GovernanceStructs.sol";
+import {AssetCapability, GovernanceLimits} from "../../interfaces/GovernanceStructs.sol";
 import {IDealManager} from "../../interfaces/IDealManager.sol";
 import {IDealCell} from "../../interfaces/IDealCell.sol";
 import {MainToken} from "../tokens/MainToken.sol";
 import {CapitalCallState} from "../interfaces/Structs.sol";
 import {MathLib} from "../libraries/MathLib.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
+import {DACEventsLib} from "../../interfaces/DACEventsLib.sol";
 
 contract NativeAssetController is IAssetController, Initializable {
+    using Checkpoints for Checkpoints.Trace208;
     using SafeERC20 for IERC20;
 
     struct DividendPayoutState {
@@ -24,6 +27,7 @@ contract NativeAssetController is IAssetController, Initializable {
         uint256 totalPayout;
         uint256 claimedPayout;
         bytes32 merkleRoot;
+        uint256 claimDeadline;
     }
 
     address public dacCell;
@@ -44,6 +48,11 @@ contract NativeAssetController is IAssetController, Initializable {
     mapping(address => bool) private controlledAddresses;
     mapping(address => bool) private distributorAddresses;
     mapping(address => uint256) private distributorAllowances;
+
+    // Votable supply keyed by the main token's `mode=timestamp` clock. A proposal reads its
+    // quorum base here at the same past timepoint it reads vote weights from the token, so
+    // nothing that becomes votable after the snapshot can vote outside the base.
+    Checkpoints.Trace208 private _votableCheckpoints;
 
     constructor() {
         _disableInitializers();
@@ -90,7 +99,13 @@ contract NativeAssetController is IAssetController, Initializable {
         onlyDACCell
         returns (uint256 previousBalance, uint256 currentBalance)
     {
-        require(IVotes(address(mainToken)).getVotes(holder) > MathLib.mul(this.totalReleasedVotable(), qualification), DACErrorsLib.InsufficientBalance());
+        // Past votes against the past base: a balance borrowed inside this transaction does not qualify.
+        uint256 snapshot = block.timestamp - 1;
+        require(
+            IVotes(address(mainToken)).getPastVotes(holder, snapshot)
+                > MathLib.mul(_votableCheckpoints.upperLookupRecent(uint48(snapshot)), qualification),
+            DACErrorsLib.InsufficientBalance()
+        );
 
         previousBalance = treasuryBalances[token];
         currentBalance = IERC20(token).balanceOf(address(this));
@@ -102,8 +117,13 @@ contract NativeAssetController is IAssetController, Initializable {
         address treasuryToken,
         address recipient,
         uint256 amount,
-        uint256 cashAmount
+        uint256 cashAmount,
+        uint256 expiry
     ) external onlyDACCell returns (bytes32 callHash) {
+        // A call is an offer at a fixed price: it carries the last second it can be taken.
+        // Zero means no expiry and is used only for a DAC's root call.
+        require(expiry == 0 || expiry > block.timestamp, DACErrorsLib.CapitalCallExpired());
+
         _requireMintHeadroom(amount);
 
         CapitalCall memory call = CapitalCall({
@@ -118,7 +138,8 @@ contract NativeAssetController is IAssetController, Initializable {
 
         capitalCalls[callHash] = CapitalCallState({
             call: call,
-            fulfilled: false
+            fulfilled: false,
+            expiry: expiry
         });
     }
 
@@ -132,6 +153,7 @@ contract NativeAssetController is IAssetController, Initializable {
 
         storedCall = capitalCalls[callHash].call;
         require(storedCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+        _requireNotExpired(callHash);
 
         _requireMintHeadroom(storedCall.tokenAmount);
 
@@ -146,6 +168,16 @@ contract NativeAssetController is IAssetController, Initializable {
         require(!capitalCalls[callHash].fulfilled, DACErrorsLib.AlreadyFulfilled());
         capitalCall = capitalCalls[callHash].call;
         require(capitalCall.tokenAmount > 0, DACErrorsLib.InvalidCapitalCall());
+        _requireNotExpired(callHash);
+    }
+
+    function getCapitalCallExpiry(bytes32 callHash) external view returns (uint256) {
+        return capitalCalls[callHash].expiry;
+    }
+
+    function _requireNotExpired(bytes32 callHash) internal view {
+        uint256 expiry = capitalCalls[callHash].expiry;
+        require(expiry == 0 || block.timestamp <= expiry, DACErrorsLib.CapitalCallExpired());
     }
 
     function recordDividendPayout(uint256 proposalId, address token, uint256 totalPayout, bytes32 merkleRoot)
@@ -161,7 +193,8 @@ contract NativeAssetController is IAssetController, Initializable {
             token: token,
             totalPayout: totalPayout,
             claimedPayout: 0,
-            merkleRoot: merkleRoot
+            merkleRoot: merkleRoot,
+            claimDeadline: block.timestamp + GovernanceLimits.DIVIDEND_CLAIM_WINDOW
         });
         committedBalances[token] += totalPayout;
     }
@@ -186,6 +219,7 @@ contract NativeAssetController is IAssetController, Initializable {
         // verified on-chain. Cap cumulative claims at the committed amount so a
         // malformed root can never draw on other commitments or free treasury.
         DividendPayoutState storage payout = dividendPayouts[proposalId];
+        require(block.timestamp <= payout.claimDeadline, DACErrorsLib.DividendClaimWindowClosed());
         require(payout.claimedPayout + amount <= payout.totalPayout, DACErrorsLib.DividendPayoutExceeded());
         payout.claimedPayout += amount;
 
@@ -195,6 +229,25 @@ contract NativeAssetController is IAssetController, Initializable {
         treasuryBalances[token] = treasuryBalances[token] >= amount ? treasuryBalances[token] - amount : 0;
 
         IERC20(token).safeTransfer(receiver, amount);
+    }
+
+    /// Once a payout's claim window has closed, releases whatever was not claimed back to
+    /// the free treasury. Nothing leaves the treasury, so the DAC cell lets anyone call it.
+    function sweepDividend(uint256 proposalId) external onlyDACCell returns (address token, uint256 unclaimed) {
+        DividendPayoutState storage payout = dividendPayouts[proposalId];
+        require(payout.merkleRoot != bytes32(0), DACErrorsLib.NotFound());
+        require(block.timestamp > payout.claimDeadline, DACErrorsLib.DividendClaimWindowOpen());
+
+        unclaimed = payout.totalPayout - payout.claimedPayout;
+        require(unclaimed > 0, DACErrorsLib.NotAllowed());
+        payout.claimedPayout = payout.totalPayout;
+
+        token = payout.token;
+        committedBalances[token] = committedBalances[token] >= unclaimed ? committedBalances[token] - unclaimed : 0;
+    }
+
+    function dividendClaimDeadline(uint256 proposalId) external view returns (uint256) {
+        return dividendPayouts[proposalId].claimDeadline;
     }
 
     function approveFunding(uint256 dealId, uint256 trancheId, uint256 rewardsLimit) external onlyDACCell {
@@ -299,25 +352,31 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     function onMainMove(address from, address to, uint256 amount) external onlyDealManager {
+        bool fromControlled = from != address(0) && controlledAddresses[from];
+        bool toControlled = to != address(0) && controlledAddresses[to];
+
         if (from == address(0)) {
-            if (controlledAddresses[to]) {
+            if (toControlled) {
                 lockedMainTokens[to] += amount;
                 unreleasedMainTokens += amount;
             }
-            return;
-        }
-
-        if (controlledAddresses[from]) {
+        } else if (fromControlled) {
             if (lockedMainTokens[from] < amount) {
                 amount = lockedMainTokens[from];
             }
 
             lockedMainTokens[from] -= amount;
-            if (controlledAddresses[to]) {
+            if (toControlled) {
                 lockedMainTokens[to] += amount;
             } else {
                 unreleasedMainTokens -= amount;
             }
+        }
+
+        // Votable supply can only change on a mint, a burn, or a move that touches a
+        // controlled address. Holder-to-holder transfers leave it alone and cost nothing here.
+        if (from == address(0) || to == address(0) || fromControlled || toControlled) {
+            _votableCheckpoints.push(uint48(block.timestamp), uint208(_totalReleasedVotable()));
         }
     }
 
@@ -331,9 +390,17 @@ contract NativeAssetController is IAssetController, Initializable {
     }
 
     function totalReleasedVotable() external view returns (uint256) {
+        return _totalReleasedVotable();
+    }
+
+    function _totalReleasedVotable() internal view returns (uint256) {
         return (mainToken.totalSupply() - unreleasedMainTokens)
             - (mainToken.balanceOf(dacCell) - lockedMainTokens[dacCell])
             - (mainToken.balanceOf(address(this)) - lockedMainTokens[address(this)]);
+    }
+
+    function getPastVotableSupply(uint256 timepoint) external view returns (uint256) {
+        return _votableCheckpoints.upperLookupRecent(uint48(timepoint));
     }
 
     // Native mode uses mint-provenance tracking, not controlled-balance checkpoints.
@@ -363,6 +430,18 @@ contract NativeAssetController is IAssetController, Initializable {
             mainToken.totalSupply() + _mainTokenObligations + amount <= mainToken.maxSupply(),
             DACErrorsLib.MaxSupplyExceeded()
         );
+    }
+
+    function treasuryBalance(address token) external view returns (uint256) {
+        return treasuryBalances[token];
+    }
+
+    function committedBalance(address token) external view returns (uint256) {
+        return committedBalances[token];
+    }
+
+    function freeBalance(address token) external view returns (uint256) {
+        return _freeBalance(token);
     }
 
     function _freeBalance(address token) internal view returns (uint256) {

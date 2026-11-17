@@ -17,6 +17,9 @@ import {DACEventsLib} from "../../../interfaces/DACEventsLib.sol";
 contract TreasuryDeal is Deal {
     using SafeERC20 for IERC20;
 
+    // Gas each funding token is limited to when capital is returned to the DAC.
+    uint256 internal constant TREASURY_TOKEN_GAS = 1_000_000;
+
     Permit2Treasury public treasury;
 
     // Events
@@ -220,21 +223,31 @@ contract TreasuryDeal is Deal {
             }
         }
 
-        // Iterate through all funding tokens and return every balance
+        // Return every funding token held by the treasury, each in its own isolated call:
+        // a token that cannot move right now is reported and skipped, the rest still go.
         address[] memory fundingTokens = IDealCell(dealCell).fundingTokens();
         for (uint256 i = 0; i < fundingTokens.length; i++) {
-            address _fundingToken = fundingTokens[i];
-
-            // Claiming the whole balance of any funding token from treasury
-            uint256 balance = IERC20(_fundingToken).balanceOf(address(treasury));
-            if (balance > 0) {
-                treasury.returnCapitalToDeal(_fundingToken, balance);
-
-                IERC20(_fundingToken).forceApprove(dealCell, balance);
-
-                IDealCellAdapter(dealCell).transferCapital(_fundingToken, balance);
+            // The stipend is guaranteed, so only the token itself can make its turn fail.
+            require(gasleft() > TREASURY_TOKEN_GAS * 64 / 63 + 20_000, DACErrorsLib.InsufficientGas());
+            try this.returnTreasuryToken{gas: TREASURY_TOKEN_GAS}(fundingTokens[i]) {}
+            catch {
+                emit DACEventsLib.CapitalReturnFailed(dacCell, id, address(this), fundingTokens[i]);
             }
         }
+    }
+
+    // Self-call target of `_beforeWithdrawCapital`: the whole treasury balance of one token.
+    function returnTreasuryToken(address _fundingToken) external {
+        require(msg.sender == address(this), DACErrorsLib.NotAuthorized());
+
+        uint256 balance = IERC20(_fundingToken).balanceOf(address(treasury));
+        if (balance == 0) return;
+
+        treasury.returnCapitalToDeal(_fundingToken, balance);
+
+        IERC20(_fundingToken).forceApprove(dealCell, balance);
+
+        IDealCellAdapter(dealCell).transferCapital(_fundingToken, balance);
     }
 
     function recoverProfits(address token) external onlyStakedAgent nonReentrant returns (uint256 amount) {

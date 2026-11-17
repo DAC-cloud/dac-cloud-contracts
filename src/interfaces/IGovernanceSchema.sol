@@ -5,12 +5,9 @@ import {ProposalParams, VotingConfig} from "./Structs.sol";
 import {DealCreationConfig, GovernanceStrategyConfig} from "./GovernanceStructs.sol";
 
 interface IGovernanceSchema {
-    function createProposal(
-        address creator,
-        ProposalParams calldata params,
-        uint256 totalVotingSupply,
-        bool dividendsEnabled
-    ) external returns (uint256 id, address proposal);
+    function createProposal(address creator, ProposalParams calldata params, bool dividendsEnabled)
+        external
+        returns (uint256 id, address proposal);
 
     function consumeApprovedProposal(uint256 id, bool requiredOutcome) external returns (address proposal);
 

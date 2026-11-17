@@ -79,6 +79,7 @@ abstract contract Deal is IDeal, ReentrancyGuard, Initializable {
         address _dealCell
     ) external {
         require(msg.sender == factory, DACErrorsLib.NotAuthorized());
+        require(dealCell == address(0), DACErrorsLib.AlreadyInitialized());
 
         dealCell = _dealCell;
     }

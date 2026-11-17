@@ -53,6 +53,8 @@ abstract contract ScriptConfig is Script {
     string internal constant EXISTING_DAC_BLOCKING_ALL_ENV = "EXISTING_DAC_BLOCKING_ON_ALL";
     string internal constant EXISTING_DAC_BLOCKING_HIGH_ENV = "EXISTING_DAC_BLOCKING_ON_HIGH_QUORUM";
     string internal constant EXISTING_DAC_ORACLE_PRIMARY_ENV = "EXISTING_DAC_ORACLE_PRIMARY_ENABLED";
+    string internal constant EXISTING_DAC_VOTE_RETENTION_ENV = "EXISTING_DAC_VOTE_RETENTION_PERCENT";
+    string internal constant EXISTING_DAC_VOTE_LOCK_ENV = "EXISTING_DAC_VOTE_LOCK_DURATION";
     string internal constant EXISTING_GOV_FLOW_LABEL_ENV = "EXISTING_GOV_FLOW_LABEL";
     string internal constant EXISTING_GOV_FLOW_DAC_LABEL_ENV = "EXISTING_GOV_FLOW_EXISTING_DAC_LABEL";
     string internal constant EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT_ENV = "EXISTING_GOV_FLOW_AGENT_MINT_AMOUNT";
@@ -99,6 +101,7 @@ abstract contract ScriptConfig is Script {
     string internal constant CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT_ENV = "CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT";
     string internal constant CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT_ENV = "CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT";
     string internal constant CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT_ENV = "CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT";
+    string internal constant CHILD_FLOW_CAPITAL_CALL_VALIDITY_ENV = "CHILD_FLOW_CAPITAL_CALL_VALIDITY";
     string internal constant CHILD_FLOW_REINVEST_AMOUNT_ENV = "CHILD_FLOW_REINVEST_AMOUNT";
     string internal constant CHILD_FLOW_RETURN_PROFIT_AMOUNT_ENV = "CHILD_FLOW_RETURN_PROFIT_AMOUNT";
 
@@ -230,6 +233,9 @@ abstract contract ScriptConfig is Script {
         config.blockingOnAllProposals = vm.envOr(EXISTING_DAC_BLOCKING_ALL_ENV, false);
         config.blockingOnHighQuorum = vm.envOr(EXISTING_DAC_BLOCKING_HIGH_ENV, true);
         config.oraclePrimaryEnabled = vm.envOr(EXISTING_DAC_ORACLE_PRIMARY_ENV, true);
+        // Vote retention is off by default: scaled percent (1e18 = 100%) and seconds.
+        config.voteRetentionPercent = vm.envOr(EXISTING_DAC_VOTE_RETENTION_ENV, uint256(0));
+        config.voteLockDuration = vm.envOr(EXISTING_DAC_VOTE_LOCK_ENV, uint256(0));
 
         if (vm.envExists(EXISTING_DAC_UNDERLYING_ENV)) {
             config.underlyingToken = vm.envAddress(EXISTING_DAC_UNDERLYING_ENV);
@@ -315,6 +321,7 @@ abstract contract ScriptConfig is Script {
         config.childMintAgentAmount = vm.envOr(CHILD_FLOW_CHILD_MINT_AGENT_AMOUNT_ENV, uint256(12_345));
         config.childCapitalCallTokenAmount = vm.envOr(CHILD_FLOW_CAPITAL_CALL_TOKEN_AMOUNT_ENV, uint256(22_222e18));
         config.childCapitalCallCashAmount = vm.envOr(CHILD_FLOW_CAPITAL_CALL_CASH_AMOUNT_ENV, uint256(2_500e6));
+        config.childCapitalCallValidity = vm.envOr(CHILD_FLOW_CAPITAL_CALL_VALIDITY_ENV, uint256(30 days));
         config.reinvestAmount = vm.envOr(CHILD_FLOW_REINVEST_AMOUNT_ENV, uint256(2_500e6));
         config.returnProfitAmount = vm.envOr(CHILD_FLOW_RETURN_PROFIT_AMOUNT_ENV, uint256(3_333e6));
     }

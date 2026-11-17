@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IVotes} from "../../../lib/IVotes.sol";
 import {ProposalParams, VotingConfig} from "../../../interfaces/Structs.sol";
 import {UUPSProxy} from "../../proxies/UUPSProxy.sol";
 import {IDealManagementProposalFactory} from "../../interfaces/IDealManagementProposalFactory.sol";
@@ -11,6 +11,7 @@ import {MathLib} from "../../libraries/MathLib.sol";
 
 abstract contract DealManagementProposalFactory is IDealManagementProposalFactory {
     error ProposalNotSupported();
+    error NoVotingPower();
 
     address public immutable referenceImpl;
 
@@ -38,7 +39,11 @@ abstract contract DealManagementProposalFactory is IDealManagementProposalFactor
         uint256 blockingQuorum;
         bool challengeable;
 
-        uint256 totalSupply = IERC20(token).totalSupply();
+        // Stake supply at the second before creation: the proposal reads vote weights at
+        // that same timepoint, so stake added in the creation second cannot vote outside
+        // the base. An empty base would pass vacuously (0 >= quorum 0).
+        uint256 totalSupply = IVotes(token).getPastTotalSupply(block.timestamp - 1);
+        require(totalSupply > 0, NoVotingPower());
 
         if (
             params.typ == AbstractDealManagementType.UPDATE_VOTING_CONFIG ||

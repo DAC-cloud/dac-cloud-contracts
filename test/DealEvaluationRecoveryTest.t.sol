@@ -334,6 +334,13 @@ contract DealEvaluationRecoveryTest is DACTestBase {
         DealHandle memory handle = _setupApprovedMockTreasuryDeal();
         address outsider = makeAddr("outsider");
 
+        // Before the evaluation deadline only the deal's own stakers may evaluate.
+        vm.prank(outsider);
+        vm.expectRevert(DACErrorsLib.NotAllowed.selector);
+        DealManager(dealManager).evaluateDeal(handle.dealId, 0);
+
+        // After it, a caller with neither main tokens nor idle agent tokens is still refused.
+        vm.warp(IDealCell(handle.dealCell).evaluationDeadline() + 1);
         vm.prank(outsider);
         vm.expectRevert(DACErrorsLib.NotAuthorized.selector);
         DealManager(dealManager).evaluateDeal(handle.dealId, 0);

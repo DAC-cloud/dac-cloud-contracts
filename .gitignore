@@ -16,9 +16,3 @@ docs/*
 
 # Dotenv file
 .env
-
-# Python venv
-pyvenv.cfg
-/bin
-/lib
-/lib64

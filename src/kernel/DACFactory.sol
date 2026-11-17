@@ -71,8 +71,10 @@ contract DACFactory is IDACFactory {
         require(config.founderAllocation > 0);
         require(config.treasuryToken.code.length > 0);
 
+        bytes32 deploySalt = deploymentSalt(msg.sender, salt);
+
         dacAddr = DACDeployment.predictDACAddress(
-            salt,
+            deploySalt,
             address(this),
             DACCellFactory(cellFactory).referenceImpl(),
             cellFactory,
@@ -96,7 +98,7 @@ contract DACFactory is IDACFactory {
 
         DACCell dac = DACCell(
             DACCellFactory(cellFactory).deployDAC(
-                salt, 
+                deploySalt, 
                 config.name,
                 config.description,
                 governanceFactory
@@ -142,11 +144,13 @@ contract DACFactory is IDACFactory {
             !config.governanceStrategy.oraclePrimaryEnabled || config.governanceOracle != address(0)
         );
 
-        dacAddr = _predictExistingDACAddress(config, salt);
+        bytes32 deploySalt = deploymentSalt(msg.sender, salt);
+
+        dacAddr = _predictExistingDACAddress(config, deploySalt);
         wrappedMainTokenAddr = _deployWrappedMainToken(config, dacAddr);
         agentTokenAddr = _deployAgentToken(config, dacAddr);
 
-        DACCell dac = _deployExistingDACCell(config, salt);
+        DACCell dac = _deployExistingDACCell(config, deploySalt);
 
         require(address(dac) == dacAddr, Create2Failed());
 
@@ -171,6 +175,13 @@ contract DACFactory is IDACFactory {
             msg.sender,
             config.treasurySeedAmount
         );
+    }
+
+    /// The CREATE2 salt a DAC is deployed with: the caller's salt bound to the caller, so
+    /// nobody else can take the address a deployer computed. Pass the result to
+    /// `DACDeployment.predictDACAddress` to predict a DAC address off-chain.
+    function deploymentSalt(address deployer, bytes32 salt) public pure returns (bytes32) {
+        return keccak256(abi.encode(deployer, salt));
     }
 
     /// @notice Standalone helper to deploy a reference BasicGovernanceOracle.

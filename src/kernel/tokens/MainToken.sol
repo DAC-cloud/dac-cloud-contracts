@@ -7,9 +7,11 @@ import {ERC20PermitUpgradeable} from"@openzeppelin/contracts-upgradeable/token/E
 import {ERC20VotesUpgradeable} from"@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {AccessControlUpgradeable} from"@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {IDealManagerAdapter} from "../interfaces/IDealManagerAdapter.sol";
+import {IDACCell} from "../../interfaces/IDACCell.sol";
+import {VoteLock} from "./VoteLock.sol";
 import {DACErrorsLib} from "../../interfaces/DACErrorsLib.sol";
 
-contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, AccessControlUpgradeable {
+contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, AccessControlUpgradeable, VoteLock {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     
     address public dacCell;
@@ -41,6 +43,7 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
         address _assetController
     ) external {
         require(msg.sender == dacCell, DACErrorsLib.NotAuthorized());
+        require(dealManager == address(0), DACErrorsLib.AlreadyInitialized());
 
         dealManager = _dealManager;
         // Only the asset controller mints: DACCell and DealManager route every
@@ -59,11 +62,24 @@ contract MainToken is ERC20Upgradeable, ERC20PermitUpgradeable, ERC20VotesUpgrad
     function _update(address from, address to, uint256 amount) internal override(ERC20Upgradeable, ERC20VotesUpgradeable) {
         super._update(from, to, amount);
         _afterTokenTransfer(from, to, amount);
+        // A transfer or burn lowers the votes of the sender's delegate.
+        if (from != address(0)) _enforceVoteLock(delegates(from));
     }
 
     function _delegate(address from, address to) internal override {
         _beforeDelegate(from, to);
+        address previous = delegates(from);
         super._delegate(from, to);
+        _enforceVoteLock(previous);
+    }
+
+    // Vote locks are set by the DAC's governance schema, resolved through the DAC cell.
+    function _voteLockAuthority() internal view override returns (address) {
+        return IDACCell(dacCell).getGovernanceSchema();
+    }
+
+    function _currentVotes(address account) internal view override returns (uint256) {
+        return getVotes(account);
     }
 
     function nonces(address owner) public view virtual override(ERC20PermitUpgradeable, NoncesUpgradeable) returns (uint256) {

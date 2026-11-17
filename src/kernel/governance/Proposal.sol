@@ -61,7 +61,10 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
         initialized = true;
         executor = _executor;
 
-        snapshotTime = clock();
+        // The second before creation: already in the past for ERC-5805 lookups, and the
+        // same timepoint the creator read `_totalVotingPower` at. Nothing that becomes
+        // votable in the creation second or later can vote, in or out of the base.
+        snapshotTime = clock() - 1;
 
         endTime = block.timestamp + _duration;
         executionValidityDuration = _executionValidityDuration;
@@ -92,6 +95,10 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
 
     function vote(bool support) external virtual nonReentrant {
         require(initialized, DACErrorsLib.NotInitialized());
+        // Voting opens the second after creation (`snapshotTime` is the second before it):
+        // a proposal is on chain, visible, for at least one block before a vote can resolve
+        // it, so creation, resolution and execution never share a transaction.
+        require(clock() > snapshotTime + 1, DACErrorsLib.VotingNotStarted());
         require(clock() <= endTime, DACErrorsLib.VotingEnded());
         require(!voted[msg.sender], DACErrorsLib.AlreadyVoted());
 
@@ -179,15 +186,19 @@ abstract contract Proposal is IVoting, IExecutableProposal, IClock, ReentrancyGu
     function _checkAndEmitResolution() internal {
         if (proposalResolved) return;
 
+        bool byTime = clock() > endTime;
         bool nowResolved =
             ((yesVotes >= quorum) && ((blockingQuorum == 0) || (yesVotes >= (totalVotingPower - blockingQuorum)))) ||
             ((blockingQuorum > 0) && (noVotes >= blockingQuorum)) ||
-            (clock() > endTime);
+            byTime;
 
         if (nowResolved) {
             proposalResolved = true;
             resolvedOutcome = _outcome();
-            resolutionTime = block.timestamp;
+            // A vote that decides the outcome stamps its own time. A resolution by time is
+            // stamped with the end of voting, whoever observes it and whenever, so the
+            // execution window never depends on when the proposal is first touched.
+            resolutionTime = byTime ? endTime : block.timestamp;
 
             emit DACEventsLib.ProposalResolved(
                 yesVotes,

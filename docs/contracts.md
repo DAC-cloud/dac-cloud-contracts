@@ -36,7 +36,7 @@ Current responsibilities:
 
 - deploy native DACs through `deployDAC(...)`
 - deploy existing-token DACs through `deployExistingTokenDAC(...)`
-- predict deterministic DAC addresses
+- predict deterministic DAC addresses, bound to the deployer: the CREATE2 salt is `deploymentSalt(deployer, salt) = keccak256(abi.encode(deployer, salt))`
 - deploy wrapper/oracle primitives for existing-token mode
 - seed wrapped treasury balances for existing-token DACs
 - emit `DACDeployed` and `ExistingTokenDACDeployed`
@@ -82,7 +82,10 @@ Current responsibilities:
 - interact with the asset controller for reward and main-asset accounting
 - validate the proposer-supplied deal-proposal factory against the module (`dealAcceptsGovernanceFactory`); reject deals whose factory the module does not vouch for
 - reward claims (`mintMain`) and `onDealClosed` are gated on deal-cell identity only, never on the module's `isActive()`: a module going dormant cannot freeze rewards already unlocked or the close that releases the DAC's reservations
-- gate module-registered controlled addresses: at most `MAX_MODULE_CONTROLLED_ADDRESSES` (3) per deal beyond the kernel-registered `DealCell` and `Deal`; contract accounts only (no EOAs, no EIP-7702 delegated EOAs) that have never delegated
+- gate controlled addresses: the `Deal` a module returns is registered only if it is a contract bound to the deal cell being created (`getCell()`) that has never delegated; beyond the kernel-registered `DealCell` and `Deal`, a module may register at most `MAX_MODULE_CONTROLLED_ADDRESSES` (3) per deal, contract accounts only (no EOAs, no EIP-7702 delegated EOAs) that have never delegated
+- gate evaluation per deal: until a deal's `evaluationDeadline` only holders of stake in that deal may evaluate it; after it, any main-token holder or agent of the DAC
+- notify a deal's evaluators when the DAC approves it (`IEvaluatorActivation.onDealActivated`, optional, isolated, gas-capped)
+- release the unclaimed remainder of a dividend payout after its claim window (`sweepDividend`, open to anyone)
 
 ### `src/kernel/DealCell.sol`
 
@@ -94,6 +97,10 @@ Current responsibilities:
 - staking bridge between `AgentToken` and `StakedAgent`
 - enforces `agentsLimit` (maximum number of stakers per deal)
 - enforces `minimalStake` (minimum stake amount per agent)
+- enforces the kernel's own staking rules: a stake is never zero, and a deal admits at most `GovernanceLimits.MAX_DEAL_HOLDERS` (100) distinct stakers over its lifetime (`holdersCount()` reports the list's length; a governance-appointed liquidator is exempt)
+- records `approvedAt`, the time the DAC approved the deal, for evaluators to measure from
+- closes regardless of the module: the close hook runs with a guaranteed gas stipend and a failure is reported through `DealCloseHookFailed`
+- returns capital one funding token at a time, each in an isolated, gas-capped call; a token that cannot move is reported through `CapitalReturnFailed` and skipped
 - tranche state
 - whitelist / early-return state
 - reward distribution state
@@ -112,6 +119,7 @@ Current responsibilities:
 - module-specific logic extension surface
 - standardized `DealRelatedContract` discovery helper
 - generic claim entrypoint for deal-owned reward pools via `claimDealRewardPool(...)`
+- `getCell()`, the deal cell the deal is bound to; the binding (`joinDac`) is set once by the deal's factory and the kernel checks it before registering the deal
 
 The deal contract intentionally stays lean; DAC challenge state lives on deal proposal contracts instead of in `Deal`.
 
@@ -135,14 +143,16 @@ Native DAC governance policy.
 
 Uses:
 
-- `MainToken` delegated votes for qualification
+- `MainToken` delegated votes for qualification, read at the second before proposal creation against the votable supply of that same second
 - `VotingConfig` for native DAC proposal rules
 
 Handles:
 
 - proposal-type gating
-- validation of native voting config
+- validation of native voting config (`VotingConfigLib`)
 - capability-aware proposal support via the asset controller
+- the creator's commitment: the qualifying votes (for `CAST_VETO_DEAL` at least 0.1% of votable supply) are vote-locked on the creator for the proposal's voting period
+- capital-call proposals: the data carries an expiry that must lie in the future
 
 ### `src/kernel/governance/HybridGovernanceSchema.sol`
 
@@ -150,7 +160,7 @@ Existing-token DAC governance policy.
 
 Uses:
 
-- `WrappedMainToken` delegated votes for qualification
+- `WrappedMainToken` delegated votes for qualification, read at the second before proposal creation against the wrapped votable supply of that same second
 - `GovernanceStrategyConfig` for oracle/fallback behavior (every duration, warmup included, is in seconds and capped by `GovernanceLimits.MAX_DURATION`, so a passed config can never brick proposal creation)
 - `GovernanceOracle` address management (a non-zero oracle must be a contract)
 
@@ -161,6 +171,9 @@ Handles:
 - wrapped-only bootstrap mode when `oraclePrimaryEnabled == false`
 - blocking behavior toggles for all proposals / high-quorum proposals
 - fallback warmup, fallback duration and execution-validity configuration, all in seconds
+- vote retention: `voteRetentionPercent` (share of a wrapped vote's weight that must still be delegated to the voter when it votes) and `voteLockDuration` (how long that share then stays vote-locked)
+- relays vote locks from its own proposals to the wrapped token (`lockVotes`, callable by proposals this schema deployed only)
+- the creator's commitment: the qualifying votes are vote-locked on the creator until the proposal's longest scheduled voting path has ended
 - capability-aware proposal support via the asset controller
 
 ### `src/kernel/governance/BasicGovernanceOracle.sol`
@@ -186,6 +199,8 @@ Current shared behaviors:
 - blocking quorum logic
 - execution-validity window
 - executable / expired / executed state
+
+`snapshotTime` is the second before creation; the creator supplies the electorate as of that same second. Voting opens the second after creation (`VotingNotStarted` before). `resolutionTime` is the time of the deciding vote, or the end of voting when the proposal resolves because its period ran out, whenever that is first observed.
 
 ### `src/kernel/governance/DACManagementProposal.sol`
 
@@ -216,13 +231,15 @@ Supports:
 - emergency fallback after oracle deactivation
 - execution-validity window after resolution
 
+Phase times follow the strategy's durations and the oracle's publication time: primary voting runs from the snapshot's `publishedAt` for `duration`; fallback warmup runs from the oracle deadline for `fallbackWarmupDuration`; fallback voting runs from the fallback snapshot for `fallbackDuration`. Transitions are applied lazily by any vote or state read, always with the scheduled times, so a snapshot published in time is honoured without an activation call and an untouched proposal still expires on schedule. A timely snapshot stays binding if the oracle is switched off later; `triggerEmergencyFallback()` is then the way out of primary, with a fresh warmup from the trigger. Oracle reads are isolated and gas-capped: an oracle that fails to answer reads as "no snapshot, not active" and cannot freeze a proposal. A wrapped vote applies the strategy's vote retention: the retained share must still be delegated to the voter and is locked through the schema.
+
 ### `src/kernel/governance/DealManagementProposal.sol`
 
 Deal-level proposal contract.
 
 Uses:
 
-- `StakedAgent` snapshot voting
+- `StakedAgent` snapshot voting (weights and stake supply at the second before creation)
 - challengeable-execution model
 - execution-validity window
 
@@ -256,8 +273,9 @@ Common asset-controller interface.
 Main responsibilities exposed at interface level:
 
 - treasury deposits and treasury sync
-- capital-call creation and fulfillment
-- dividend payout registration and claim settlement (claims capped at the committed total)
+- capital-call creation and fulfillment, with a per-call expiry (`getCapitalCallExpiry`)
+- dividend payout registration and claim settlement (claims capped at the committed total, open for `GovernanceLimits.DIVIDEND_CLAIM_WINDOW`; `dividendClaimDeadline`, `sweepDividend`)
+- the votable supply as of a past second (`getPastVotableSupply`), the base every proposal is measured against
 - deal funding approval
 - main reward settlement
 - DAC-managed distributor registry for `AgentToken`
@@ -275,10 +293,11 @@ Handles:
 
 - main-token treasury accounting
 - native main-token obligations
-- dividend payout commitments (non-zero root and amount, claims capped at the committed total)
-- capital calls and treasury mints, both keeping max-supply headroom for outstanding reward obligations
+- dividend payout commitments (non-zero root and amount, claims capped at the committed total, a 365-day claim window, then a sweep of the remainder back to the free treasury)
+- capital calls and treasury mints, both keeping max-supply headroom for outstanding reward obligations; a capital call cannot be fulfilled after its expiry
 - controlled address registration
-- released-votable accounting
+- released-votable accounting, checkpointed on every mint, burn and move that touches a controlled address so that proposals can read the votable supply of a past second
+- treasury views: `treasuryBalance`, `committedBalance`, `freeBalance`
 - DAC-managed `AgentToken` distributor allowances and recipient validation
 
 ### `src/kernel/controllers/ExistingTokenAssetController.sol`
@@ -289,10 +308,10 @@ Handles:
 
 - wrapped treasury custody
 - reserve-backed reward commitments
-- reserve-backed dividend commitments
-- wrapped votable-supply exclusions
+- reserve-backed dividend commitments, with the same claim window and sweep as native mode
+- wrapped votable-supply exclusions, readable as of a past second
 - wrapped move/delegate hooks
-- reserve-backed capital calls from wrapped inventory
+- reserve-backed capital calls from wrapped inventory, each with its expiry
 - DAC-managed `AgentToken` distributor allowances and recipient validation
 
 ### Asset-controller factories
@@ -340,6 +359,8 @@ Native DAC governance token.
 - `ERC20Votes`
 - capped supply
 - mint/burn hooks routed through DAC-controlled components
+- vote locks (`VoteLock`): the governance schema can pin an amount of an account's delegated votes until a timestamp; `lockedVotes(account)` reads the live lock
+- wired to its deal manager once (`dacInit`)
 
 ### `src/kernel/tokens/WrappedMainToken.sol`
 
@@ -352,6 +373,12 @@ Features:
 - auto-self-delegation on first self-wrap (third-party `wrapTo` recipients delegate themselves)
 - move/delegate notifications to the asset controller
 - explicit `Wrapped` / `Unwrapped` events
+- vote locks (`VoteLock`): a locked amount cannot be unwrapped, transferred or re-delegated until the lock ends
+- wired to its asset controller once (`setController`)
+
+### `src/kernel/tokens/VoteLock.sol`
+
+Vote-lock mixin shared by `MainToken` and `WrappedMainToken`. A lock pins an amount of an account's delegated votes until a timestamp; while it is live, no transfer, burn, unwrap or re-delegation, by the account or by anyone delegating to it, may bring the account's votes below the locked amount. Only the DAC's governance schema can lock. Locks merge to the larger amount and the later expiry, never exceed the votes held when set, and never run longer than three years.
 
 ### `src/kernel/tokens/AgentToken.sol`
 
@@ -370,6 +397,8 @@ Key semantics:
 - distributed balances become bound / non-transferable at the recipient
 - qualification-sensitive checks use `qualifiedBalanceOf(...)`, which excludes distributor inventory
 - `transferFrom` (the path approved deals use to pull stake) requires a qualified balance, so distributor inventory can never enter a deal as stake
+- a stake is never zero
+- the `DealManager` holds the burner role only (it burns slashed stake); minting stays with the DAC cell
 
 ### `src/kernel/tokens/StakedAgent.sol`
 
@@ -444,6 +473,7 @@ Capabilities:
 - create and vote child DAC proposals
 - reinvest profits
 - return profits
+- send child equity home when the deal closes, and afterwards through `returnChildEquity()` for equity that was vote-locked in the child at close
 - emit `DealRelatedContract` for child DAC and child token discovery
 - approve external voting venue versions per staked-pig governance
 - approve EIP-712 external vote payloads and serve them as ERC-1271 signatures (snapshot.org single-choice as the shipped venue)
@@ -460,6 +490,7 @@ Capabilities:
 - agent spend/receive permissions
 - vote delegation for treasury-held vote tokens
 - profits recovery
+- capital return one funding token at a time, isolated and gas-capped
 - related treasury discovery event emission
 
 ### `src/modules/core/deals/Permit2Treasury.sol`
@@ -469,7 +500,7 @@ Treasury wallet owned by `TreasuryDeal`.
 Features:
 
 - direct spends
-- Permit2 receive/spend support
+- Permit2 receive/spend support; the treasury's ERC-20 allowance to Permit2 is unlimited (`type(uint256).max`, which tokens with narrower allowances also accept) and Permit2's own per-spender allowance is the limit
 - agent allowance enforcement
 - capital return to the deal
 
@@ -506,7 +537,7 @@ Milestone-driven evaluator with:
 - extension support
 - close milestones
 
-Configuration is validated at deployment (non-empty curves, positive `expectedReturn`, oracle present whenever two tokens are compared, non-zero growth snapshot) and zero denominators evaluate to zero progress, so a misconfigured milestone can never make `evaluateDeal` revert forever. Only capital the kernel recorded as returned counts; a raw balance on the DealCell never does. When `fundingToken` is set, `expectedReturn` is the scaled share of invested capital expected back (`1e18` = 100%). With `excludePrincipal` the capital invested in the accounting token is subtracted first and `expectedReturn` becomes the expected profit share, so returning the principal itself contributes nothing. Unlocks are clamped to what the deal can still convert.
+Configuration is validated at deployment (non-empty curves, positive `expectedReturn`, oracle present whenever two tokens are compared, a growth-mode token the oracle can price) and zero denominators evaluate to zero progress, so a misconfigured milestone can never make `evaluateDeal` revert forever. A growth-mode milestone measures from the price at the deal's activation: the evaluator takes its reference prices in `onDealActivated()`, or when it is created if the deal is already live. Only capital the kernel recorded as returned counts; a raw balance on the DealCell never does. When `fundingToken` is set, `expectedReturn` is the scaled share of invested capital expected back (`1e18` = 100%). With `excludePrincipal` the capital invested in the accounting token is subtracted first and `expectedReturn` becomes the expected profit share, so returning the principal itself contributes nothing. Unlocks are clamped to what the deal can still convert.
 
 ### `src/modules/core/evaluators/RevenueBasedEvaluator.sol`
 
@@ -517,7 +548,7 @@ Recurring revenue evaluator with:
 - missed-cycle penalties
 - optional close behavior
 
-Configuration is validated at deployment (positive duration and projection, non-empty curves, percents within scale). A zero requirement from the curve counts as met, while a derived target of zero or nothing invested settles the cycles without results. At most `MAX_CYCLES_PER_EVALUATION` cycles settle per call with revenue attributed pro rata, the rest carrying over, so evaluation can never revert forever, run out of gas after a long gap, or evaluate carried-over cycles against zero revenue. With `excludePrincipal` only returns above the capital invested in the accounting token count as revenue. Unlocks are clamped to what the deal can still convert.
+Configuration is validated at deployment (positive duration and projection, non-empty curves, percents within scale). The schedule runs from `max(evaluationStart, approvedAt)`: an unset or early start is moved to the deal's approval, so no cycle is counted while the DAC is still voting on the deal. A zero requirement from the curve counts as met, while a derived target of zero or nothing invested settles the cycles without results. At most `MAX_CYCLES_PER_EVALUATION` cycles settle per call with revenue attributed pro rata, the rest carrying over, so evaluation can never revert forever, run out of gas after a long gap, or evaluate carried-over cycles against zero revenue. With `excludePrincipal` only returns above the capital invested in the accounting token count as revenue. Unlocks are clamped to what the deal can still convert.
 
 ### Evaluator factories
 
@@ -543,8 +574,8 @@ Key shared structs:
 
 - `dealRewardPoolPercent` — percentage of deal funding allocated to the deal reward pool
 - `evaluatorModuleFactory` — module factory for evaluator deployment; `address(0)` means use the deal's own module factory
-- `agentsLimit` — maximum number of agents with a live stake in a deal; `0` means no limit
-- `approveDeadline` / `evaluationDeadline` / `dealDeadline` — the DAC must approve the deal by the first; from the second, main-token holders (not only staked agents) may trigger evaluations; after the third, the DAC may force capital to be returned. A deal cannot be closed by the DAC before its deadlines: those deadlines are part of the obligation the DAC takes on when it approves the deal
+- `agentsLimit` — maximum number of agents with a live stake in a deal; `0` means no limit of the deal's own (the kernel's cap of 100 distinct stakers per deal always applies)
+- `approveDeadline` / `evaluationDeadline` / `dealDeadline` — the DAC must approve the deal by the first; until the second only the deal's own stakers may trigger evaluations, after it any main-token holder or agent of the DAC may; after the third, the DAC may force capital to be returned. A deal cannot be closed by the DAC before its deadlines: those deadlines are part of the obligation the DAC takes on when it approves the deal
 - `minimalStake` — minimum stake per agent; `0` means no minimum
 
 ### `src/interfaces/GovernanceStructs.sol`
@@ -609,7 +640,13 @@ Shared custom error catalog used across the kernel, controllers, governance laye
 Errors of note:
 
 - `AgentsLimitReached` — reverts when a deal's staker count would exceed `agentsLimit`
+- `HoldersLimitReached` — reverts when a new staker would exceed the kernel's cap on a deal's holder list
 - `InsufficientStake` — reverts when a staking amount is below `minimalStake`
+- `ZeroStake` — reverts on a stake of zero
+- `VotesLocked` — reverts a transfer, burn, unwrap or re-delegation that would take locked votes away from their delegate, and a vote whose retained share is no longer delegated to the voter
+- `CapitalCallExpired` — reverts on a capital call past its expiry, and on a capital-call proposal without a future expiry
+- `DividendClaimWindowClosed` / `DividendClaimWindowOpen` — a dividend claim after its window, a sweep before it
+- `InsufficientGas` — reverts when the caller did not provide the gas an isolated hook or token turn is guaranteed
 - `EvaluatorNotCompatible` — reverts when the evaluator module does not support the requested evaluator kind
 
 ## 14. Supporting Libraries
@@ -617,4 +654,5 @@ Errors of note:
 - `src/kernel/libraries/DACCellGovernanceLib.sol` — governance routing helpers used by `DACCell`
 - `src/kernel/libraries/DACCellCapitalLib.sol` — capital-call and treasury helpers used by `DACCell`
 - `src/kernel/libraries/DealCellGovernanceLib.sol` — governance routing helpers used by `DealCell`
+- `src/kernel/libraries/VotingConfigLib.sol` — the sanity bounds every `VotingConfig` is checked against, for DACs and deals alike
 - `src/kernel/libraries/MathLib.sol` — shared fixed-point and percentage math utilities

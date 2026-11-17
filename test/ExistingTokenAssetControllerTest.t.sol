@@ -168,7 +168,7 @@ contract ExistingTokenAssetControllerTest is Test {
 
     function test_capitalCall_sellsWrappedTreasuryReserves() external {
         vm.prank(dac);
-        bytes32 callHash = controller.createCapitalCall(7, address(usdc), holder, 50e18, 5_000e6);
+        bytes32 callHash = controller.createCapitalCall(7, address(usdc), holder, 50e18, 5_000e6, block.timestamp + 30 days);
 
         CapitalCall memory call = controller.getCapitalCall(callHash);
         assertEq(call.tokenAmount, 50e18);

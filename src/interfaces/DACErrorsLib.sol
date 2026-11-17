@@ -87,6 +87,8 @@ library DACErrorsLib {
     error NotResolved();
     error VetoNotEnabled();
     error VotingEnded();
+    // Voting on a native or deal proposal opens the second after its creation
+    error VotingNotStarted();
     error AlreadyVoted();
 
     error NoFunding();
@@ -103,4 +105,19 @@ library DACErrorsLib {
     error AgentsLimitReached();
     error InsufficientStake();
     error EvaluatorNotCompatible();
+
+    // Vote locks: the account does not hold the votes a lock requires
+    error VotesLocked();
+
+    error CapitalCallExpired();
+
+    // Staking
+    error ZeroStake();
+    error HoldersLimitReached();
+
+    error DividendClaimWindowClosed();
+    error DividendClaimWindowOpen();
+
+    // Not enough gas forwarded to guarantee a kernel-to-module hook its stipend
+    error InsufficientGas();
 }

@@ -18,6 +18,10 @@ import {CoreDealManagementType} from "../governance/CoreDealManagementProposals.
 import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 import {DACEventsLib} from "../../../interfaces/DACEventsLib.sol";
 
+interface IChildVoteLock {
+    function lockedVotes(address account) external view returns (uint256 amount, uint256 until);
+}
+
 contract DACDeal is Deal {
     using SafeERC20 for IERC20;
 
@@ -214,12 +218,39 @@ contract DACDeal is Deal {
         // these equity tokens as dividends, or establish a new Deal
         // with new management
 
-        address token = IDACCell(managedEntity).getMainToken();
-        uint256 balance = IERC20(token).balanceOf(address(this));
+        _returnChildEquity();
+    }
 
-        IERC20(token).forceApprove(dealCell, balance);
+    /// Once the deal is closed its child equity belongs to the home treasury. Anyone may
+    /// push home whatever is transferable: equity held back at close by a vote lock in the
+    /// child (the deal voted or opened a proposal there) follows when the lock ends.
+    function returnChildEquity() external nonReentrant {
+        require(IDealCell(dealCell).isClosed(), DACErrorsLib.DealIsNotClosed());
+        _returnChildEquity();
+    }
 
-        IDealCellAdapter(dealCell).transferCapital(token, balance);
+    function _returnChildEquity() internal {
+        // The token cached at initialization: a child cannot swap it out or make the read fail.
+        address token = dacCellDNA.dacMainToken;
+        uint256 amount = _transferableChildEquity(token);
+        if (amount == 0) return;
+
+        IERC20(token).forceApprove(dealCell, amount);
+
+        IDealCellAdapter(dealCell).transferCapital(token, amount);
+    }
+
+    // Balance minus whatever the child token keeps vote-locked on this deal.
+    function _transferableChildEquity(address token) internal view returns (uint256 amount) {
+        amount = IERC20(token).balanceOf(address(this));
+        if (amount == 0) return 0;
+
+        try IChildVoteLock(token).lockedVotes(address(this)) returns (uint256 locked, uint256) {
+            if (locked == 0) return amount;
+            uint256 votes = IVotes(token).getVotes(address(this));
+            uint256 free = votes > locked ? votes - locked : 0;
+            if (free < amount) amount = free;
+        } catch {}
     }
 
     function _checkStackedAgentProposalSupported(ProposalParams calldata params) internal virtual override returns (bool supported) {

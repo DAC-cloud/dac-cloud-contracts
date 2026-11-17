@@ -34,6 +34,9 @@ interface IDealCell {
 
     function isValidDeal() external pure returns (bool);
     function isApproved() external view returns (bool);
+    function approvedAt() external view returns (uint256);
+    /// Distinct addresses that have ever staked into the deal (capped by the kernel).
+    function holdersCount() external view returns (uint256);
     function isClosed() external view returns (bool);
 
     function approveDeadline() external view returns (uint256);

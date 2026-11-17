@@ -79,7 +79,7 @@ Key points:
 - **`supportsDealRewardPool(dealKind)`** -- whether deals of this kind can allocate a portion of rewards to the deal contract itself (see section 7).
 - **`isActive`** -- the kernel checks this before deploying. Return `false` to pause new deployments.
 - **`safetyCheck(deal)`** -- a hook for runtime invariant checks. The kernel may call this during deal lifecycle transitions.
-- **`deployDeal`** -- receives a pre-deployed `dealCell` address from the kernel and creates the Deal contract. Returns the deal address. The kernel (DACCellGovernanceLib) deploys the DealCell, passes it to `deployDeal`, then initializes the DealCell afterward. Module code never controls DealCell deployment or initialization. The evaluator is deployed separately by the kernel via `deployEvaluator`.
+- **`deployDeal`** -- receives a pre-deployed `dealCell` address from the kernel and creates the Deal contract. Returns the deal address. The kernel (DACCellGovernanceLib) deploys the DealCell, passes it to `deployDeal`, then initializes the DealCell afterward. Module code never controls DealCell deployment or initialization. The evaluator is deployed separately by the kernel via `deployEvaluator`. The address returned must be a contract bound to that `dealCell` (its `getCell()` returns it, which the base `Deal` does once the deal factory has called `joinDac`) and must never have delegated the DAC's governance token: the kernel checks both before it takes the deal out of the electorate, and refuses the deal otherwise.
 - **`deployEvaluator`** -- called by the kernel, not by `deployDeal`. Deploys an evaluator instance for a specific deal.
 
 ---
@@ -176,13 +176,13 @@ The kernel's DealCell calls these hooks at various points. Override the internal
 | `_afterApprove(trancheId)` | After a funding tranche is approved |
 | `_afterInvite(invitee, grantInviteRight)` | After an agent is invited to the deal |
 | `_afterUnstake(staker, amount)` | After an agent unstakes |
-| `_beforeWithdrawCapital()` | Before capital withdrawal to the DAC |
+| `_beforeWithdrawCapital()` | Before capital withdrawal to the DAC. May revert to refuse a withdrawal that is not due; token handling inside it should be isolated per token (see section 9) |
 | `_afterWithdrawCapital()` | After capital withdrawal completes |
 | `_beforeMarkAsSuccess(rewardPercent)` | Before the deal is marked successful |
 | `_onDealRewardAllocated(amount)` | When the deal's reward pool portion is allocated |
 | `_afterMarkAsFailed(slashPercent)` | After the deal is marked as failed |
 | `_beforeExtendDeadline(oldDeadline, newDeadline)` | Before a deadline extension |
-| `_beforeClose()` | Before the deal is closed |
+| `_beforeClose()` | Before the deal is closed. Runs with a fixed gas stipend (1,000,000); a failure is reported, not propagated, and the deal closes regardless |
 | `_beforeRecovery(liquidator, liquidatorStake)` | Before recovery/liquidation |
 | `_afterRecovery(liquidator, liquidatorStake)` | After recovery completes |
 | `_beforeClaimMainToken(grantee, amount)` | Before main token claim |
@@ -309,7 +309,7 @@ interface IEvaluator {
 
 ### evaluateDeal
 
-Called by the kernel during evaluation cycles. Staked agents can trigger an evaluation at any time; main-token holders only once the deal's `evaluationDeadline` has passed, which is the earliest point LPs may step in. Actions after a `close` in the same result set are ignored, and `percent` is capped at 100%. Returns an array of `EvaluationResult`:
+Called by the kernel during evaluation cycles. Until the deal's `evaluationDeadline`, only holders of stake in that deal can trigger an evaluation; after it any main-token holder or agent of the DAC can, which is the earliest point LPs may step in. Actions after a `close` in the same result set are ignored, and `percent` is capped at 100%. Returns an array of `EvaluationResult`:
 
 ```solidity
 struct EvaluationResult {
@@ -375,6 +375,26 @@ contract MyEvaluatorFactory is IEvaluatorFactory {
     }
 }
 ```
+
+### Measuring from activation
+
+A deal is proposed, voted on by the DAC for days, and only then approved. An evaluator should measure from the approval, not from the moment it was deployed. Two things are available for that:
+
+- `IDealCell(dealCell).approvedAt()` -- the timestamp of the deal's approval (zero until then). Schedules should start at `max(configured start, approvedAt)`.
+- `IEvaluatorActivation.onDealActivated()` -- an optional hook. When the DAC approves a deal, the kernel calls it once on every evaluator attached to the deal, from the `DealManager`, with a gas stipend of 1,000,000. Use it to take reference values (prices, balances) at activation. The call is isolated: an evaluator that does not implement it, or whose hook fails, does not affect the approval, so an evaluator should also be able to take its reference lazily at its first evaluation.
+
+```solidity
+function onDealActivated() external override {
+    require(msg.sender == IDACCell(dac).getDealManager(), DACErrorsLib.NotAuthorized());
+    referencePrice = oracle.tokenPrice(token);
+}
+```
+
+An evaluator added to a deal that is already live (`ADD_EVALUATOR`) gets no activation call; it takes its reference when it is initialized.
+
+### Bounding the work of one evaluation
+
+Each convert or slash result is one pass over the deal's holder list, and a deal can have up to 100 holders. With a full list, one evaluation costs about 3.1M gas for a first reward conversion, 5.4M for a slash, and roughly 0.9M for every further result, so ten results fit in a 2^24-gas transaction and more may not. An evaluator that can emit many results in one call (several milestones falling due together, a long gap between evaluations) should cap what it settles per call and carry the rest over, as `RevenueBasedEvaluator` does with `MAX_CYCLES_PER_EVALUATION`.
 
 ### Reward caps
 
@@ -490,7 +510,32 @@ _registerRelatedContract(dacCellDNA.dacAgentToken, bytes32("CHILD_AGENT_TOKEN"),
 
 ### Do not revert unconditionally in hooks
 
-Deal hooks like `_beforeClose`, `_beforeWithdrawCapital`, and `_beforeRecovery` are called during critical lifecycle transitions. If your hook reverts unconditionally, it can **brick the deal** -- capital becomes permanently locked because the kernel cannot complete the transition. Always ensure hooks have a valid execution path that does not revert, or use them only for validation that should legitimately block the operation.
+Deal hooks like `_beforeWithdrawCapital` and `_beforeRecovery` are called during critical lifecycle transitions. If such a hook reverts unconditionally, it can **brick the deal** -- capital becomes permanently locked because the kernel cannot complete the transition. Always ensure hooks have a valid execution path that does not revert, or use them only for validation that should legitimately block the operation.
+
+### What the close hook can and cannot do
+
+Closing belongs to the kernel. `_beforeClose` is the module's chance to tidy up (the core `DACDeal` uses it to send child equity home), not a way to prevent the close:
+
+- it runs with a gas stipend of 1,000,000, and the kernel guarantees that stipend or reverts the whole transaction, so a caller cannot starve it;
+- if it reverts or runs out of gas the kernel emits `DealCloseHookFailed` and closes the deal anyway.
+
+Write the hook so that a partial failure leaves the deal in a state from which the rest can be finished later by a separate call. `DACDeal.returnChildEquity()` is the reference: whatever the close hook could not move (equity that was vote-locked at that moment) can be sent home afterwards by anyone.
+
+### Return capital token by token
+
+`withdrawCapital` on the deal cell returns each funding token in its own isolated call with a gas stipend of 1,000,000, emits `CapitalReturnFailed` for a token that could not move, and continues with the others. A deal that keeps capital elsewhere (a treasury contract, a vault, a pool) and pulls it back in `_beforeWithdrawCapital` should follow the same pattern, as `TreasuryDeal` does: one external self-call per funding token inside `try`/`catch`, with a gas cap, so that one frozen, paused or hostile token cannot hold the others. A token skipped this way stays where it is and returns on a later call.
+
+### Governance tokens a deal holds can be vote-locked
+
+A deal that holds a DAC's governance token and uses it to govern (as `DACDeal` does in its child DAC) is subject to that DAC's vote locks: opening a proposal under a non-zero qualification, opening a challenge, or casting a retained wrapped vote pins part of the deal's votes for a period. A transfer that would take the deal's votes below the locked amount reverts with `VotesLocked`. Read `lockedVotes(address(this))` on the token and move only what is free, and give locked balances a later exit.
+
+### Actions that deserve a reaction window
+
+A deal proposal is executable as soon as it resolves; the kernel adds no delay between a staked-agent vote and its execution, and a DAC challenge can only attach to a proposal that is still pending. If an action of your deal should leave the DAC time to react (moving a large share of the deal's capital, changing who controls it), build the delay into the action: execute in two steps with a timelock between them, and let the DAC's challenge or an evaluator observe the pending step.
+
+### Staking rules the kernel enforces
+
+Whatever a deal configures, a stake is never zero and a deal admits at most 100 distinct stakers over its lifetime (`IDealCell.holdersCount()`). A deal that sets neither a whitelist nor a `minimalStake` is open to every agent of the DAC for one unit of stake; set at least one of the two unless an open pool is what the deal is.
 
 ### DealCell and evaluator deployment are kernel-controlled
 

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IEvaluator} from "../../../interfaces/IEvaluator.sol";
+import {IEvaluator, IEvaluatorActivation} from "../../../interfaces/IEvaluator.sol";
 import {IDealCell} from "../../../interfaces/IDealCell.sol";
 import {IDACCell} from "../../../interfaces/IDACCell.sol";
 import {EvaluationResult} from "../../../interfaces/Structs.sol";
@@ -12,7 +12,7 @@ import {Milestone} from "../interfaces/Structs.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 import {DACErrorsLib} from "../../../interfaces/DACErrorsLib.sol";
 
-contract MilestoneBasedEvaluator is IEvaluator, Initializable {
+contract MilestoneBasedEvaluator is IEvaluator, IEvaluatorActivation, Initializable {
 
     error NotInitialized();
     error OracleNotSet();
@@ -37,7 +37,10 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
     // Per-milestone state
     mapping(uint256 => bool) public evaluated;
-    mapping(address => uint256) public snapshotPrice;   // oracle snapshot at creation
+    mapping(address => uint256) public snapshotPrice;   // growth-mode reference price, taken when the deal goes live
+
+    // True once every growth-mode milestone has its reference price.
+    bool private baselinesTaken;
 
     constructor() {
         _disableInitializers();
@@ -88,15 +91,46 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
 
             require(m.valuationMode == 2, InvalidValuationMode());
 
-            // If mode is `growth` oracle must be set and the creation snapshot non-zero
+            // If mode is `growth` the oracle must be set and able to price the token now.
+            // The reference price itself is taken when the deal goes live.
             require(m.oracle != address(0), OracleNotSet());
-
-            if (snapshotPrice[m.token] > 0) continue;
-
-            uint256 price = getOraclePrice(m.oracle, m.token);
-            require(price > 0, InvalidConfig());
-            snapshotPrice[m.token] = price;
+            require(getOraclePrice(m.oracle, m.token) > 0, InvalidConfig());
         }
+
+        // An evaluator added to a deal that is already live has no activation ahead of it.
+        (bool ok, bytes memory ret) = _cell.staticcall(abi.encodeCall(IDealCell.isApproved, ()));
+        if (ok && ret.length == 32 && abi.decode(ret, (bool))) {
+            _captureBaselines();
+        }
+    }
+
+    /// Called by the kernel when the DAC approves the deal: growth is measured from the
+    /// price at activation, not from the price when the deal was proposed.
+    function onDealActivated() external override {
+        require(msg.sender == IDACCell(dac).getDealManager(), DACErrorsLib.NotAuthorized());
+        _captureBaselines();
+    }
+
+    function _captureBaselines() internal {
+        if (baselinesTaken) return;
+
+        bool complete = true;
+        uint256 count = config.milestones.length;
+        for (uint256 i = 0; i < count; i++) {
+            if (config.milestones[i].valuationMode != 2) continue;
+
+            address token = config.milestones[i].token;
+            if (snapshotPrice[token] > 0) continue;
+
+            uint256 price = getOraclePrice(config.milestones[i].oracle, token);
+            if (price == 0) {
+                complete = false;
+                continue;
+            }
+            snapshotPrice[token] = price;
+        }
+
+        baselinesTaken = complete;
     }
 
     function permitMint(address, address, uint256) external view override returns (bool permit) {
@@ -124,6 +158,10 @@ contract MilestoneBasedEvaluator is IEvaluator, Initializable {
         // Mutates `evaluated`, `unlockedRewards`, milestone timestamps/extensions.
         // Must only be entered via the kernel so kernel observes returned actions.
         require(msg.sender == IDACCell(dac).getDealManager(), DACErrorsLib.NotAuthorized());
+
+        // Normally a no-op: baselines are taken at activation. This only catches a
+        // reference price the oracle could not give at that moment.
+        _captureBaselines();
 
         EvaluationResult[] memory results = new EvaluationResult[](config.milestones.length * 3 + 1);
         uint256 resultIndex = 0;

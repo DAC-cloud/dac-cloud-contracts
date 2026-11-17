@@ -255,6 +255,9 @@ contract DividendPayoutTest is Test {
         mainToken.delegate(founder);
 
         vm.stopPrank();
+
+        // Proposals read votes at the previous second: let the issuance above settle.
+        vm.warp(block.timestamp + 1);
     }
 
     function _executeDividendPayoutProposal(DACCell dac, bytes32 root, uint256 totalPayout) internal returns (uint256 proposalId) {

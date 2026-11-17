@@ -5,7 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ProposalParams, VotingConfig, DealParams, EvaluationResult, Tranche} from "../../interfaces/Structs.sol";
 import {IDealCellAdapter} from "../interfaces/IDealCellAdapter.sol";
-import {IEvaluator} from "../../interfaces/IEvaluator.sol";
+import {IEvaluator, IEvaluatorActivation} from "../../interfaces/IEvaluator.sol";
 import {IDACManagementFactory} from "../interfaces/IDACManagementFactory.sol";
 import {IModuleFactory} from "../../interfaces/IModuleFactory.sol";
 import {IModuleRegistry} from "../../interfaces/IModuleRegistry.sol";
@@ -33,6 +33,9 @@ interface IDACGovernanceAdapter {
 
 library DACCellGovernanceLib {
     using SafeERC20 for IERC20;
+
+    // Gas an evaluator's activation hook is guaranteed and limited to.
+    uint256 internal constant ACTIVATION_HOOK_GAS = 1_000_000;
 
     function _deployEvaluator(
         address dacCell,
@@ -230,41 +233,18 @@ library DACCellGovernanceLib {
         emit DACEventsLib.FundingApproved(dacCell, dealId, trancheId, rewardsLimit);
 
         IDealCellAdapter(dealCell).approveFunding(trancheId, rewardsLimit);
-    }
 
-    function approveFunding(
-        IManagementProposal prop,
-        mapping(address => uint256) storage treasuryBalances,
-        IDealManager dealManager
-    ) public {
-        (uint256 dealId, uint256 trancheId, uint256 rewardsLimit) = abi.decode(
-            prop.data(),
-            (uint256, uint256, uint256)
-        );
-
-        address dealCell = dealManager.deals(dealId);
-        require(dealCell != address(0), DACErrorsLib.InvalidDealId(dealId));
-
-        require(
-            IERC20(IDealCell(dealCell).stakeToken()).totalSupply() > 0, 
-            DACErrorsLib.NoStake()
-        );
-
-        Tranche memory fundingTranche = IDealCell(dealCell).fundingTranche(trancheId);
-
-        require(treasuryBalances[fundingTranche.token] >= fundingTranche.amount, DACErrorsLib.InsufficientTreasury());
-
-        if (fundingTranche.amount > 0) {
-            IERC20(fundingTranche.token).safeTransfer(address(dealManager), fundingTranche.amount);
-            treasuryBalances[fundingTranche.token] -= fundingTranche.amount;
+        if (trancheId == 0) {
+            // The deal is live: tell its evaluators, so baselines are taken now. The hook
+            // is optional and isolated, and its stipend is guaranteed, so neither a failing
+            // evaluator nor a caller forwarding too little gas can skip it silently.
+            address[] memory evaluators = dealState[dealCell].evaluators;
+            for (uint256 i = 0; i < evaluators.length; i++) {
+                if (evaluators[i].code.length == 0) continue;
+                require(gasleft() > ACTIVATION_HOOK_GAS * 64 / 63 + 10_000, DACErrorsLib.InsufficientGas());
+                try IEvaluatorActivation(evaluators[i]).onDealActivated{gas: ACTIVATION_HOOK_GAS}() {} catch {}
+            }
         }
-        else {
-            require(trancheId == 0, DACErrorsLib.InvalidTranche());
-        }
-
-        IDealManagerAdapter(address(dealManager)).approveFunding(
-            dealId, trancheId, rewardsLimit
-        );
     }
 
     function registerVetoChallenge(
@@ -383,6 +363,7 @@ library DACCellGovernanceLib {
         uint256 id,
         uint256 evaluatorId,
         AgentToken agentToken,
+        IERC20 mainToken,
         mapping(uint256 => address) storage deals,
         mapping(address => DealState) storage dealState
     ) public {
@@ -391,12 +372,16 @@ library DACCellGovernanceLib {
 
         require(dealState[dealCell].active, DACErrorsLib.DealIsNotApproved());
 
-        // Agents may evaluate at any time; main-token holders only once the deal's
-        // evaluation deadline has passed (the earliest point LPs may step in).
-        if (agentToken.qualifiedBalanceOf(msg.sender) == 0) {
+        // Until the evaluation deadline the deal's own stakers decide when it is
+        // evaluated. After it, any main-token holder or agent of the DAC may step in.
+        if (IERC20(IDealCell(dealCell).stakeToken()).balanceOf(msg.sender) == 0) {
             require(
-                IDealCell(dealCell).evaluationDeadline() < block.timestamp, 
+                IDealCell(dealCell).evaluationDeadline() < block.timestamp,
                 DACErrorsLib.NotAllowed()
+            );
+            require(
+                mainToken.balanceOf(msg.sender) > 0 || agentToken.qualifiedBalanceOf(msg.sender) > 0,
+                DACErrorsLib.NotAuthorized()
             );
         }
 

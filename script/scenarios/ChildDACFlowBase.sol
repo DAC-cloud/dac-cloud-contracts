@@ -192,7 +192,7 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
 
     function _findCapitalCallHash(Vm.Log[] memory logs) internal pure returns (bytes32 capitalCallHash) {
         bytes32 eventSig =
-            keccak256("CapitalCallCreated(uint256,address,bytes32,address,uint256,uint256,uint256)");
+            keccak256("CapitalCallCreated(uint256,address,bytes32,address,uint256,uint256,uint256,uint256)");
 
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == eventSig) {
@@ -291,12 +291,17 @@ abstract contract ChildDACFlowBase is ScenarioGovernanceBase {
     function _childCapitalCallProposal(
         ChildDACFlowSeed memory seed,
         ChildDACFlowSeedConfig memory config
-    ) internal pure returns (ProposalParams memory params) {
+    ) internal view returns (ProposalParams memory params) {
+        // A governance capital call states the last second it can be fulfilled.
         params = ProposalParams({
             typ: DACManagementProposalType.CAPITAL_CALL,
             target: seed.deal,
             i: bytes32(config.childCapitalCallTokenAmount),
-            data: abi.encode(seed.treasuryToken, config.childCapitalCallCashAmount)
+            data: abi.encode(
+                seed.treasuryToken,
+                config.childCapitalCallCashAmount,
+                block.timestamp + config.childCapitalCallValidity
+            )
         });
     }
 }
