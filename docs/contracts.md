@@ -84,7 +84,7 @@ Current responsibilities:
 - reward claims (`mintMain`) and `onDealClosed` are gated on deal-cell identity only, never on the module's `isActive()`: a module going dormant cannot freeze rewards already unlocked or the close that releases the DAC's reservations
 - gate controlled addresses: the `Deal` a module returns is registered only if it is a contract bound to the deal cell being created (`getCell()`) that has never delegated; beyond the kernel-registered `DealCell` and `Deal`, a module may register at most `MAX_MODULE_CONTROLLED_ADDRESSES` (3) per deal, contract accounts only (no EOAs, no EIP-7702 delegated EOAs) that have never delegated
 - gate evaluation per deal: until a deal's `evaluationDeadline` only holders of stake in that deal may evaluate it; after it, any main-token holder or agent of the DAC
-- notify a deal's evaluators when the DAC approves it (`IEvaluatorActivation.onDealActivated`, optional, isolated, gas-capped)
+- notify a deal's evaluators when the DAC approves it (`IEvaluatorActivation.onDealActivated`, optional, no fixed gas limit; a hook that reverts is reported through `EvaluatorActivationSkipped` and skipped, one that runs out of gas reverts the approval)
 - release the unclaimed remainder of a dividend payout after its claim window (`sweepDividend`, open to anyone)
 
 ### `src/kernel/DealCell.sol`

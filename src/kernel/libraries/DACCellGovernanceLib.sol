@@ -34,8 +34,13 @@ interface IDACGovernanceAdapter {
 library DACCellGovernanceLib {
     using SafeERC20 for IERC20;
 
-    // Gas an evaluator's activation hook is guaranteed and limited to.
-    uint256 internal constant ACTIVATION_HOOK_GAS = 1_000_000;
+    // An evaluator's activation hook runs with all the gas the approval has. When it fails,
+    // the approval goes on only if at least 1/ACTIVATION_GAS_MARGIN of that gas is still
+    // there. A call that ran out of gas leaves 1/64 of it behind (EIP-150), and one that ran
+    // out a few calls deep and let the failure bubble up leaves a few 64ths; either is far
+    // below the margin, and then the whole approval reverts. A hook that fails for a reason
+    // of its own hands back what it did not use and stays above it.
+    uint256 internal constant ACTIVATION_GAS_MARGIN = 8;
 
     function _deployEvaluator(
         address dacCell,
@@ -236,13 +241,20 @@ library DACCellGovernanceLib {
 
         if (trancheId == 0) {
             // The deal is live: tell its evaluators, so baselines are taken now. The hook
-            // is optional and isolated, and its stipend is guaranteed, so neither a failing
-            // evaluator nor a caller forwarding too little gas can skip it silently.
+            // is optional: an evaluator without it, or one whose hook fails for a reason of
+            // its own, is reported and does not hold the approval up. A hook that failed
+            // because the transaction carried too little gas is not skipped: the approval
+            // reverts, so nobody can leave an activation out by underfunding the call.
             address[] memory evaluators = dealState[dealCell].evaluators;
             for (uint256 i = 0; i < evaluators.length; i++) {
                 if (evaluators[i].code.length == 0) continue;
-                require(gasleft() > ACTIVATION_HOOK_GAS * 64 / 63 + 10_000, DACErrorsLib.InsufficientGas());
-                try IEvaluatorActivation(evaluators[i]).onDealActivated{gas: ACTIVATION_HOOK_GAS}() {} catch {}
+
+                uint256 gasBefore = gasleft();
+                try IEvaluatorActivation(evaluators[i]).onDealActivated() {}
+                catch {
+                    require(gasleft() > gasBefore / ACTIVATION_GAS_MARGIN, DACErrorsLib.InsufficientGas());
+                    emit DACEventsLib.EvaluatorActivationSkipped(dacCell, dealId, evaluators[i]);
+                }
             }
         }
     }

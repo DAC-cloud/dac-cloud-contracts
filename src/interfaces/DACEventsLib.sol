@@ -289,6 +289,11 @@ library DACEventsLib {
 
     event CapitalReturnFailed(address indexed dac, uint256 indexed id, address indexed deal, address token);
 
+    // At a deal's approval, an evaluator had no activation hook or its hook reverted; the
+    // deal was approved regardless and the evaluator takes its references on its own
+
+    event EvaluatorActivationSkipped(address indexed dac, uint256 indexed id, address indexed evaluator);
+
     // A deal's close hook failed or ran out of its gas stipend; the deal closed regardless
 
     event DealCloseHookFailed(address indexed dac, uint256 indexed id, address indexed deal);

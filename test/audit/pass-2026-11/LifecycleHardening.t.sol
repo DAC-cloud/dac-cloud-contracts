@@ -112,7 +112,7 @@ contract LifecycleHardening is DACTestBase {
 
     bytes32 internal constant CLOSE_HOOK_FAILED = keccak256("DealCloseHookFailed(address,uint256,address)");
     // DealCell.CLOSE_HOOK_GAS
-    uint256 internal constant CLOSE_HOOK_GAS = 1_000_000;
+    uint256 internal constant CLOSE_HOOK_GAS = 5_000_000;
 
     function setUp() public {
         setUpBase();

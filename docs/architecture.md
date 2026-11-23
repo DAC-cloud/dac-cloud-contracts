@@ -420,7 +420,7 @@ Two rules hold whatever a deal configures:
 - a stake is never zero
 - a deal admits at most `GovernanceLimits.MAX_DEAL_HOLDERS` (100) distinct stakers over its lifetime
 
-Slashing and reward allocation walk the deal's holder list inside one evaluation, so the list is bounded by the kernel: with a full list, a first evaluation that both allocates rewards and slashes costs about 7.9M gas, under half of a 2^24-gas transaction, and an evaluation carrying ten results still fits (14.9M). The list is historical (an address that staked once keeps its place), and `holdersCount()` on the deal cell reports how much of it is used. A liquidator appointed by DAC governance joins a closed deal outside the cap.
+Slashing and reward allocation walk the deal's holder list inside one evaluation, so the list is bounded by the kernel: with a full list, a first evaluation that both allocates rewards and slashes costs about 7.9M gas, under half of a 2^24-gas transaction, and an evaluation carrying ten results still fits (14.9M). An evaluation that also closes the deal must leave the close hook's 5M stipend available, which at a full list leaves room for five results before the close. The list is historical (an address that staked once keeps its place), and `holdersCount()` on the deal cell reports how much of it is used. A liquidator appointed by DAC governance joins a closed deal outside the cap.
 
 A deal with the whitelist switched off and `minimalStake` at zero is open to every agent of the DAC for one unit of stake. Its governance, its reward shares and its holder list are then shared with whoever arrives first; a deal that is not meant as an open pool sets at least one of the two.
 
@@ -474,7 +474,7 @@ Who may call it depends on the deal's `evaluationDeadline`:
 - until the deadline, whoever holds stake in that deal. The deal's own agents decide when their work is measured.
 - after the deadline, any main-token holder or agent of the DAC as well. This is the point where the DAC's side may step in.
 
-An evaluator measures a deal from its activation. When the DAC approves a deal, the deal cell records `approvedAt` and the kernel calls `onDealActivated()` on every evaluator attached to it (an optional, isolated, gas-capped hook). The core evaluators use it as follows:
+An evaluator measures a deal from its activation. When the DAC approves a deal, the deal cell records `approvedAt` and the kernel calls `onDealActivated()` on every evaluator attached to it (an optional hook with no fixed gas limit). The core evaluators use it as follows:
 
 - `RevenueBasedEvaluator` counts cycles from `max(evaluationStart, approvedAt)`: no cycle runs while the DAC is still voting on the deal
 - `MilestoneBasedEvaluator` takes the reference price of a growth-mode milestone at activation, so price movement before the deal existed is neither rewarded nor punished
@@ -592,9 +592,9 @@ The kernel keeps a few outcomes out of a module's hands:
 - **Closing.** A deal's close hook (`beforeClose`) runs with a guaranteed gas stipend and its failure is reported (`DealCloseHookFailed`), not propagated. No module, and no asset it holds, can stop a deal from closing or shield its stakers from the evaluation that closes it.
 - **Returning capital.** `withdrawCapital` handles a deal's funding tokens one by one, each in an isolated, gas-capped call. A token that cannot move at that moment (frozen, paused, hostile) is reported (`CapitalReturnFailed`) and skipped; the others return, and the call can be repeated for what was skipped.
 - **The electorate.** The address a module returns as its `Deal` is excluded from the votable supply only if it is a contract bound to the very deal cell being created (`getCell()`) that has never delegated. This is the same rule a module is held to for the further addresses it registers itself.
-- **Activation.** The evaluator activation hook is optional and isolated: an evaluator without it, or one whose hook fails, does not affect the approval of a deal.
+- **Activation.** The evaluator activation hook is optional and runs with all the gas the approval carries. An evaluator without it, or one whose hook reverts for a reason of its own, does not affect the approval of a deal: the kernel emits `EvaluatorActivationSkipped` and goes on. A hook that failed for lack of gas is never skipped: the approval reverts, so an activation cannot be left out by underfunding the transaction. The kernel tells the two apart by what is left after the failed call: running out of gas, directly or a few calls deep, leaves only a few 64ths of the gas behind, and the approval requires an eighth. A hook that can never finish inside a transaction therefore keeps its own deal from being approved; nothing has left the treasury at that point, and stakers recover their stake after the approval deadline.
 
-In each isolated call the stipend is guaranteed by the kernel: the caller either provides enough gas for it or the whole transaction reverts, so a turn can only fail because of the module or token it was given to.
+In each isolated call that has a stipend (the close hook, each funding token's turn) the stipend is guaranteed by the kernel: the caller either provides enough gas for it or the whole transaction reverts, so a turn can only fail because of the module or token it was given to.
 
 ### 10.1 DACDeal External Voting
 
@@ -720,6 +720,8 @@ Important events and their semantics:
   carries the call's `expiry` as its last field (zero for a root call)
 - `CapitalReturnFailed(dac, id, deal, token)`
   a funding token that could not be returned in a capital return; the call can be repeated
+- `EvaluatorActivationSkipped(dac, id, evaluator)`
+  at a deal's approval, an evaluator had no activation hook or its hook reverted; the deal was approved regardless
 - `DealCloseHookFailed(dac, id, deal)`
   a module close hook that failed; the deal closed regardless
 - `DividendSwept(payoutId, token, amount)`

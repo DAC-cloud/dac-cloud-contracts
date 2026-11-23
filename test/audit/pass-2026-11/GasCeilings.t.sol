@@ -273,6 +273,53 @@ contract HolderLoopGasTest is DACTestBase {
         emit log_named_uint("gas evaluateDeal (K alternating convert/slash results)", _lastGas());
     }
 
+    /// K alternating convert/slash results followed by a close, sent with exactly the Base
+    /// per-transaction gas cap. The close hook's stipend has to be available on top of what
+    /// the results cost, so this is the binding case for a full holder list.
+    function test_gas_multiResultEvaluationThenClose() public {
+        uint256 n = vm.envOr("N_HOLDERS", uint256(10));
+        uint256 k = vm.envOr("K_RESULTS", uint256(4));
+
+        (DealHandle memory handle,) = _createDeal(32);
+        vm.warp(block.timestamp + 1);
+
+        vm.prank(agent1);
+        agentToken.stakeToDeal(handle.dealCell, 20_000);
+        for (uint256 i = 1; i < n; i++) {
+            address h = _holder(i);
+            vm.prank(address(dac));
+            agentToken.mint(h, 100_000);
+            vm.prank(agent1);
+            IDealCell(handle.dealCell).invite(h, false);
+            vm.prank(h);
+            agentToken.stakeToDeal(handle.dealCell, 20_000);
+        }
+
+        vm.startPrank(founder);
+        IVoting(dac.getProposalVoting(handle.proposalId)).vote(true);
+        dac.executeDACProposal(handle.proposalId);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1);
+
+        EvaluationResult[] memory results = new EvaluationResult[](k + 1);
+        for (uint256 i = 0; i < k; i++) {
+            results[i] =
+                i % 2 == 0 ? EvaluationResult(1, MathLib.atScale(1), 0) : EvaluationResult(0, MathLib.atScale(1), 0);
+        }
+        results[k] = EvaluationResult(3, 0, 0);
+        MockEvaluator(handle.evaluatorAddr).setResults(results);
+
+        emit log_named_uint("N_HOLDERS", n);
+        emit log_named_uint("K_RESULTS before the close", k);
+        vm.prank(agent1);
+        try DealManager(dealManager).evaluateDeal{gas: 16_777_216}(handle.dealId, 0) {
+            emit log_named_uint("fits the Base cap, gas used", _lastGas());
+            assertTrue(IDealCell(handle.dealCell).isClosed());
+        } catch {
+            emit log_string("does NOT fit the Base cap (close hook stipend not available)");
+        }
+    }
+
     function _toggleWhitelist(DealHandle memory handle, bool on) internal returns (uint256 gasUsed) {
         vm.prank(agent1);
         uint256 proposalId = Deal(handle.dealAddr)

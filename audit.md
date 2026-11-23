@@ -8,7 +8,7 @@
 | **Target** | Base mainnet; any Cancun-level EVM chain |
 | **Toolchain** | solc 0.8.38, EVM `cancun`, optimizer on (1 run), legacy pipeline; Foundry 1.5.1; OpenZeppelin Contracts 5.7.0 |
 | **Reviewer** | Claude Fable 5.2, automated review: one full read of `src/` and seven independent passes (governance economics, treasury accounting, deal lifecycle and evaluators, core module, existing-token path with a whole-codebase access-control sweep, release readiness, stateful fuzzing), followed by a hardening round on the same tree |
-| **Tests** | `forge test`: 332 pass. 259 project tests, 72 review tests in `test/audit/pass-2026-11/`, and a stateful invariant suite in `test/invariant/`. |
+| **Tests** | `forge test`: 338 pass. 259 project tests, 78 review tests in `test/audit/pass-2026-11/`, and a stateful invariant suite in `test/invariant/`. |
 
 ---
 
@@ -99,10 +99,10 @@ Each property below was checked by reading, by test, or by both. Tests named `te
 **Deal lifecycle.**
 1. A stake is never zero and a deal's holder list has at most 100 entries, so slashing, reward allocation and close fit in one transaction with margin (`test_REG_H03_*`; section 7.2).
 2. Before a deal's evaluation deadline only holders of stake in that deal can evaluate it; afterwards any holder or agent of the DAC can (`test_REG_M06_*`).
-3. Evaluators measure from the deal's approval: no revenue cycle runs, and no price baseline is taken, while the DAC is still voting (`test_REG_M04_*`).
+3. Evaluators measure from the deal's approval: no revenue cycle runs, and no price baseline is taken, while the DAC is still voting (`test_REG_M04_*`). The activation hook that takes those baselines has no fixed gas limit and cannot be left out by underfunding the approval: a hook that ran out of gas, directly or in a nested call, reverts the approval, while a hook that fails for a reason of its own is reported and skipped (`test_REG_activationHook_*`).
 4. A module's close hook cannot stop a close: it runs with a guaranteed stipend and its failure is reported, not propagated (`test_REG_L04_*`).
 5. Capital returns token by token: one funding token that reverts, or burns all the gas it is given, costs its own turn and nothing else (`test_REG_M08_*`).
-6. In every isolated call the stipend is guaranteed by the kernel, so a caller cannot make a hook or a token's turn fail by underfunding the transaction.
+6. A caller cannot make a hook or a token's turn fail by underfunding the transaction: where a call has a stipend the kernel guarantees it, and where it has none (evaluator activation) a failure for lack of gas reverts the whole transaction.
 
 **Capital calls.** A governance capital call needs the high quorum, remains blockable, states an expiry, and can be neither read nor fulfilled after it (`test_REG_M03_*`, `test_REG_L03_*`).
 
@@ -170,7 +170,9 @@ Retention and lock price an attempt; they do not prevent one. Someone who buys t
 
 **Slashing takes the stake, not the permissions a deal already granted.** A treasury deal's standing agent allowances, Permit2 allowances and proposals opened before a slash keep working after the stake is gone (`test_NOTE_M05_spendRightsOutliveTheStake_*`). The DAC's answer is the capital return, which any holder can call the moment a deal is closed with no stake left: send it in the same transaction as the evaluation that closes the deal, and nothing remains to spend (`test_NOTE_M05_evaluateThenReturnCapital_*`). A governance-appointed liquidator handles whatever is not a funding token.
 
-**Evaluator configuration is the DAC's to check.** Curve arrays are not bounded in length, and a very long curve makes an evaluation expensive (section 7.3); `duration` may be one second; a milestone's `timestamp + extension` must not overflow. Each needs a DAC-approved configuration, and a deal linter should flag them. An evaluation with a full holder list fits ten slash or convert results; a milestone evaluator produces up to three results per milestone that falls due, so milestones that can fall due together should be few.
+**An evaluator can keep its own deal from being approved.** The activation hook runs without a gas limit, and a hook that never finishes inside a transaction makes the approval revert every time. Nothing has left the treasury at that point and stakers recover their stake after the approval deadline, so the cost falls on the deal that chose the evaluator. An `EvaluatorActivationSkipped` event at approval means the evaluator had no hook or its hook reverted: it then takes its references at its first evaluation, which the deal's stakers time.
+
+**Evaluator configuration is the DAC's to check.** Curve arrays are not bounded in length, and a very long curve makes an evaluation expensive (section 7.3); `duration` may be one second; a milestone's `timestamp + extension` must not overflow. Each needs a DAC-approved configuration, and a deal linter should flag them. An evaluation with a full holder list fits ten slash or convert results, and five when it also closes the deal (section 7.2); a milestone evaluator produces up to three results per milestone that falls due, so milestones that can fall due together should be few, and a closing milestone should not share its date with several others.
 
 **Evaluators can be added from any approved module.** `ADD_EVALUATOR` whitelists an evaluator for a deal and the deal's agents ratify it; the module is checked when the DAC votes, not again at ratification, so an evaluator from a module removed in between still deploys. That keeps custom evaluators addable, including the one a DAC uses to wind a deal down.
 
@@ -220,8 +222,8 @@ Approving a module is a high-trust decision: a module defines what its deals do 
 | Vote lock | at most 3 years, at most the votes held | `VoteLock` |
 | Dividend claim window | 365 days | `GovernanceLimits.DIVIDEND_CLAIM_WINDOW` |
 | Revenue cycles settled per evaluation | 64 | `RevenueBasedEvaluator.MAX_CYCLES_PER_EVALUATION` |
-| Close hook stipend | 1,000,000 gas | `DealCell` |
-| Evaluator activation hook stipend | 1,000,000 gas each | `DACCellGovernanceLib` |
+| Close hook stipend | 5,000,000 gas | `DealCell` |
+| Evaluator activation hook | no fixed limit; after a failed hook the approval needs 1/8 of the pre-call gas left, else it reverts | `DACCellGovernanceLib` |
 | Capital return, per funding token | 1,000,000 gas in the deal cell; 1,000,000 in `TreasuryDeal`; 100,000 per probe | `DealCellGovernanceLib`, `TreasuryDeal` |
 | Governance oracle read | 300,000 gas | `HybridDACManagementProposal` |
 
@@ -244,7 +246,17 @@ With 100 holders, a first evaluation carrying `K` alternating conversion and sla
 gas(N holders, K results) ≈ N × (79,400 + 8,700 × (K − 2))
 ```
 
-which puts the ceiling at about 211 holders for a two-result evaluation and 112 for a ten-result one. The cap of 100 keeps a ten-result evaluation, plus the close hook's guaranteed stipend, inside the limit with about 5% to spare, and an ordinary evaluation (one or two results) under half of it. A holder with no live stake costs one balance read per result. The list is historical, so the cap counts every address that ever staked into the deal.
+which puts the ceiling at about 211 holders for a two-result evaluation and 112 for a ten-result one. The cap of 100 keeps a ten-result evaluation inside the limit, and an ordinary evaluation (one or two results) under half of it. A holder with no live stake costs one balance read per result. The list is historical, so the cap counts every address that ever staked into the deal.
+
+An evaluation that also closes the deal needs the close hook's stipend on top: 5,000,000 gas must still be available when the close is reached, whatever the hook then uses, and that is 30% of a transaction. Sent with exactly the Base cap, results followed by a close fit as follows:
+
+| Holders | Results before the close that fit |
+|---|---|
+| 100 | 5 (6 do not) |
+| 75 | 8 (10 do not) |
+| 50 | 16 |
+
+An evaluation that does not fit reverts as a whole and does so every time, so a deal with a full holder list should not be able to produce more than five slash or convert results together with its close. The usual closing evaluations are far inside this: a full slash, or a final conversion, with the close.
 
 The cap is a property of walking the list. Accounting that settles slashes and rewards per holder on claim, rather than per evaluation, would remove it; that is a change of the deal cell's storage model and belongs to a later protocol version.
 
@@ -258,7 +270,7 @@ The cap is a property of walking the list. Accounting that settles slashes and r
 | `createManagementProposal` | 0.52M to 0.78M | native / hybrid |
 | `stakeToDeal` | 0.43M / 0.62M | 25th / 100th holder |
 | `forceReturnCapital` | 0.35M | one funding token |
-| `DACDeal` close hook | 0.24M | against its 1.0M stipend |
+| `DACDeal` close hook | 0.24M | against its 5.0M stipend |
 | Revenue evaluation, 64 cycles | 0.47M / 2.18M / 16.33M | 2 / 16 / 128 coefficients per curve |
 
 The holder rows can be reproduced with `N_HOLDERS=100 K_RESULTS=10 forge test --match-path 'test/audit/pass-2026-11/GasCeilings.t.sol' --isolate -vv`.
@@ -373,7 +385,7 @@ Open release-engineering items. None is in `src/`.
 
 ## 11. Tests
 
-`forge test` runs 333 tests; 332 pass and one, the full invariant campaign, is skipped unless enabled.
+`forge test` runs 339 tests; 338 pass and one, the full invariant campaign, is skipped unless enabled.
 
 ### 11.1 Review tests
 
@@ -384,7 +396,7 @@ Open release-engineering items. None is in `src/`.
 | `KernelHardening.t.sol` | Vote and base timepoint (DAC and deal level), the opening of voting, voting-config bounds, deal-vote execution timing, fixed execution windows, capital-call expiry and quorum, evaluation gating, deployer-bound addresses, staking limits and their gas |
 | `HybridGovernanceHardening.t.sol` | Timely snapshots (also after an oracle deactivation, and with an oracle that stops answering), the fixed hybrid schedule, vote retention and vote locks, and what a fallback electorate is |
 | `ProposalQualification.t.sol` | Past-vote qualification and the lock on a creator's and a challenger's votes |
-| `EvaluatorActivation.t.sol` | Revenue schedules and growth baselines measured from the deal's approval |
+| `EvaluatorActivation.t.sol` | Revenue schedules and growth baselines measured from the deal's approval; the activation hook without a gas limit, under every gas limit a caller can choose |
 | `TreasuryDealBehaviour.t.sol` | Spend rights after a slash, per-token capital return, narrow-allowance tokens, and the Permit2 signature paths, against the canonical Permit2 runtime |
 | `ControlledAddress.t.sol` | Which addresses a deal can take out of the electorate |
 | `LifecycleHardening.t.sol` | Close-hook isolation, `DACDeal` equity at and after close, dividend claim window and sweep, one-shot wiring |

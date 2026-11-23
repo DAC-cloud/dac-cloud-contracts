@@ -8,7 +8,13 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {DACTestBase} from "../../base/DACTestBase.t.sol";
-import {DealParams} from "../../../src/interfaces/Structs.sol";
+import {DealParams, ProposalParams, EvaluationResult} from "../../../src/interfaces/Structs.sol";
+import {IEvaluator, IEvaluatorActivation} from "../../../src/interfaces/IEvaluator.sol";
+import {IEvaluatorFactory} from "../../../src/interfaces/modules/IEvaluatorFactory.sol";
+import {DACErrorsLib} from "../../../src/interfaces/DACErrorsLib.sol";
+import {DACManagementProposalType} from "../../../src/kernel/governance/DACManagementProposals.sol";
+import {TreasuryDealFactory} from "../../../src/modules/core/deals/factories/TreasuryDealFactory.sol";
+import {MockEvaluatorModuleFactory, MOCK_EVALUATOR_SELECTOR} from "../../DealEvaluationRecoveryTest.t.sol";
 import {IVoting} from "../../../src/interfaces/IVoting.sol";
 import {IDealCell} from "../../../src/interfaces/IDealCell.sol";
 import {IDealManager} from "../../../src/interfaces/IDealManager.sol";
@@ -37,6 +43,71 @@ contract ActivationPriceOracle is IPriceOracle {
     }
 }
 
+/// Does a fixed amount of work for whoever calls it.
+contract GasWorker {
+    mapping(uint256 => uint256) internal slots;
+    uint256 internal next;
+
+    // About 22k gas per unit: one fresh storage slot each.
+    function work(uint256 units) external {
+        uint256 from = next;
+        for (uint256 i = 0; i < units; i++) {
+            slots[from + i] = 1;
+        }
+        next = from + units;
+    }
+}
+
+/// Evaluator whose activation hook behaves as configured.
+contract HookEvaluator is IEvaluator, IEvaluatorActivation {
+    uint8 public immutable mode; // 0 works then succeeds, 1 reverts, 2 never finishes, 3 works in a nested call
+    uint256 public immutable units;
+    GasWorker public immutable worker;
+
+    bool public activated;
+    mapping(uint256 => uint256) internal slots;
+
+    constructor(uint8 _mode, uint256 _units) {
+        mode = _mode;
+        units = _units;
+        worker = new GasWorker();
+    }
+
+    function onDealActivated() external override {
+        if (mode == 1) revert("reference not available");
+        if (mode == 2) {
+            while (true) {}
+        }
+        if (mode == 3) {
+            // A failure of the nested call, out of gas included, bubbles up.
+            worker.work(units);
+        } else {
+            for (uint256 i = 0; i < units; i++) {
+                slots[i] = 1;
+            }
+        }
+        activated = true;
+    }
+
+    function permitMint(address, address, uint256) external pure returns (bool) {
+        return true;
+    }
+
+    function evaluateDeal(uint256, address, address, address) external pure returns (EvaluationResult[] memory) {
+        return new EvaluationResult[](0);
+    }
+}
+
+contract HookEvaluatorFactory is IEvaluatorFactory {
+    function deployEvaluator(address, uint256, address, DealParams calldata, bytes calldata evaluatorConfig)
+        external
+        returns (address)
+    {
+        (uint8 mode, uint256 units) = abi.decode(evaluatorConfig, (uint8, uint256));
+        return address(new HookEvaluator(mode, units));
+    }
+}
+
 /// M-04. A deal is proposed, voted on for days, and only then approved. Its evaluators
 /// count cycles and take reference prices from the approval, not from the proposal.
 contract EvaluatorActivation is DACTestBase {
@@ -45,6 +116,9 @@ contract EvaluatorActivation is DACTestBase {
 
     ActivationPriceOracle internal priceOracle;
     address internal constant PRICED_TOKEN = address(0xBEEF);
+    MockEvaluatorModuleFactory internal hookModule;
+
+    bytes32 internal constant ACTIVATION_SKIPPED = keccak256("EvaluatorActivationSkipped(address,uint256,address)");
 
     function setUp() public {
         setUpBase();
@@ -52,6 +126,22 @@ contract EvaluatorActivation is DACTestBase {
         onboardAgent(agent1);
         onboardAgent(agent2);
         priceOracle = new ActivationPriceOracle();
+
+        // A module whose evaluators have a configurable activation hook.
+        vm.prank(moduleOwner);
+        hookModule = new MockEvaluatorModuleFactory(
+            address(new TreasuryDealFactory(permit2)), address(new HookEvaluatorFactory())
+        );
+        vm.startPrank(founder);
+        uint256 pid = dac.createManagementProposal(
+            ProposalParams({
+                typ: DACManagementProposalType.ADD_MODULE, target: address(hookModule), i: 0, data: bytes("")
+            })
+        );
+        vm.warp(block.timestamp + 1);
+        IVoting(dac.getProposalVoting(pid)).vote(true);
+        dac.executeDACProposal(pid);
+        vm.stopPrank();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -259,10 +349,121 @@ contract EvaluatorActivation is DACTestBase {
     }
 
     /*//////////////////////////////////////////////////////////////
+            the activation hook: no gas limit, no silent skip
+    //////////////////////////////////////////////////////////////*/
+
+    // A staked deal whose evaluator's hook has the given behaviour, with the DAC's
+    // approval voted and ready to execute.
+    function _hookDeal(uint8 mode, uint256 units) internal returns (DealHandle memory handle, HookEvaluator evaluator) {
+        handle = _createDealWith(agent1, address(hookModule), MOCK_EVALUATOR_SELECTOR, abi.encode(mode, units));
+        evaluator = HookEvaluator(handle.evaluatorAddr);
+        vm.warp(block.timestamp + 1);
+        vm.prank(agent1);
+        agentToken.stakeToDeal(handle.dealCell, 20_000);
+        address approval = dac.getProposalVoting(handle.proposalId);
+        vm.prank(founder);
+        IVoting(approval).vote(true);
+    }
+
+    function _skips(Vm.Log[] memory logs, address evaluator) internal pure returns (uint256 n) {
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == ACTIVATION_SKIPPED && address(uint160(uint256(logs[i].topics[3]))) == evaluator) {
+                n++;
+            }
+        }
+    }
+
+    // A hook that needs well over a million gas simply gets it.
+    function test_REG_activationHook_hasNoFixedGasLimit() public {
+        (DealHandle memory handle, HookEvaluator evaluator) = _hookDeal(0, 120); // about 2.7M gas
+
+        vm.recordLogs();
+        uint256 g = gasleft();
+        dac.executeDACProposal(handle.proposalId);
+        emit log_named_uint("approval with a heavy activation hook, gas", g - gasleft());
+
+        assertTrue(IDealCell(handle.dealCell).isApproved());
+        assertTrue(evaluator.activated());
+        assertEq(_skips(vm.getRecordedLogs(), address(evaluator)), 0);
+    }
+
+    // A hook that reverts for a reason of its own is reported and does not hold up the approval.
+    function test_REG_activationHook_ownFailureIsReportedAndSkipped() public {
+        (DealHandle memory handle, HookEvaluator evaluator) = _hookDeal(1, 0);
+
+        vm.recordLogs();
+        dac.executeDACProposal(handle.proposalId);
+
+        assertTrue(IDealCell(handle.dealCell).isApproved());
+        assertFalse(evaluator.activated());
+        assertEq(_skips(vm.getRecordedLogs(), address(evaluator)), 1);
+    }
+
+    // Whatever gas the approval is sent with, it either reverts or runs the hook to the
+    // end: no gas limit lets a caller approve the deal with the activation left out.
+    function _assertNeverApprovedWithoutActivation(uint8 mode) internal {
+        (DealHandle memory handle, HookEvaluator evaluator) = _hookDeal(mode, 120);
+
+        uint256 approvedRuns;
+        uint256 revertedRuns;
+        for (uint256 gasLimit = 300_000; gasLimit <= 4_500_000; gasLimit += 50_000) {
+            uint256 snap = vm.snapshotState();
+            try dac.executeDACProposal{gas: gasLimit}(handle.proposalId) {
+                assertTrue(evaluator.activated(), "approved with the activation left out");
+                approvedRuns++;
+            } catch {
+                assertFalse(IDealCell(handle.dealCell).isApproved());
+                revertedRuns++;
+            }
+            vm.revertToState(snap);
+        }
+        // The sweep crosses the point where the hook starts to fit.
+        assertGt(approvedRuns, 0);
+        assertGt(revertedRuns, 0);
+    }
+
+    function test_REG_activationHook_cannotBeLeftOutByUnderfundingTheCall() public {
+        _assertNeverApprovedWithoutActivation(0);
+    }
+
+    // Same when the hook runs out of gas one call deeper and the failure bubbles up.
+    function test_REG_activationHook_cannotBeLeftOut_nestedCall() public {
+        _assertNeverApprovedWithoutActivation(3);
+    }
+
+    // A hook that can never finish keeps its own deal from being approved. Nothing has
+    // left the treasury at that point, and stakers get their stake back after the
+    // approval deadline.
+    function test_NOTE_activationHook_thatNeverFinishes_blocksItsOwnDeal() public {
+        (DealHandle memory handle,) = _hookDeal(2, 0);
+        uint256 treasuryBefore = usdc.balanceOf(dac.getAssetController());
+
+        try dac.executeDACProposal{gas: 16_000_000}(handle.proposalId) {
+            revert("approved although the hook never returned");
+        } catch (bytes memory err) {
+            assertEq(bytes4(err), DACErrorsLib.InsufficientGas.selector);
+        }
+        assertFalse(IDealCell(handle.dealCell).isApproved());
+        assertEq(usdc.balanceOf(dac.getAssetController()), treasuryBefore);
+
+        vm.warp(IDealCell(handle.dealCell).approveDeadline() + 1);
+        vm.prank(agent1);
+        IDealCell(handle.dealCell).unstake();
+        assertEq(agentToken.balanceOf(agent1), 100_000);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                 helpers
     //////////////////////////////////////////////////////////////*/
 
     function _createTreasuryDealWith(address agent, bytes4 evaluatorSelector, bytes memory evaluatorConfig)
+        internal
+        returns (DealHandle memory handle)
+    {
+        return _createDealWith(agent, address(coreModule), evaluatorSelector, evaluatorConfig);
+    }
+
+    function _createDealWith(address agent, address module, bytes4 evaluatorSelector, bytes memory evaluatorConfig)
         internal
         returns (DealHandle memory handle)
     {
@@ -273,7 +474,7 @@ contract EvaluatorActivation is DACTestBase {
             name: "Treasury Deal",
             description: "evaluator activation",
             linkHash: "0x00",
-            moduleFactory: address(coreModule),
+            moduleFactory: module,
             governanceFactory: address(coreDealGovernanceFactory),
             dealTarget: address(0),
             proposer: agent,

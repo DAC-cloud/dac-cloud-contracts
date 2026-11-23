@@ -20,7 +20,7 @@ import {DACEventsLib} from "../interfaces/DACEventsLib.sol";
 contract DealCell is IDealCell, ReentrancyGuard, Initializable {
 
     // Gas the module's close hook is guaranteed and limited to.
-    uint256 internal constant CLOSE_HOOK_GAS = 1_000_000;
+    uint256 internal constant CLOSE_HOOK_GAS = 5_000_000;
 
     address private factory;
 

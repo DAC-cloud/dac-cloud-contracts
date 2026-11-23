@@ -182,7 +182,7 @@ The kernel's DealCell calls these hooks at various points. Override the internal
 | `_onDealRewardAllocated(amount)` | When the deal's reward pool portion is allocated |
 | `_afterMarkAsFailed(slashPercent)` | After the deal is marked as failed |
 | `_beforeExtendDeadline(oldDeadline, newDeadline)` | Before a deadline extension |
-| `_beforeClose()` | Before the deal is closed. Runs with a fixed gas stipend (1,000,000); a failure is reported, not propagated, and the deal closes regardless |
+| `_beforeClose()` | Before the deal is closed. Runs with a fixed gas stipend (5,000,000); a failure is reported, not propagated, and the deal closes regardless |
 | `_beforeRecovery(liquidator, liquidatorStake)` | Before recovery/liquidation |
 | `_afterRecovery(liquidator, liquidatorStake)` | After recovery completes |
 | `_beforeClaimMainToken(grantee, amount)` | Before main token claim |
@@ -381,7 +381,15 @@ contract MyEvaluatorFactory is IEvaluatorFactory {
 A deal is proposed, voted on by the DAC for days, and only then approved. An evaluator should measure from the approval, not from the moment it was deployed. Two things are available for that:
 
 - `IDealCell(dealCell).approvedAt()` -- the timestamp of the deal's approval (zero until then). Schedules should start at `max(configured start, approvedAt)`.
-- `IEvaluatorActivation.onDealActivated()` -- an optional hook. When the DAC approves a deal, the kernel calls it once on every evaluator attached to the deal, from the `DealManager`, with a gas stipend of 1,000,000. Use it to take reference values (prices, balances) at activation. The call is isolated: an evaluator that does not implement it, or whose hook fails, does not affect the approval, so an evaluator should also be able to take its reference lazily at its first evaluation.
+- `IEvaluatorActivation.onDealActivated()` -- an optional hook. When the DAC approves a deal, the kernel calls it once on every evaluator attached to the deal, from the `DealManager`. Use it to take reference values (prices, balances) at activation. The hook has no fixed gas limit: it runs with whatever the approving transaction carries, and it shares that transaction (16,777,216 gas on Base) with the rest of the approval. Three outcomes are possible:
+  - it returns: the evaluator is activated;
+  - it reverts for a reason of its own, or the evaluator has no such function: the kernel emits `EvaluatorActivationSkipped(dac, dealId, evaluator)` and the approval goes on. The evaluator should therefore also be able to take its reference lazily, at its first evaluation;
+  - it runs out of gas: the whole approval reverts with `InsufficientGas`, and whoever executes it has to send more gas. Nobody can leave an activation out by underfunding the call.
+
+  The kernel recognises a lack of gas by what is left after the failed call: less than an eighth of the gas that was there before it. Running out of gas leaves 1/64 behind, and a few 64ths when it happens some calls deep and the failure bubbles up. Three rules follow for a hook:
+  - let failures of the calls it makes bubble up. If the hook catches a failed external call and carries on, check `gasleft()` the same way first, or an underfunded transaction can make the hook skip that step and still return;
+  - a hook that fails on its own should fail early. One that reverts after using more than seven eighths of the gas it was given is read as out of gas, and the approval then needs a higher gas limit to get past it;
+  - a hook that cannot finish within one transaction blocks the approval of its own deal. Keep the work bounded, and move anything that scales with unbounded input out of the hook.
 
 ```solidity
 function onDealActivated() external override {
@@ -394,7 +402,7 @@ An evaluator added to a deal that is already live (`ADD_EVALUATOR`) gets no acti
 
 ### Bounding the work of one evaluation
 
-Each convert or slash result is one pass over the deal's holder list, and a deal can have up to 100 holders. With a full list, one evaluation costs about 3.1M gas for a first reward conversion, 5.4M for a slash, and roughly 0.9M for every further result, so ten results fit in a 2^24-gas transaction and more may not. An evaluator that can emit many results in one call (several milestones falling due together, a long gap between evaluations) should cap what it settles per call and carry the rest over, as `RevenueBasedEvaluator` does with `MAX_CYCLES_PER_EVALUATION`.
+Each convert or slash result is one pass over the deal's holder list, and a deal can have up to 100 holders. With a full list, one evaluation costs about 3.1M gas for a first reward conversion, 5.4M for a slash, and roughly 0.9M for every further result, so ten results fit in a 2^24-gas transaction and more may not. When the same evaluation also closes the deal, the close hook's 5M stipend must still be available at the close: with a full list that leaves room for five results before it, with 75 holders for eight. An evaluator that can emit many results in one call (several milestones falling due together, a long gap between evaluations) should cap what it settles per call and carry the rest over, as `RevenueBasedEvaluator` does with `MAX_CYCLES_PER_EVALUATION`.
 
 ### Reward caps
 
@@ -516,7 +524,7 @@ Deal hooks like `_beforeWithdrawCapital` and `_beforeRecovery` are called during
 
 Closing belongs to the kernel. `_beforeClose` is the module's chance to tidy up (the core `DACDeal` uses it to send child equity home), not a way to prevent the close:
 
-- it runs with a gas stipend of 1,000,000, and the kernel guarantees that stipend or reverts the whole transaction, so a caller cannot starve it;
+- it runs with a gas stipend of 5,000,000, and the kernel guarantees that stipend or reverts the whole transaction, so a caller cannot starve it. The stipend has to be available whether or not the hook uses it, so every transaction that closes a deal needs that much gas spare at the close;
 - if it reverts or runs out of gas the kernel emits `DealCloseHookFailed` and closes the deal anyway.
 
 Write the hook so that a partial failure leaves the deal in a state from which the rest can be finished later by a separate call. `DACDeal.returnChildEquity()` is the reference: whatever the close hook could not move (equity that was vote-locked at that moment) can be sent home afterwards by anyone.
